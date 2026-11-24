@@ -364,7 +364,7 @@ Uma ação principal por rodapé. Rótulo no formato verbo + objeto ("Baixar atu
 | Signage | Lista de unidades; depois o painel da unidade; depois o guia em passos | Como está hoje |
 | Ponto | Operação de hoje; cartões abrem Registros, Histórico de ajustes, Banco de horas e Espelhos mensais. Os três primeiros reutilizam Detalhe do dia. Sem "Todas as unidades": a batida precisa de uma unidade; turno Entre unidades permite escolher a unidade atual | Decidido (2026-10-23) |
 | Solicitações | A entrada usa cartões: Jornada contém ausência e troca de turno; Benefícios contém vale-transporte. Ausência e troca também podem começar no dia escolhido da Escala. Ajuste de ponto fica exclusivamente em Ponto, ligado ao dia e às batidas | Decidido (2026-10-22) |
-| Aplicativo | Bloqueado com conta conhecida: pede a biometria sozinho, se a pessoa ativou. Sem conta: entrada | Como está hoje |
+| Aplicativo | Bloqueado com conta conhecida: pede a biometria sozinho, se a pessoa ativou. Sem conta: entrada. A conferência inicial da conta Google ocorre sem tela intermediária; a vinculação ocupa a entrada somente quando a API confirma pendência obrigatória. | Decidido (2026-11-16) |
 
 A regra da Escala está em `ModulesState.selectedScheduleUnit` (valor inicial `Rules.ALL_UNITS`) e no reinício a cada visita em `ScheduleScreen`; `coala-go-ui-contract.test.ts` e `ViewModelsTest` protegem as duas partes.
 
@@ -448,3 +448,5 @@ No Ponto sem internet, dados ainda não consultados aparecem como indisponíveis
 ### Ciclo de contingência v2 na candidata local
 
 Preparo e renovação continuam automáticos e invisíveis como operação técnica:24horas para iniciar e24horas do primeiro registro. Encerrar ciclo só informa conclusão autoritativa depois da confirmação servidor e do envio de pendências; a visualização de cliente legado é identificada como local. O próximo preparo é tentado automaticamente, sem botão de autorização. Batida local confirmada no armazenamento reabre a visualização do novo ciclo, mantendo separadas confirmação local e confirmação fiscal. O [guia REP](../engineering/flows/dp-time-recording.md) descreve os limites e a recuperação; sem mudança de layout ou componentes visuais.
+
+23/11/2026 — Em Ajustes, dias devolvidos pelo RH mostram orientação, resposta e situação. O colaborador seleciona explicitamente o ajuste relacionado ou envia justificativa. O fluxo continua usando o pedido de ajuste existente para alteração dos horários. Implementação local com compilação em validação.

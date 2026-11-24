@@ -1,6 +1,5 @@
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import { resolveDPCoverageMode } from "@/lib/dp-coverage-demands";
-import { formatOperatingHoursSummary } from "@/lib/dp-operating-hours";
 import type {
   DPCoverageMode,
   DPOperatingHours,
@@ -223,20 +222,11 @@ export function mergeOperationalUnits(sortedUnits: DPUnit[], kiosks: Kiosk[]): M
   return sortByName([...registered, ...operationalOnly]);
 }
 
-/** Resumo de cobertura exibido na linha e no painel. `needsConfiguration` marca atenção. */
+/** Resumo do alerta de escala vazia exibido na linha e no painel. */
 export function coverageSummaryFor(dpUnit?: DPUnit): { text: string; needsConfiguration: boolean } {
+  if (!dpUnit) return { text: "Alerta indisponível · unidade sem cadastro de DP", needsConfiguration: false };
   const coverageMode = resolveDPCoverageMode(dpUnit);
-  const operatingHoursSummary = formatOperatingHoursSummary(dpUnit?.operatingHours);
-  if (coverageMode === "on_demand") {
-    return { text: "Sob demanda · definida por data na escala mensal", needsConfiguration: false };
-  }
-  if (coverageMode === "disabled") {
-    return { text: "Controle de cobertura desativado", needsConfiguration: false };
-  }
-  if (operatingHoursSummary) {
-    return { text: operatingHoursSummary, needsConfiguration: false };
-  }
-  return { text: "Horário de funcionamento não configurado", needsConfiguration: true };
+  return { text: coverageMode === "disabled" ? "Alerta de escala vazia desligado" : "Alerta de escala vazia ligado", needsConfiguration: false };
 }
 
 export const STOCK_ROLE_LABELS: Record<DPUnitStockRole, string> = {
@@ -246,9 +236,9 @@ export const STOCK_ROLE_LABELS: Record<DPUnitStockRole, string> = {
 };
 
 export const COVERAGE_MODE_LABELS: Record<DPCoverageMode, string> = {
-  fixed_hours: "Horário fixo",
-  on_demand: "Sob demanda",
-  disabled: "Sem controle",
+  fixed_hours: "Alerta ligado",
+  on_demand: "Alerta ligado",
+  disabled: "Alerta desligado",
 };
 
 export function pluralize(count: number, singular: string, plural: string) {

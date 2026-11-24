@@ -1,0 +1,101 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { promisify } from "node:util";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { assertFirestoreEmulatorSafety } from "../helpers/firestore-emulator-safety.mjs";
+assertFirestoreEmulatorSafety({ projectId: "demo-coala-repository", databaseId: "coala-financeiro" });
+const { financialDbAdmin: db } = await import("../../src/lib/firebase-financial-admin.ts");
+const { buildCashClosureFromPdv } = await import("../../src/features/financial/cash-closures/build-cash-closure.ts");
+const { mergeBuiltClosureForPersistence, recalculateCountedLine, recalculateReportedLine } = await import("../../src/features/financial/cash-closures/persistence.ts");
+const { buildCashClosureOperators, withCashClosureOperatorAggregate } = await import("../../src/features/financial/cash-closures/operators.ts");
+const { cashSupplyMovementFingerprint } = await import("../../src/features/financial/cash-closures/supply-classification.ts");
+const run = promisify(execFile);
+const now = "2026-11-17T12:00:00.000Z";
+
+test("rebuild preserves legacy PDV coverage, unknown source, project checks, revisions and technical-only idempotent apply", async () => {
+  const workspaceId = "dre-rebuild-test";
+  const kioskId = "unit";
+  const date = "2026-10-01";
+  const move = { id: "fund", kind: "supply", amountCents: 4000, date, occurredAt: `${date}T12:00:00-03:00`, operatorId: "a", terminalId: null, paymentMethodId: null, paymentMethodName: "DINHEIRO", isCash: true, cancelled: false };
+  const built = buildCashClosureFromPdv([95, 5].map((amount, index) => ({ codcupom: String(index), usuariorecebimento_id: index === 0 ? "a" : "b", dtrecebimento: `${date} 12:00:00`, valortotal: amount, itens: [], formaPgtos: [{ nome: "DINHEIRO", valortotal: amount }] })), { workspaceId, kioskId, kioskName: "Unit", pdvFilialId: "1", date, cashMovements: [move] });
+  const stored = mergeBuiltClosureForPersistence({ built, now });
+  const line = recalculateCountedLine({ ...stored.lines[0], metadata: { ...stored.lines[0].metadata,
+    supplyClassifications: [{ movementId: move.id, movementFingerprint: cashSupplyMovementFingerprint(move), kind: "cash_fund", classifiedAt: now, classifiedBy: "test", classifiedByName: "Test" }] } }, 9500, null, "test", now);
+  const bad = { version: 1, shortageCents: 4000, surplusCents: 0 };
+  const pendingLine = recalculateReportedLine(stored.lines.find(item => item.operatorId === "b"), 500, null, "test", now);
+  const operators = buildCashClosureOperators({ closure: stored.closure, lines: [line, pendingLine], now }).operators.map(operator => {
+    const result = { ...operator, status: operator.operatorId === "a" ? "approved" : "draft",
+      cashDifferences: operator.operatorId === "a" ? bad : operator.cashDifferences };
+    if (operator.operatorId === "b") delete result.pdvCashDifferences;
+    return result;
+  });
+  const closure = { ...withCashClosureOperatorAggregate(stored.closure, operators, now), dreSelectedCashDifferences: bad };
+  const ref = db.collection("cashClosures").doc(closure.id);
+  const summary = db.collection("cashClosureMonthlySummaries").doc(`${workspaceId}_${kioskId}_2026_10`);
+  const folder = await mkdtemp(join(tmpdir(), "dre-rebuild-"));
+  const backup = join(folder, "backup.json");
+  const args = ["--workspace=" + workspaceId, "--kiosk=" + kioskId, "--period=2026-10"];
+  const invoke = async (projectId, ...extra) => JSON.parse((await run(process.execPath, ["--import", "tsx", "scripts/rebuild-dre-cash-projections.mts", ...(projectId ? ["--project=" + projectId] : []), ...args, ...extra], { env: process.env })).stdout);
+  const cli = (...extra) => invoke("demo-coala-repository", ...extra);
+  const data = async () => ({ closure: (await ref.get()).data(), line: (await ref.collection("lines").doc(line.id).get()).data(), operator: (await ref.collection("cashClosureOperators").doc(operators[0].id).get()).data() });
+  try {
+    await ref.set(closure);
+    await ref.collection("lines").doc(line.id).set(line);
+    await ref.collection("lines").doc(pendingLine.id).set(pendingLine);
+    for (const operator of operators) await ref.collection("cashClosureOperators").doc(operator.id).set(operator);
+    let before = await data();
+    let dry = await cli();
+    assert.equal(dry.changedDays, 1);
+    assert.equal(dry.projectId, "demo-coala-repository");
+    assert.equal(dry.databaseId, "coala-financeiro");
+    assert.equal(dry.expected.dreCashShortageKnownCents, 0);
+    assert.equal(dry.expected.dreCoverage.cashDifferenceClosureCount, 1);
+    assert.equal(dry.expected.dreCoverage.pdvFallbackOperatorCount, 1);
+    assert.deepEqual(await data(), before);
+    await assert.rejects(invoke(null), error => error.stderr.includes("--project=PROJECT_ID"));
+    await assert.rejects(invoke("demo-wrong-destination", "--apply", "--plan=" + dry.plan, "--backup=" + backup), error => error.stderr.includes("Destino Firebase divergente"));
+    assert.deepEqual(await data(), before);
+    await assert.rejects(cli("--apply", "--plan=" + "0".repeat(64), "--backup=" + backup));
+    assert.deepEqual(await data(), before);
+    await ref.update({ updatedAt: "2026-11-17T12:01:00.000Z" });
+    before = await data();
+    await assert.rejects(cli("--apply", "--plan=" + dry.plan, "--backup=" + backup));
+    assert.deepEqual(await data(), before);
+    dry = await cli();
+    await cli("--apply", "--plan=" + dry.plan, "--backup=" + backup);
+    const saved = JSON.parse(await readFile(backup, "utf8"));
+    assert.equal(saved.projectId, "demo-coala-repository");
+    assert.equal(saved.databaseId, "coala-financeiro");
+    assert.equal(saved.rows[0].oldPatch.finalizedCashDifferences.shortageCents, 4000);
+    const after = await data();
+    assert.deepEqual(after.line, before.line);
+    const expectedClosure = { ...before.closure, finalizedCashDifferences: { version: 1, shortageCents: 0, surplusCents: 0 }, dreSelectedCashDifferences: { version: 1, shortageCents: 0, surplusCents: 0 }, dreCashProjectionRebuiltAt: after.closure.dreCashProjectionRebuiltAt };
+    assert.deepEqual(after.closure, expectedClosure);
+    assert.deepEqual(after.operator, { ...before.operator, cashDifferences: { version: 1, shortageCents: 0, surplusCents: 0 } });
+    assert.deepEqual((await ref.collection("lines").doc(pendingLine.id).get()).data(), pendingLine);
+    assert.deepEqual((await ref.collection("cashClosureOperators").doc(operators[1].id).get()).data(), operators[1]);
+    const repeated = await cli();
+    assert.equal(repeated.changedDays, 0);
+    // The production trigger writes this projection asynchronously; simulate that boundary here.
+    await summary.set(repeated.expected);
+    assert.equal((await cli("--verify")).matches, true);
+    const noOpBefore = await data();
+    await cli("--apply", "--plan=" + repeated.plan, "--backup=" + join(folder, "noop.json"));
+    assert.deepEqual(await data(), noOpBefore);
+    const unknown = recalculateReportedLine(pendingLine, null, null, "test", now);
+    await ref.collection("lines").doc(unknown.id).set(unknown);
+    await ref.update({ dreSelectedCashDifferences: { version: 1, shortageCents: null, surplusCents: null } });
+    const absentSource = await cli();
+    assert.equal(absentSource.expected.dreCoverage.cashDifferenceClosureCount, 0);
+    assert.equal(absentSource.expected.dreCashShortageKnownCents, null);
+    assert.equal(absentSource.expected.dreCashSurplusKnownCents, null);
+    assert.deepEqual((await ref.collection("lines").doc(unknown.id).get()).data(), unknown);
+  } finally {
+    await db.recursiveDelete(ref);
+    await summary.delete();
+    await rm(folder, { recursive: true, force: true });
+  }
+});

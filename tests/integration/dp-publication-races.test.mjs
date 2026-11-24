@@ -8,6 +8,7 @@ const { stageWorkShift, publishPreparedSchedule, listEditableScheduleShifts, dis
   await import('../../src/features/dp/schedules/publication-service.server.ts');
 const { applyActiveRevisionOperationalChanges } =
   await import('../../src/features/dp/schedules/operational-overlay.server.ts');
+const { saveClosedScheduleDay } = await import('../../src/features/dp/coverage-demands/service.server.ts');
 const { readOfficialScheduleShifts } = await import('../../src/features/dp/schedules/official-revision.server.ts');
 
 test('evento operacional não conflitante entra na revisão; alteração do mesmo turno barra a troca do ponteiro', async () => {
@@ -71,4 +72,103 @@ test('evento operacional não conflitante entra na revisão; alteração do mesm
   const resolved = await publishPreparedSchedule(context, schedule.id, 'publish-after-discard', 2);
   assert.equal(resolved.publicationVersion, 3);
   assert.equal((await readOfficialScheduleShifts({ scheduleId: schedule.id })).shifts.some((shift) => shift.id === 'a'), false);
+  const beforeManual = (await schedule.get()).get('activeRevisionId');
+  await stageWorkShift({ context, scheduleId: schedule.id, shiftId: 'b', mode: 'update',
+    requestId: 'manual-draft', input: { ...input, date: '2027-11-05',
+      manualDay: { mode: 'flexible', expectedWorkMinutes: 360, expectedBreakMinutes: 0 } } });
+  await assert.rejects(publishPreparedSchedule(context, schedule.id, 'manual-publish-blocked', 1),
+    { code: 'DP_SCHEDULE_MANUAL_DAY_PUBLICATION_UNAVAILABLE' });
+  const afterManual = await schedule.get();
+  assert.equal(afterManual.get('activeRevisionId'), beforeManual);
+  assert.equal(afterManual.get('publicationVersion'), 3);
+  assert.equal((await readOfficialScheduleShifts({ scheduleId: schedule.id })).shifts.find((shift) => shift.id === 'b').manualDay, undefined);
+  const draftWithManual = await listEditableScheduleShifts(context, schedule.id);
+  assert.deepEqual(draftWithManual.conflicts, []);
+  assert.equal(draftWithManual.shifts.find((shift) => shift.id === 'b').manualDay.mode, 'flexible');
+
+  await stageWorkShift({ context, scheduleId: schedule.id, shiftId: 'b', mode: 'update',
+    requestId: 'remove-manual-draft', input: { ...input, date: '2027-11-05' } });
+  const plain = await publishPreparedSchedule(context, schedule.id, 'publish-ordinary-again', 2);
+  assert.equal(plain.publicationVersion, 4);
+
+  const changeClosure = (date, closed) => saveClosedScheduleDay({
+    context, scheduleId: schedule.id, date, requestId: 'closure',
+    input: { closed, schedules: [{ scheduleId: schedule.id, unitId }] },
+  });
+  await changeClosure('2027-11-05', true);
+  await assert.rejects(publishPreparedSchedule(context, schedule.id, 'closure-with-shift', 1),
+    { code: 'DP_SCHEDULE_CLOSED_DAY_HAS_WORK' });
+  assert.equal((await schedule.get()).get('closedDates'), undefined);
+  await changeClosure('2027-11-05', false);
+  await changeClosure('2027-11-06', true);
+  const closed = await publishPreparedSchedule(context, schedule.id, 'closure-without-shift', 3);
+  assert.equal(closed.publicationVersion, 5);
+  const afterClosure = await schedule.get();
+  assert.deepEqual(afterClosure.get('closedDates'), ['2027-11-06']);
+  assert.equal(afterClosure.get('draftClosedDates'), undefined);
+  const activeB = (await readOfficialScheduleShifts({ scheduleId: schedule.id })).shifts.find((shift) => shift.id === 'b');
+  await assert.rejects(dbAdmin.runTransaction(async (tx) => {
+    const snapshot = await tx.get(schedule);
+    await applyActiveRevisionOperationalChanges({ tx, schedule: snapshot, workspaceId,
+      changes: [{ shiftId: 'b', previous: activeB, next: { ...activeB, date: '2027-11-06' } }],
+      actorId: personId, reason: 'shift_swap_accepted' });
+  }), { code: 'DP_OPERATIONAL_DAY_CLOSED' });
+
+});
+
+test('publica os trechos híbridos juntos e preserva todos os ponteiros se um rascunho mudar', async () => {
+  const { stageManualJourneyDraft } = await import('../../src/features/dp/schedules/publication-service.server.ts');
+  const { readRepPMonthOfPerson } = await import('../../src/features/dp/rep-p/own-month.server.ts');
+  const prefix = 'publication-hybrid';
+  const workspaceId = `${prefix}-workspace`;
+  const userId = `${prefix}-person`;
+  const unitIds = [`${prefix}-x`, `${prefix}-y`];
+  const schedules = unitIds.map((id) => dbAdmin.collection('dp_schedules').doc(id));
+  const context = { decoded: { uid: `${prefix}-admin` }, userDoc: { username: 'Admin' },
+    isDefaultAdmin: true, permissions: { dp: { schedules: { view: true, edit: true, publish: true } } }, workspace_id: workspaceId };
+  const date = '2027-12-08';
+  await Promise.all([
+    ...schedules.map((schedule, index) => schedule.set({ workspaceId, unitId: unitIds[index], year: 2027, month: 12,
+      publicationStatus: 'draft', publicationVersion: 0, operationalVersion: 0, draftVersion: 0, journeyValidationVersion: 0 })),
+    ...unitIds.map((id) => dbAdmin.collection('dp_units').doc(id).set({ name: id, isArchived: false })),
+    dbAdmin.collection('users').doc(userId).set({ username: 'Person', unitId: unitIds[0], unitIds, isActive: true }),
+    dbAdmin.collection('dp_journeys').doc(prefix).set({ lineageId: prefix, version: 1, status: 'published', name: 'Hybrid',
+      validFrom: '2027-12-01', weeklyMinutes: 2400, cycleLengthDays: 7,
+      days: [{ dayIndex: 0, plannedMinutes: 480, isRestDay: false }],
+      applicability: { scope: { kind: 'company' }, collaboratorIds: [userId] }, allowedShiftDefinitionIds: [] }),
+  ]);
+  const version = { expectedDraftVersion: 0, expectedDraftGenerationId: 'initial', expectedOperationalVersion: 0 };
+  await stageManualJourneyDraft(context, { userId, date, segments: [
+    { ...version, scheduleId: schedules[0].id, shiftId: 'x', existing: false, unitId: unitIds[0],
+      startTime: '', endTime: '', manualDay: { mode: 'flexible', expectedWorkMinutes: 240, expectedBreakMinutes: 0 } },
+    { ...version, scheduleId: schedules[1].id, shiftId: 'y', existing: false, unitId: unitIds[1],
+      startTime: '13:00', endTime: '17:00', manualDay: { mode: 'fixed', expectedBreakMinutes: 0 } },
+  ] }, 'stage-hybrid');
+
+  assert.deepEqual((await listEditableScheduleShifts(context, schedules[0].id)).linkedScheduleIds, schedules.map(({ id }) => id));
+  await assert.rejects(publishPreparedSchedule(context, schedules[0].id, 'incomplete', 1),
+    { code: 'DP_SCHEDULE_PUBLICATION_GROUP_REQUIRED' });
+  const companion = { scheduleId: schedules[1].id, expectedDraftVersion: 1 };
+  await assert.rejects(publishPreparedSchedule(context, schedules[0].id, 'stale', 1, async () => {
+    await schedules[1].update({ draftVersion: 2 });
+  }, [companion]), { code: 'DP_SCHEDULE_PUBLICATION_STALE' });
+  for (const schedule of schedules) assert.equal((await schedule.get()).get('activeRevisionId'), undefined);
+
+  const published = await publishPreparedSchedule(context, schedules[0].id, 'publish-hybrid', 1, undefined,
+    [{ ...companion, expectedDraftVersion: 2 }]);
+  assert.deepEqual(published.publishedScheduleIds, schedules.map(({ id }) => id));
+  const official = await readRepPMonthOfPerson([userId], '2027-12');
+  assert.deepEqual(official.shifts.sort((a, b) => a.manualOrder - b.manualOrder).map((shift) =>
+    [shift.unitId, shift.manualMode, shift.manualWorkMinutes ?? null, shift.startTime, shift.endTime]), [
+    [unitIds[0], 'flexible', 240, null, null],
+    [unitIds[1], 'fixed', null, '13:00', '17:00'],
+  ]);
+  const { buildCollaboratorSchedulePayload } = await import('../../src/features/collaborator-schedule/server.ts');
+  const portal = await buildCollaboratorSchedulePayload({
+    ...context, decoded: { uid: userId }, userDoc: { id: userId, unitIds }, isDefaultAdmin: false,
+  }, 2027, 12);
+  assert.deepEqual(portal.shifts.sort((a, b) => a.manualOrder - b.manualOrder).map((shift) =>
+    [shift.unitId, shift.manualDay?.mode, shift.manualDay?.expectedWorkMinutes ?? null]), [
+    [unitIds[0], 'flexible', 240], [unitIds[1], 'fixed', null],
+  ]);
 });

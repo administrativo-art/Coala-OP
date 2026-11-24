@@ -24,7 +24,7 @@ api,src/app/api/dp/responsibility-coverages/route.ts,,docs/engineering/flows/dp-
 api,src/app/api/dp/responsibility-tasks/route.ts,,docs/engineering/flows/dp-absences.md,Lista paginada de pendencias operacionais atribuidas ou sem cobertura conforme permissao e abrangencia.
 api,src/app/api/dp/responsibility-tasks/[taskId]/route.ts,,docs/engineering/flows/dp-absences.md,Primeiro responsavel elegivel assume por CAS e conclui com justificativa e auditoria.
 api,src/app/api/dp/schedules/[scheduleId]/absences/route.ts,,docs/engineering/flows/dp-absences.md,Projecao minima de ausencias aprovadas na competencia da escala sem motivo tipo ou documento.
-api,src/app/api/financial/acquirer-fees/route.ts,,docs/engineering/flows/stone-sales-review.md,Previa e apropriacao de taxas explicitas; admin padrao e escopo revalidados; sem novo debito bancario.
+api,src/app/api/financial/acquirer-fees/route.ts,,docs/engineering/flows/stone-sales-review.md,Apuracao de taxas e configuracao do modo automatico; leitura e reavaliacao das pendencias do mes; admin padrao e vinculo revalidados.
 api,src/app/api/admin/fix-receipts/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/ai/analyze-consumption/route.ts,,docs/engineering/flows/stock-analysis.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/ai/analyze-goals/route.ts,,docs/engineering/flows/goals.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -49,6 +49,7 @@ api,src/app/api/auth/first-access/[token]/route.ts,,docs/engineering/access-and-
 api,src/app/api/auth/forgot-password/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/auth/last-login/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/auth/password-changed/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/auth/pdv-password/route.ts,,docs/engineering/access-and-privacy.md,POST autenticado do titular; reautenticacao recente e acesso PDV ativo; troca a senha na API externa.
 api,src/app/api/auth/view-as/route.ts,,docs/engineering/access-and-privacy.md,Ferramenta DEV somente leitura; ator real preservado e inicio/fim auditados.
 api,src/app/api/catalogo/route.ts,,docs/engineering/flows/catalog.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/client/bootstrap/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -108,6 +109,7 @@ api,src/app/api/dp/natasha/shift-definitions/route.ts,,docs/engineering/flows/dp
 api,src/app/api/dp/schedules/[scheduleId]/coverage-demands/[date]/route.ts,,docs/engineering/flows/dp-schedules.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/schedules/[scheduleId]/route.ts,,docs/engineering/flows/dp-schedules.md,Leitura pontual ou exclusao transacional e auditada; ambos revalidam permissao e unidade.
 api,src/app/api/dp/schedules/[scheduleId]/draft-shifts/route.ts,,docs/engineering/flows/dp-schedules.md,Leitura do rascunho e descarte explicito de conflitos para editores com acesso a unidade.
+api,src/app/api/dp/schedules/[scheduleId]/draft-shifts/day-off/route.ts,,docs/engineering/flows/dp-schedules.md,Adiciona ou remove DSR do rascunho com controle de versao e permissao para a unidade.
 api,src/app/api/dp/schedules/[scheduleId]/publish/route.ts,,docs/engineering/flows/dp-schedules.md,Publicacao do rascunho com permissao propria e ativacao atomica da revisao oficial.
 api,src/app/api/dp/schedules/[scheduleId]/external-candidates/route.ts,,docs/engineering/flows/dp-schedules.md,Busca prefixada e limitada de pessoas externas; exige permissao especifica e acesso a unidade da escala; retorna projecao minima.
 api,src/app/api/dp/schedules/[scheduleId]/day-offs/route.ts,,docs/engineering/flows/dp-schedules.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -128,9 +130,9 @@ api,src/app/api/dp/time-recording/afd/route.ts,,docs/engineering/flows/dp-time-r
 api,src/app/api/dp/time-recording/aej/route.ts,,docs/engineering/flows/dp-time-recording.md,POST AEJ leiaute 002 de um estabelecimento e periodo de competencias fechadas para o gestor de ponto; originais da ARP mais tratamentos aprovados e horario contratual da escala; CAdES da desenvolvedora; auditoria em ptrp_aejExports.
 api,src/app/api/dp/time-recording/fiscal-options/route.ts,,docs/engineering/flows/dp-time-recording.md,GET lista estabelecimentos fiscais do workspace para gestor global de Tempo selecionar na tela de exportacao AFD e AEJ.
 api,src/app/api/dp/time-recording/options/route.ts,,docs/engineering/flows/dp-time-recording.md,Unidades de execucao do proprio usuario na data pela abrangencia do vinculo historico; somente leitura sem ARP.
-api,src/app/api/dp/time-recording/journey-location/route.ts,,docs/engineering/flows/dp-time-recording.md,POST proprio e idempotente da trilha opcional Entre unidades; exige turno e politica nominal ativos grava fora da ARP/PTRP e nunca altera ponto banco ou folha.
-api,src/app/api/dp/time-recording/journey-location/lease/route.ts,,docs/engineering/flows/dp-time-recording.md,POST proprio e atestado emite lease curta apenas para usuario autenticado com jornada workday e politica nominal ativa; classificacao empresarial nao participa da autorizacao.
-api,src/app/api/dp/time-recording/location-policies/[unitId]/route.ts,,docs/engineering/flows/dp-time-recording.md,GET e PUT da politica central de geolocalizacao por unidade para gestor de Tempo com escopo; lista nominal do piloto revisao e auditoria autoritativas; nunca le evidencias.
+api,src/app/api/dp/time-recording/journey-location/route.ts,,docs/engineering/flows/dp-time-recording.md,POST proprio e idempotente da trilha opcional Entre unidades; exige turno workday gate global e politica da area com referencia juridica valida; grava fora da ARP/PTRP e nunca altera ponto banco ou folha.
+api,src/app/api/dp/time-recording/journey-location/lease/route.ts,,docs/engineering/flows/dp-time-recording.md,POST proprio e atestado emite lease curta apenas para usuario autenticado com jornada workday e politica da area juridicamente habilitada; classificacao empresarial nao participa da autorizacao.
+api,src/app/api/dp/time-recording/location-policies/[unitId]/route.ts,,docs/engineering/flows/dp-time-recording.md,GET e PUT da area de geolocalizacao por unidade para gestor de Tempo com escopo; revisao e auditoria autoritativas; campos nominais legados nao decidem elegibilidade e a rota nunca le evidencias.
 api,src/app/api/dp/time-recording/offline-permits/route.ts,,docs/engineering/flows/dp-time-recording.md,POST prepara protocolo v2 de 24h para iniciar ciclo e 24h desde a primeira batida com aparelho unico; v1 preservado para filas antigas; exclusivo Coala Go atestado sem criar NSR.
 api,src/app/api/dp/time-recording/offline-cycles/route.ts,,docs/engineering/flows/dp-time-recording.md,POST encerra ciclo proprio assinado e drenado com Hora Legal e auditoria sem criar NSR; nao inicia nem prolonga ciclo.
 api,src/app/api/dp/time-recording/month/route.ts,,docs/engineering/flows/dp-time-recording.md,Escala do mes do proprio usuario para o Registro de ponto: escalas do mes uma por unidade e turnos proprios pelo indice userId+date (ate 62) com intervalo do cadastro; somente leitura sem ARP.
@@ -168,7 +170,7 @@ api,src/app/api/financial/accounts/route.ts,,docs/engineering/flows/expenses.md,
 api,src/app/api/financial/agent/route.ts,,docs/engineering/flows/financial-overview.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/analysis-routines/route.ts,,docs/engineering/flows/financial-overview.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/analysis-routines/scheduler/route.ts,,docs/engineering/runtime-surfaces.md,Destino de investigacao; conferir metodo e ramo no handler.
-api,src/app/api/financial/beneficiaries/entities/[entityId]/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/beneficiaries/entities/[entityId]/route.ts,,docs/engineering/flows/payment-requests.md,Leitura e atualização de chave Pix de entidade com tipo explícito e autorização de cadastro.
 api,src/app/api/financial/beneficiaries/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/bootstrap/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/budget-inputs/route.ts,,docs/engineering/flows/financial-budgets.md,Orcamentos na main; conferir escopo por acao e gatilho.
@@ -222,6 +224,7 @@ api,src/app/api/financial/cash-deposits/inter/webhook/route.ts,,docs/engineering
 api,src/app/api/financial/cash-deposits/reports/export/route.ts,,docs/engineering/flows/cash-deposits.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/cash-deposits/reports/route.ts,,docs/engineering/flows/cash-deposits.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/cash-deposits/route.ts,,docs/engineering/flows/cash-deposits.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/cash-flow-study/route.ts,,docs/engineering/flows/cash-flow.md,Estudo de fluxo de caixa de 13 semanas: GET sem parâmetros (secureRoute; administrador padrão) junta saldo do Inter pela API, carteira Stone, lotes de depósito, fechamentos, despesas abertas e realizado do Inter com consultas limitadas; só leitura.
 api,src/app/api/financial/data/route.ts,,docs/engineering/flows/cash-flow.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/dre/cmv-closure/route.ts,,docs/engineering/flows/dre.md,POST fechar/reabrir CMV por unidade e competencia; transacao e autorizacao por acao.
 api,src/app/api/financial/dre/source-data/route.ts,,docs/engineering/flows/dre.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -229,15 +232,20 @@ api,src/app/api/financial/dre/stock-cmv/route.ts,,docs/engineering/flows/dre.md,
 api,src/app/api/financial/expenses/[expenseId]/adjustments/[adjustmentId]/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/expenses/[expenseId]/boleto/payment/route.ts,,docs/engineering/flows/payment-requests.md,"Rota adicionada na main70aaab65; conferir schemas, permissao e consumidores."
 api,src/app/api/financial/expenses/[expenseId]/boleto/route.ts,,docs/engineering/flows/payment-requests.md,"Rota adicionada na main70aaab65; conferir schemas, permissao e consumidores."
+api,src/app/api/financial/expenses/[expenseId]/supplier-pix/route.ts,,docs/engineering/flows/payment-requests.md,Preparo de Pix para fornecedor PF/PJ ou recebedor indicado em compra confirmada com NF; preserva fornecedor fiscal e revalida despesa vinculada.
+api,src/app/api/financial/expenses/[expenseId]/consultancy-pix/route.ts,,docs/engineering/flows/payment-requests.md,Preparo protegido de Pix da consultoria de RH provisionada com obrigacao real deterministica; sem envio automatico.
 api,src/app/api/financial/expenses/[expenseId]/payments/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/expenses/[expenseId]/reconcile-provision/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/expenses/[expenseId]/settlement/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/expenses/provision-series/route.ts,,docs/engineering/flows/expenses.md,Ajuste assistido e transacional de valor de previsoes recorrentes com identidade e valor anterior conferidos.
 api,src/app/api/financial/import-sessions/[sessionId]/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/analyze/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/case/route.ts,,docs/engineering/flows/financial-inbox.md,Consulta segura do contexto da cobrança e correção allowlistada da leitura sem alterar a despesa.
+api,src/app/api/financial/inbox/[id]/expense/route.ts,,docs/engineering/flows/financial-inbox.md,Criação restrita e idempotente de despesa real para guia DARE arquivada antes do vínculo financeiro.
 api,src/app/api/financial/inbox/[id]/files/[fileId]/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/link/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/payment/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/inbox/[id]/pix-payment/route.ts,,docs/engineering/flows/payment-requests.md,Prepara Pix copia e cola da guia FGTS Digital; contrato secureRoute.
 api,src/app/api/financial/inbox/[id]/restore/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/[id]/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/inbox/bulk-review/route.ts,,docs/engineering/flows/financial-inbox.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -253,10 +261,13 @@ api,src/app/api/financial/payment-requests/[id]/submit/route.ts,,docs/engineerin
 api,src/app/api/financial/payment-requests/adopt-inter/route.ts,,docs/engineering/flows/payment-requests.md,Vincula agendamento DDA ja existente no Inter a despesa ou provisao com conferencia bancaria e auditoria; nao envia pagamento.
 api,src/app/api/financial/payment-requests/route.ts,,docs/engineering/flows/payment-requests.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/pdv-stone-review/route.ts,,docs/engineering/flows/stone-sales-review.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/pdv-stone-review/unlinked-resolution/route.ts,,docs/engineering/flows/stone-sales-review.md,Registra a resolução auditada de um Pix Stone sem vínculo.
 api,src/app/api/financial/stone-agenda/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-anticipations/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-future-receivables/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
-api,src/app/api/financial/stone-receipts/reconcile/route.ts,,docs/engineering/flows/stone-sales-review.md,Consulta autenticada e administrativa; lê arquivos Stone publicados e créditos Inter limitados, sem escrita financeira.
+api,src/app/api/financial/stone-receipts/reconcile/route.ts,,docs/engineering/flows/stone-sales-review.md,Consulta autenticada e administrativa da 1ª parte dos recebimentos (venda → conta Stone); lê arquivos Stone publicados, carteira, Pix e fechamento de vendas, sem escrita financeira.
+api,src/app/api/financial/stone-fee-expenses/route.ts,,docs/engineering/flows/stone-sales-review.md,Despesa do mês das taxas Stone: GET mostra o plano (uma despesa por tipo) e os bloqueios a partir da conferência salva; POST lança ou desfaz (secureRoute; administrador padrão) em expenses, com registro stoneFeeMonthExpenses e histórico stoneFeeMonthExpenseEvents com ator.
+api,src/app/api/financial/stone-fees/route.ts,,docs/engineering/flows/stone-sales-review.md,Taxas dos recebíveis Stone: GET monta a visão (taxa atual por recorrência e exceções) a partir das conferências salvas; GET também devolve o histórico por período (view=history) e as ocorrências; POST grava a decisão do administrador padrão (secureRoute) em stoneReceiptDecisions, com histórico em stoneReceiptDecisionEvents e ator, abre a ocorrência em stoneReceiptOccurrences ao contestar e registra contato ou resultado dela (action).
 api,src/app/api/financial/stone-mappings/route.ts,,docs/engineering/flows/stone-sales-review.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-portfolio-cron/route.ts,,docs/engineering/runtime-surfaces.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-portfolio/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -649,3 +660,21 @@ api,src/app/api/documents/editor/templates/[tid]/publish/route.ts,,docs/engineer
 api,src/app/api/documents/editor/templates/[tid]/route.ts,,docs/engineering/flows/document-generation.md,GET secureRoute: abre modelo e conteudo da versao atual por workspace; exige hr.documents.generate; sem escrita.
 api,src/app/api/documents/editor/templates/[tid]/use/route.ts,,docs/engineering/flows/document-generation.md,POST secureRoute: cria rascunho sem titular a partir da versao PUBLICADA (transacao com auditoria used); exige hr.documents.generate; 409 se arquivado/nao publicado/versao publicada mudou.
 api,src/app/api/documents/editor/templates/route.ts,,docs/engineering/flows/document-generation.md,GET lista paginada (status, limit 1-25, cursor) e POST cria modelo (content ou fromDocument; fromDocument exige poder abrir o documento); secureRoute; exige hr.documents.generate; sem catalogo.
+api,src/app/api/financial/dre/export/route.ts,,docs/engineering/flows/dre.md,Exportacao contextual PDF XLSX somente leitura com escopo financeiro e unidades.
+api,src/app/api/jobs/acquirer-fees/auto/route.ts,,docs/engineering/flows/stone-sales-review.md,Reconhecimento diario automatico das taxas de venda conciliada; modo por unidade (desligado, simulacao, ativo); mesmo portao do botao Reconhecer.
+function,functions/src/acquirer-fee-auto-jobs.ts,acquirerFeeAutoRecognition,docs/engineering/flows/stone-sales-review.md,onSchedule diario 05:40 America/Belem; chama a rota de reconhecimento automatico; deploy nao confirmado.
+api,src/app/api/financial/month-closing/route.ts,,docs/engineering/flows/month-closing.md,Leitura do fechamento mensal por competencia com secureRoute; somente leitura.
+api,src/app/api/dp/schedules/manual-journey/route.ts,,docs/engineering/flows/dp-schedules.md,Salva em conjunto os trechos de uma jornada manual no rascunho com controle de versao por escala.
+api,src/app/api/dp/time-recording/day-corrections/route.ts,,docs/engineering/flows/dp-time-recording.md,GET pedidos de ajuste e tratamentos do proprio titular no mes; POST pedido proprio com justificativa (inclusao desconsideracao ou correcao) validando vinculo batida alvo e competencia aberta; nunca altera a ARP.
+api,src/app/api/dp/service-providers/route.ts,,docs/engineering/access-and-privacy.md,Acesso individual de prestador com sessao propria e concessoes revogaveis.
+api,src/app/api/service-portal/login/route.ts,,docs/engineering/access-and-privacy.md,Acesso individual de prestador com sessao propria e concessoes revogaveis.
+api,src/app/api/service-portal/activate/route.ts,,docs/engineering/access-and-privacy.md,Acesso individual de prestador com sessao propria e concessoes revogaveis.
+api,src/app/api/service-portal/session/route.ts,,docs/engineering/access-and-privacy.md,Acesso individual de prestador com sessao propria e concessoes revogaveis.
+api,src/app/api/service-portal/logout/route.ts,,docs/engineering/access-and-privacy.md,Acesso individual de prestador com sessao propria e concessoes revogaveis.
+page,src/app/prestadores/page.tsx,,docs/engineering/access-and-privacy.md,Portal proprio de prestadores sem providers internos.
+page,src/app/prestadores/ativar/page.tsx,,docs/engineering/access-and-privacy.md,Portal proprio de prestadores sem providers internos.
+api,src/app/api/dp/service-providers/closures/route.ts,,docs/engineering/service-provider-access.md,Conferencia e liberacao explicita do fechamento individual para uma concessao do contador.
+api,src/app/api/service-portal/closures/route.ts,,docs/engineering/service-provider-access.md,Consulta e abertura auditada de fechamento individual e download protegido do contracheque selecionado.
+api,src/app/api/dp/time-recording/payslip-reconciliation/route.ts,,docs/engineering/flows/dp-time-recording.md,Conferencia RH de eventos do contracheque contra entrega imutavel com revisao fechamento todas unidades documento exato e bloqueio de assinatura.
+api,src/app/api/dp/time-recording/closing-progress/route.ts,,docs/engineering/flows/dp-time-recording.md,Acompanhamento DP limitado por competencia sem extrato ou PDF por pessoa e sem escrita.
+api,src/app/api/dp/time-recording/payroll-finance/route.ts,,docs/engineering/flows/dp-time-recording.md,Conferencia documental com permissao RH e financeira de titulos existentes sem criar lancamento ou pagamento.

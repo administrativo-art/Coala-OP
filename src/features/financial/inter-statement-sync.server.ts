@@ -19,6 +19,8 @@ import { queueMatchedBankPayment } from "@/features/financial/obligations/servic
 import {
   findExpectedBankDebitGroupMatches,
   findExpectedBankDebitMatch,
+  expectedDebitPrincipalForExpense,
+  settleExpectedDebitInstallments,
   type ExpectedBankDebitCandidate,
 } from "@/features/financial/payment-requests/expected-bank-debits";
 import { planPaymentRequestStatementSettlement } from "@/features/financial/payment-requests/statement-settlement";
@@ -725,7 +727,8 @@ async function reconcileExpectedBankDebit(params: {
         && paymentRequest.lastError?.code === "BANK_RECONCILIATION_DIVERGENCE");
     if (
       paymentRequest.expenseId !== params.expected.expenseId
-      || paymentRequest.paymentRail !== "barcode"
+      || (paymentRequest.paymentRail !== "barcode"
+        && !(paymentRequest.paymentRail === "pix_copy_paste" && paymentRequest.sourceType === "financial_inbox"))
       || (paymentRequest.sourceType === "financial_inbox"
         ? paymentRequest.sourceId !== params.expected.financialInboxMessageId
         : paymentRequest.sourceId !== params.expected.expenseId || Boolean(params.expected.financialInboxMessageId))
@@ -739,9 +742,10 @@ async function reconcileExpectedBankDebit(params: {
     if (paymentRequest.sourceType === "financial_inbox" && !inboxMessage) {
       throw new ExpectedBankDebitReviewError("A cobrança de origem do pagamento não foi encontrada.");
     }
-    const expensePrincipal = Number(expense.totalValue) || 0;
+    const installmentNumber = paymentRequest.installmentNumber ?? null;
+    const expensePrincipal = expectedDebitPrincipalForExpense(expense, installmentNumber);
     const principal = params.expected.principalAmount;
-    if (expensePrincipal > 0 && Math.abs(expensePrincipal - principal) > 0.01) {
+    if (expensePrincipal === null || Math.abs(expensePrincipal - principal) > 0.01) {
       throw new ExpectedBankDebitReviewError(
         "O principal da despesa diverge da solicitação bancária; a baixa automática foi bloqueada.",
       );
@@ -752,7 +756,9 @@ async function reconcileExpectedBankDebit(params: {
       cashAmount: cash,
       expectedAmount: params.expected.amount,
       bankSettlementAmount: paymentRequest.bankSettlementAmount,
-      dueDate: paymentRequest.barcodeSnapshot.dueDate,
+      dueDate: paymentRequest.paymentRail === "pix_copy_paste"
+        ? paymentRequest.pixCopyPasteSnapshot.dueDate
+        : paymentRequest.barcodeSnapshot.dueDate,
       paidOn: params.entry.date,
     });
     if (settlementObservation.divergence === "expected_amount") {
@@ -871,12 +877,13 @@ async function reconcileExpectedBankDebit(params: {
       throw new ExpectedBankDebitReviewError("A solicitação bancária não aceita a baixa pelo extrato.");
     }
     const installments = Array.isArray(expense.installments)
-      ? expense.installments.map((installment: Record<string, unknown>) => ({
-          ...installment,
-          ...(match.summary.obligationStatus === "PAID" && installment.status !== "cancelled"
-            ? { status: "paid", paidAt, linkedBankTransactionId: params.transactionId }
-            : {}),
-        }))
+      ? settleExpectedDebitInstallments(
+          expense.installments,
+          installmentNumber,
+          match.summary.obligationStatus === "PAID",
+          paidAt,
+          params.transactionId,
+        )
       : expense.installments;
     batch.set(expenseRef, {
       ...match.expensePatch,

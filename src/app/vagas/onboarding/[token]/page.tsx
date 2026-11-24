@@ -87,7 +87,7 @@ type PublicOnboarding = {
   } | null;
 };
 
-type ChildAnswer = { birthDate: string; name: string; cpf: string };
+type ChildAnswer = { birthDate: string; name: string; cpf: string; incomeTaxDependent: boolean };
 
 type FormalizationAnswers = {
   fullName: string;
@@ -210,6 +210,7 @@ function asChildren(value: unknown, count: number): ChildAnswer[] {
       birthDate: /^\d{4}-\d{2}-\d{2}$/.test(birthDate) ? birthDate : "",
       name: asString(data.name),
       cpf: asString(data.cpf),
+      incomeTaxDependent: data.incomeTaxDependent === true,
     };
   });
 }
@@ -456,7 +457,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
     setAnswers(current => ({
       ...current,
       childrenCount: count,
-      children: Array.from({ length: count }, (_, index) => current.children[index] ?? { birthDate: "", name: "", cpf: "" }),
+      children: Array.from({ length: count }, (_, index) => current.children[index] ?? { birthDate: "", name: "", cpf: "", incomeTaxDependent: false }),
     }));
   }
 
@@ -478,7 +479,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
     }));
   }
 
-  function setChildField(index: number, field: keyof ChildAnswer, value: string) {
+  function setChildField(index: number, field: keyof ChildAnswer, value: string | boolean) {
     setAnswers(current => ({
       ...current,
       children: current.children.map((child, childIndex) => childIndex === index ? { ...child, [field]: value } : child),
@@ -1003,6 +1004,10 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
                               ? "A documentação exigida será listada no bloco de salário-família abaixo."
                               : "Nenhuma documentação de salário-família exigida pela idade informada."}
                           </p>
+                          <label className="flex items-center gap-2 text-xs font-semibold md:col-span-2">
+                            <input type="checkbox" checked={child.incomeTaxDependent} onChange={event => setChildField(index, "incomeTaxDependent", event.target.checked)} />
+                            Declaro este filho como dependente para o imposto de renda na folha
+                          </label>
                         </div>
                       ) : (
                         <p className="mt-1 text-[11px] font-semibold text-[#5B4C5B]">

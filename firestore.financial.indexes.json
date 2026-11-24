@@ -1,5 +1,23 @@
 {
   "indexes": [
+    {"collectionGroup":"financialBudgetProjects","queryScope":"COLLECTION","fields":[{"fieldPath":"active","order":"ASCENDING"},{"fieldPath":"cashPlanningEnabled","order":"ASCENDING"},{"fieldPath":"cashPlanStartDate","order":"ASCENDING"}]},
+    {"collectionGroup":"items","queryScope":"COLLECTION_GROUP","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"closureId","order":"ASCENDING"}]},
+    {"collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "employeeId", "order": "ASCENDING"}, {"fieldPath": "provisionCompetence", "order": "ASCENDING"}, {"fieldPath": "payrollEarningType", "order": "ASCENDING"}]},
+    {"collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "fiscalIdentity.taxpayerTaxId", "order": "ASCENDING"}, {"fieldPath": "competenceMonth", "order": "ASCENDING"}]},
+    {"collectionGroup": "financialInboxMessages", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "linkedExpenseId", "order": "ASCENDING"}]},
+    {"collectionGroup": "payrollFinancialReviews", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "createdBy", "order": "ASCENDING"}]},
+    {"collectionGroup": "payrollFinancialReviewState", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "updatedBy", "order": "ASCENDING"}]},
+    {"collectionGroup": "payrollFinancialReviewClaims", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "updatedBy", "order": "ASCENDING"}]},
+    {"collectionGroup": "payrollFinancialReviews", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "subjectKeys", "arrayConfig": "CONTAINS"}]},
+    {"collectionGroup": "payrollFinancialReviews", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "referenceEmployeeUid", "order": "ASCENDING"}]},
+    {"collectionGroup": "payrollFinancialReviews", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "referenceEmployeeId", "order": "ASCENDING"}]},
+    {"collectionGroup": "payrollFinancialReviewState", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "subjectKeys", "arrayConfig": "CONTAINS"}]},
+    {"collectionGroup": "payrollFinancialReviewState", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "referenceEmployeeUid", "order": "ASCENDING"}]},
+    {"collectionGroup": "payrollFinancialReviewState", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "referenceEmployeeId", "order": "ASCENDING"}]},
+    {"collectionGroup": "payrollFinancialReviewClaims", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "subjectKeys", "arrayConfig": "CONTAINS"}]},
+    {"collectionGroup": "payrollFinancialReviewClaims", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "referenceEmployeeUid", "order": "ASCENDING"}]},
+    {"collectionGroup": "payrollFinancialReviewClaims", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "referenceEmployeeId", "order": "ASCENDING"}]},
+
     { "collectionGroup": "financialAcquirerFeeBatches", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "unitId", "order": "ASCENDING" }, { "fieldPath": "stoneCode", "order": "ASCENDING" }, { "fieldPath": "referenceDate", "order": "ASCENDING" }, { "fieldPath": "source", "order": "ASCENDING" }
     ] },
@@ -543,6 +561,31 @@
     }
   ],
   "fieldOverrides": [
+    {
+      "collectionGroup": "events",
+      "fieldPath": "purchasePixIndication.confirmedBy",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "feeAutoPendingMonths",
+      "fieldPath": "reviews",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "events",
+      "fieldPath": "actorId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
     {
       "collectionGroup": "interWebhookRawEvents",
       "fieldPath": "expiresAt",

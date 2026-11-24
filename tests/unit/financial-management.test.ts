@@ -12,7 +12,8 @@ function source(): DreSourceDataPayload { return { expenses: [
   dates: ["2026-09-01"], hasUndatedReports: false }], closureSummaries: [{ id: "unit-09", kioskId: "unit", year: 2026, month: 9,
     closureCount: 1, expectedTotalCents: 100_000, differenceTotalCents: 0,
     ...summarizeCashClosureDre([{ date: "2026-09-01", pdvSales: { version: 1, amountCents: 100_000 },
-      finalizedCashDifferences: { version: 1, shortageCents: 0, surplusCents: 0 } }]) }], missingSimulationIds: [],
+      dreSelectedCashDifferences: { version: 1, shortageCents: 0, surplusCents: 0 },
+      drePdvFallbackOperatorCount: 0, operatorCount: 1, finalizedOperatorCount: 1 }]) }], missingSimulationIds: [],
 stats: { expenseDocuments: 1, salesReportDocuments: 1, closureSummaryDocuments: 0, simulationDocuments: 1 } }; }
 function input() { return { request, source: source(), accounts: { cost: { name: "Cost", drePosition: "despesas_operacionais", isDreAccount: true } },
   centerName: "Unit", centerNames: { unit: "Unit" }, cash: { movements: [], excludedCount: 0, confirmedBalance: null }, receivables: null }; }

@@ -29,7 +29,7 @@ test('glob 10 inside Firebase CLI retains its modern minimatch API', () => {
   const minimatch = globRequire('minimatch') as { Minimatch: new (pattern: string) => { match: (path: string) => boolean } };
   const { globSync } = firebaseRequire('glob') as { globSync: (pattern: string, options: { cwd: string }) => string[] };
 
-  assert.equal(globRequire('minimatch/package.json').version, '10.2.4');
+  assert.equal(globRequire('minimatch/package.json').version, '11.0.5');
   assert.equal(new minimatch.Minimatch('*.mjs').match('uber-direct-vpc.mjs'), true);
   assert.ok(globSync('uber-direct-vpc.mjs', { cwd: 'scripts' }).includes('uber-direct-vpc.mjs'));
 });

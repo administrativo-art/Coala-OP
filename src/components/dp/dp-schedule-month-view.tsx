@@ -361,7 +361,11 @@ export function DPScheduleMonthView({ year, month }: { year: number; month: numb
                   selected: !!schedule && selectedSchedule?.id === schedule.id,
                   disabled: !interactive,
                   filledDays: schedule ? filledDaysByScheduleId[schedule.id] ?? 0 : 0,
-                  expectedDays: unit ? countExpectedDPUnitDays({ unit, year, month, shiftDefinitions }) : null,
+                  expectedDays: unit ? countExpectedDPUnitDays({
+                    unit, year, month, shiftDefinitions,
+                    closedDates: isDefaultAdmin || permissions.dp?.schedules?.edit
+                      ? schedule?.draftClosedDates ?? schedule?.closedDates : schedule?.closedDates,
+                  }) : null,
                   onClick: interactive ? () => {
                     if (schedule) selectSchedule(schedule.id);
                     else if (canCreate && createDependenciesReady) openCreate(unit?.id);

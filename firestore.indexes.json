@@ -1,6 +1,8 @@
 
 {
   "indexes": [
+    {"collectionGroup":"lots","queryScope":"COLLECTION","fields":[{"fieldPath":"productId","order":"ASCENDING"},{"fieldPath":"quantity","order":"ASCENDING"}]},
+    {"collectionGroup":"providerPortalGrants","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"officeId","order":"ASCENDING"},{"fieldPath":"memberId","order":"ASCENDING"},{"fieldPath":"revokedAt","order":"ASCENDING"},{"fieldPath":"expiresAt","order":"ASCENDING"}]},
     {"collectionGroup":"assets","queryScope":"COLLECTION","fields":[{"fieldPath":"custody.holderId","order":"ASCENDING"},{"fieldPath":"custody.holderType","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
     {"collectionGroup":"assetCustodyTransfers","queryScope":"COLLECTION","fields":[{"fieldPath":"fromHolder.holderId","order":"ASCENDING"},{"fieldPath":"fromHolder.holderType","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
     {"collectionGroup":"assetCustodyTransfers","queryScope":"COLLECTION","fields":[{"fieldPath":"toHolder.holderId","order":"ASCENDING"},{"fieldPath":"toHolder.holderType","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
@@ -827,6 +829,10 @@
     }
   ],
   "fieldOverrides": [
+    { "collectionGroup": "shifts", "fieldPath": "userId", "indexes": [
+      { "order": "ASCENDING", "queryScope": "COLLECTION" },
+      { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+    ] },
     { "collectionGroup": "privacyPersonCursorStates", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
     { "collectionGroup": "authIdentityMigrations", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
     {

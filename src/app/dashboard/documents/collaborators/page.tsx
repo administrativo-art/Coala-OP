@@ -1,4 +1,5 @@
-import { ArchiveEmployees } from "@/features/documents/central/archive-employees";
+import { CollaboratorArchive } from "@/features/documents/central/collaborator-archive";
+
 export default function CollaboratorArchivePage() {
-  return <ArchiveEmployees />;
+  return <CollaboratorArchive />;
 }

@@ -282,6 +282,12 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               || permissions.financial?.paymentRequests?.view,
           },
           {
+            label: "Fechamento do mês",
+            href: "/dashboard/financial/month-closing",
+            icon: ClipboardCheck,
+            show: isDefaultAdmin || (permissions.financial?.view && permissions.financial?.monthClosings?.view),
+          },
+          {
             label: "Conciliação e fechamento",
             href: "__group:reconciliation",
             icon: ClipboardCheck,
@@ -302,8 +308,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             show: permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow || isDefaultAdmin,
             children: [
               { label: "Visão do caixa", href: "/dashboard/financial/cash-flow", icon: Wallet, show: permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow },
-              { label: "Recebíveis", href: "/dashboard/financial/cash-flow/receivables", icon: Wallet, show: isDefaultAdmin },
-              { label: "Coala Financeiro", href: "/dashboard/financial/cash-flow/agent", icon: Wallet, show: isDefaultAdmin },
             ],
           },
           { label: "DRE", href: "/dashboard/financial/dre", icon: Landmark, show: permissions.financial?.dre },

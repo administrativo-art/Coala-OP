@@ -17,6 +17,7 @@ const optionalId = reviewId.nullable().optional();
 const adjustmentSchema = z.object({
   type: z.literal("item_cancellation"),
   originalAmountCents: z.number().int().min(1).max(MAX_SALE_CENTS),
+  itemDiscountCents: z.number().int().min(1).max(MAX_SALE_CENTS).optional(),
   cancelledAmountCents: z.number().int().min(1).max(MAX_SALE_CENTS),
   finalAmountCents: z.number().int().min(1).max(MAX_SALE_CENTS),
   lastCancellationAt: reviewTimestamp.nullable(),
@@ -26,7 +27,7 @@ const adjustmentSchema = z.object({
 const factSchema = z.object({
   id: reviewId, source: z.enum(["pdv", "stone"]), workspaceId: reviewId,
   kioskId: reviewId.nullable(), businessDate: reviewDate, soldAt: reviewTimestamp,
-  channel: z.enum(["pix", "credit_card", "debit_card"]),
+  channel: z.enum(["pix", "credit_card", "debit_card", "voucher"]),
   grossAmountCents: z.number().int().min(1).max(MAX_SALE_CENTS),
   status: z.enum(["approved", "pending", "partial_cancellation", "cancelled", "refunded", "chargeback"]),
   couponId: optionalId,

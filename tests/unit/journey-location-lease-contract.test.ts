@@ -12,7 +12,7 @@ const access = readFileSync('src/features/dp/rep-p/location-access.server.ts', '
 test('lease depende de usuário, jornada e política ao vivo, nunca da classificação empresarial', () => {
   assert.match(lease, /context\.decoded\.uid/);
   assert.match(lease, /locationTrackingPolicy !== 'workday'/);
-  assert.match(lease, /participantUserIds\.includes\(context\.decoded\.uid\)/);
+  assert.doesNotMatch(lease, /participantUserIds/);
   assert.match(lease, /shiftWindowContainsNow\(shift, now\)/);
   assert.doesNotMatch(lease, /mobileCorporateDevices|corporateDevice/);
 });

@@ -200,9 +200,12 @@ function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'NOT_FOUND
 function markingAllowedForProfile(context: ServerUserContext) {
   return context.permissions.app.timeRecording?.mark === true;
 }
-function locationPolicyForActor(context: ServerUserContext, policy: RepPLocationPolicySnapshot) {
-  return policy.participantUserIds.includes(context.decoded.uid)
-    ? policy : disabledRepPLocationPolicy(context.workspace_id, policy.executionUnitId);
+/** A coleta vale para todos: quem decide é o turno (uso da localização) e a unidade só entrega a área. */
+function locationPolicyForActor(_context: ServerUserContext, policy: RepPLocationPolicySnapshot) {
+  // A área pode ser cadastrada antes da aprovação jurídica. Sem referência aprovada, o servidor não pede nem grava posição.
+  return policy.mode === 'observe' && policy.legalBasisReference
+    && policy.retentionDays === REP_P_LOCATION_RETENTION_DAYS
+    ? policy : disabledRepPLocationPolicy(policy.workspaceId, policy.executionUnitId);
 }
 function digest(value: unknown) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
 function establishmentKey(workspaceId: string, cnpj: string) { return digest(['establishment', workspaceId, cnpj]); }
@@ -1569,7 +1572,7 @@ export async function classifyOwnRepPMarking(context: ServerUserContext, receipt
   // coordenados na mesma transação mesmo com a ARP em banco dedicado.
   return deps.hrDb.runTransaction(async (tx) => {
     const closureRef = deps.hrDb.collection('ptrp_competenceClosures').doc(`${context.workspace_id}_${workDate.slice(0, 7)}`);
-    const classificationRef = deps.hrDb.collection(CLASSIFICATIONS).doc(receiptId);
+    const classificationRef = closureClassificationRef(deps.hrDb, receiptId);
     const closure = await tx.get(closureRef);
     const classificationDocument = await tx.get(classificationRef);
     const closureVersion = Number(closure.get('version') ?? 0);
@@ -1712,7 +1715,7 @@ export async function listRepPMarkingsOfPerson(workspaceId: string, employeeUid:
     baseFilters(deps.pilotDb, PILOT_MARKINGS).get(),
   ]);
   const overlays = snapshot.docs.length ? await deps.hrDb.getAll(...snapshot.docs
-    .map((document) => deps.hrDb.collection(CLASSIFICATIONS).doc(document.id))) : [];
+    .map((document) => closureClassificationRef(deps.hrDb, document.id))) : [];
   const visible = options.locationVisible;
   const locations = visible ? await markingLocations(deps, snapshot.docs
     .filter((document) => visible(String((document.get('snapshot') as RepPReceiptSnapshot).executionUnitId)))
@@ -1759,6 +1762,22 @@ export async function readRepPPilotMarkingsForBank(workspaceId: string, employee
   };
 }
 
+/** Entradas oficiais para conferir o ponto. Não lê PDFs, dados de localização nem o piloto. */
+export async function readClosureMarkings(repDb: Firestore, workspaceId: string, uid: string, start: string, end: string) {
+  const rows = await repDb.collection('repP_receipts').where('workspaceId', '==', workspaceId).where('employeeId', '==', uid)
+    .where('recordedDate', '>=', start).where('recordedDate', '<=', end).orderBy('recordedDate')
+    .select('snapshot.nsr', 'snapshot.markedAt', 'snapshot.executionUnitId', 'recordedDate', 'classification')
+    .limit(MAX_HISTORY_MARKINGS + 1).get();
+  if (rows.size > MAX_HISTORY_MARKINGS) throw fail('REP_P_HISTORY_TRUNCATED', 'Há batidas demais para conferir a competência.', 'CONFLICT');
+  return rows.docs.map((doc) => ({ receiptId: doc.id, workDate: String(doc.get('recordedDate')),
+    nsr: Number(doc.get('snapshot.nsr')), markedAt: String(doc.get('snapshot.markedAt')), executionUnitId: String(doc.get('snapshot.executionUnitId')),
+    classification: doc.get('classification') ?? null, receiptStatus: 'available' as const }));
+}
+
+export function closureClassificationRef(hrDb: Firestore, receiptId: string) {
+  return hrDb.collection(CLASSIFICATIONS).doc(receiptId);
+}
+
 /**
  * Batidas de uma pessoa num período para o espelho do fechamento (Etapa 6): mesma consulta do histórico próprio,
  * chamada só pelo serviço de espelho depois de conferir a permissão. Devolve também a identidade congelada no
@@ -1796,7 +1815,7 @@ export async function readRepPForAej(workspaceId: string, establishmentId: strin
   const { markings, receipts } = await deps.repDb.runTransaction(async (transaction) => {
     const events = await transaction.get(deps.repDb.collection(EVENTS).where('workspaceId', '==', workspaceId).where('establishmentId', '==', establishmentId)
       .where('recordedDate', '>=', startDate).where('recordedDate', '<=', endDate).orderBy('recordedDate').orderBy('nsr').limit(maxEvents + 1));
-    const catalog = await transaction.get(deps.repDb.collection(RECEIPTS).where('workspaceId', '==', workspaceId).where('establishmentId', '==', establishmentId)
+    const catalog = await transaction.get(deps.repDb.collection('repP_receipts').where('workspaceId', '==', workspaceId).where('establishmentId', '==', establishmentId)
       .where('recordedDate', '>=', startDate).where('recordedDate', '<=', endDate).limit(maxEvents + 1));
     if (events.size > maxEvents || catalog.size > maxEvents) throw fail('REP_P_AFD_RANGE_TOO_LARGE', 'O período excede o limite seguro de exportação. Divida o intervalo de datas.');
     return {

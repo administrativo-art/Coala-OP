@@ -314,6 +314,7 @@ export default async function seedE2E() {
   };
   batch.set(mainDb.collection("purchase_orders").doc(E2E_ORDER_IDS.issued), {
     ...commonOrder,
+    paymentMethod: "pix",
     supplierId: "supplier-e2e-issued",
     supplierName: "Fornecedor E2E Emitido",
     status: "created",
@@ -419,6 +420,11 @@ export async function resetFinancialE2EFixtures() {
   const financialBatch = financialDb.batch();
   financialBatch.set(financialDb.collection("accounts").doc("account-e2e"), {
     name: "Equipamentos e maquinários",
+    active: true,
+    parentId: null,
+  });
+  financialBatch.set(financialDb.collection("accounts").doc("service-fee-e2e"), {
+    name: "Taxa de serviço E2E",
     active: true,
     parentId: null,
   });

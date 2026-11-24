@@ -286,6 +286,44 @@ test("central: autorização atual, paginação e proposta preservadas pelas API
     assert.equal((await read({})).status,403);
     await person.update({unitIds:["central-unit-a"]});
   });
+  await t.test("upload e status exigem gestão e unidade antes de persistir", async () => {
+    const file = new File([Buffer.from("%PDF-1.4 teste")], "arquivo.pdf", { type: "application/pdf" });
+    const upload = (authenticated = true) => {
+      const form = new FormData();
+      form.set("employeeId", employeeId);
+      form.set("documentTypeCode", "UNKNOWN_DOCUMENT");
+      form.set("file", file);
+      return employeeDocuments.POST(new NextRequest("http://localhost/api/hr/employee-documents", {
+        method: "POST", headers: authenticated ? { Authorization: `Bearer ${idToken}` } : {}, body: form,
+      }));
+    };
+    assert.equal((await upload(false)).status, 401);
+    await person.update({ unitIds: ["central-unit-b"] });
+    assert.equal((await upload()).status, 403);
+    await person.update({ unitIds: ["central-unit-a"] });
+    const response = await upload();
+    assert.equal(response.status, 201);
+    const { document: filed } = await response.json();
+    const ref = hrDbAdmin.collection("employeeDocuments").doc(filed.id);
+    const stored = await ref.get();
+    assert.equal(stored.get("employeeId"), employeeId);
+    assert.equal((await ref.collection("audit").where("action", "==", "DOCUMENT_FILED").get()).size, 1);
+    const patch = (status, authenticated = true) => employeeDocuments.PATCH(new NextRequest("http://localhost/api/hr/employee-documents", {
+      method: "PATCH", headers: { ...(authenticated ? { Authorization: `Bearer ${idToken}` } : {}), "Content-Type": "application/json" },
+      body: JSON.stringify({ id: filed.id, status }),
+    }));
+    assert.equal((await patch("validated", false)).status, 401);
+    await person.update({ unitIds: ["central-unit-b"] });
+    assert.equal((await patch("validated")).status, 403);
+    assert.equal((await ref.get()).get("status"), "received");
+    await person.update({ unitIds: ["central-unit-a"] });
+    assert.equal((await patch("validated")).status, 200);
+    assert.equal((await ref.get()).get("status"), "validated");
+    assert.equal((await ref.collection("audit").where("action", "==", "status_validated").get()).size, 1);
+    await getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET)
+      .file(stored.get("storagePath")).delete({ ignoreNotFound: true });
+    await ref.delete();
+  });
   await t.test("remover assinado do Acervo preserva o original compartilhado e revalida gestão/unidade", async () => {
     const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
     const path = `central-integration/${uid}/shared-signed.pdf`;
@@ -300,7 +338,7 @@ test("central: autorização atual, paginação e proposta preservadas pelas API
     const listed = (await listing.json()).documents.find((item) => item.id === document.id);
     assert.ok(listed);
     for (const field of ["storagePath", "storageSubfolder", "signedFileUrl"]) assert.equal(field in listed, false, "a lista não deve expor caminhos ou links privados");
-    assert.equal((await remove(false)).status, 403);
+    assert.equal((await remove(false)).status, 401);
     await person.update({ unitIds: ["central-unit-b"] });
     assert.equal((await remove()).status, 403);
     assert.equal((await document.get()).get("deletedAt"), null);

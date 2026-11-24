@@ -173,6 +173,8 @@ export function buildDrePersonAnalysis({
     amount: number;
     allocationResultCenter?: string | null;
   }) {
+    // Explicit financial namespace for external beneficiaries, not an employment reference.
+    if (employeeId.trim().startsWith("external:")) return;
     const amountInCents = cents(amount);
     if (amountInCents <= 0) return;
 

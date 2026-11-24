@@ -14,6 +14,20 @@ const TRANSIENT_NETWORK_CODES = new Set([
   "ETIMEDOUT",
 ]);
 const RESPONSE_DETAILS_LIMIT = 2_000;
+const INTER_DESTINATION_FIELD = /(?:chave|pix.?key|destinat|recipient|receiver|destination|headers?|authorization|token|secret|password|cert|private.?key|payload|body|conta|account|agencia|agency)/i;
+const PIX_UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+
+function redactInterResponse(value: unknown, depth = 0, seen = new WeakSet<object>()): unknown {
+  if (typeof value === "string") return value.replace(PIX_UUID, "[REDACTED]")
+    .replace(/\b(chave(?:\s+pix)?|pixkey|destinat[aá]rio)\s*[:=]?\s*([^\s,.;]+)/gi, "$1 [REDACTED]");
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "object") return value;
+  if (depth >= 5 || seen.has(value)) return null;
+  seen.add(value);
+  if (Array.isArray(value)) return value.slice(0, 20).map(item => redactInterResponse(item, depth + 1, seen));
+  return Object.fromEntries(Object.entries(value).slice(0, 30).map(([key, entry]) => [key,
+    INTER_DESTINATION_FIELD.test(key) ? "[REDACTED]" : redactInterResponse(entry, depth + 1, seen)]));
+}
 
 function axiosFacts(error: unknown) {
   try {
@@ -38,7 +52,7 @@ export function interResponseDetails(error: unknown): string | null {
           : undefined
       );
     if (data === undefined || data === null || data === "") return null;
-    const sanitized = sanitizeValue(data);
+    const sanitized = sanitizeValue(redactInterResponse(data));
     const serialized = typeof sanitized === "string" ? sanitized : JSON.stringify(sanitized);
     if (!serialized || serialized === "{}" || serialized === "null") return null;
     return serialized.slice(0, RESPONSE_DETAILS_LIMIT);

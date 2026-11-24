@@ -184,3 +184,6 @@ O resumo mensal de cada colaborador deverá mostrar, sem dupla contagem:
 - centro de resultado individual;
 - contrato/instituição, para consignado;
 - conciliação entre linhas, contas e total do título.
+
+
+Implementação local de 23/11/2026: a seção Conciliação financeira da folha registra a conferência dos títulos já cadastrados. O valor lido é explícito e vinculado ao documento/hash/competência. Salário compara líquido com valor a pagar; guia compara nominal com individualizações por conta. Título, documento e identificador de guia têm exclusividade no registro. A operação preserva contas/naturezas existentes e não gera lançamento ou pagamento. Identidade, número, individualização ou vínculo sem prova ficam pendentes. Publicação e homologação real não realizadas.

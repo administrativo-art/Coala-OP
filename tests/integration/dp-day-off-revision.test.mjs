@@ -18,6 +18,9 @@ test('folga Bizneo em revisão ativa publica, falha, repete e remove por overlay
   const date = '2027-12-12';
   const schedule = dbAdmin.collection('dp_schedules').doc(`${workspaceId}-schedule`);
   const revisionId = 'rev-1';
+  const indexKey = `${userId}:2027-12`;
+  const legacyIndexId = createHash('sha256').update(JSON.stringify(indexKey)).digest('hex');
+  const currentIndexId = createHash('sha256').update(indexKey).digest('hex');
   const officialWork = { id: 'official-work', scheduleId: schedule.id, unitId, userId,
     date: '2027-12-13', type: 'work', startTime: '09:00', endTime: '17:00' };
   const context = { decoded: { uid: `${workspaceId}-admin` }, userDoc: { username: 'Admin' },
@@ -53,7 +56,7 @@ test('folga Bizneo em revisão ativa publica, falha, repete e remove por overlay
       schedule.collection('revisions').doc(revisionId).collection('people').doc(userId).set({ shifts: [officialWork] }),
       schedule.collection('shifts').doc('stale-work').set({ scheduleId: schedule.id, unitId, userId,
         date, type: 'work', startTime: '09:00', endTime: '17:00' }),
-      dbAdmin.collection('dp_personScheduleIndex').doc(createHash('sha256').update(`${userId}:2027-12`).digest('hex'))
+      dbAdmin.collection('dp_personScheduleIndex').doc(legacyIndexId)
         .set({ userId, competence: '2027-12', scheduleIds: [schedule.id] }),
       dbAdmin.collection('dp_units').doc(unitId).set({ name: 'Unidade teste' }),
       dbAdmin.collection('users').doc(userId).set({ username: 'Colaboradora', isActive: true,
@@ -91,7 +94,8 @@ test('folga Bizneo em revisão ativa publica, falha, repete e remove por overlay
     await Promise.all(logs.docs.map((doc) => doc.ref.delete()));
     await Promise.all([
       dbAdmin.collection('dp_bizneo_day_off_operations').doc(operationId).delete(),
-      dbAdmin.collection('dp_personScheduleIndex').doc(createHash('sha256').update(`${userId}:2027-12`).digest('hex')).delete(),
+      dbAdmin.collection('dp_personScheduleIndex').doc(legacyIndexId).delete(),
+      dbAdmin.collection('dp_personScheduleIndex').doc(currentIndexId).delete(),
       schedule.collection('operationalOverlays').doc(revisionId).collection('entries').doc(shiftId).delete(),
       schedule.collection('operationalOverlays').doc(revisionId).collection('people').doc(userId).delete(),
       schedule.collection('revisions').doc(revisionId).collection('entries').doc(officialWork.id).delete(),
@@ -101,4 +105,69 @@ test('folga Bizneo em revisão ativa publica, falha, repete e remove por overlay
       dbAdmin.collection('dp_units').doc(unitId).delete(), dbAdmin.collection('users').doc(userId).delete(),
     ]);
   }
+});
+
+test('folga Bizneo em revisão ativa publica e remove com a proteção de ocupação ligada', async (t) => {
+  const suffix = randomUUID().slice(0, 8);
+  const workspaceId = `dayoff-guard-${suffix}`;
+  const userId = `${workspaceId}-user`;
+  const unitId = `${workspaceId}-unit`;
+  const date = '2027-12-14';
+  const schedule = dbAdmin.collection('dp_schedules').doc(`${workspaceId}-schedule`);
+  const revisionId = 'rev-1';
+  const previousGuard = process.env.DP_ABSENCE_OPERATIONAL_GUARD;
+  process.env.DP_ABSENCE_OPERATIONAL_GUARD = 'on';
+  const originalFetch = globalThis.fetch;
+  let kind = 'schedule';
+  globalThis.fetch = async (input, init) => {
+    const method = init?.method ?? 'GET';
+    if (method === 'POST') { kind = 'one_time_rest'; return new Response('{}', { status: 201 }); }
+    if (method === 'DELETE') { kind = 'schedule'; return new Response('{}', { status: 200 }); }
+    return new Response(JSON.stringify({ day_details: [{ date, kind, absences: [], time_ranges: [] }] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  const context = { decoded: { uid: `${workspaceId}-admin` }, userDoc: { username: 'Admin' },
+    permissions: structuredClone(defaultAdminPermissions), isDefaultAdmin: true, workspace_id: workspaceId };
+  const operationId = createHash('sha256').update(JSON.stringify([workspaceId, userId, date])).digest('hex').slice(0, 32);
+  const shiftId = `day-off-${operationId.slice(0, 20)}`;
+  const readiness = dbAdmin.collection('dp_absenceOperationalReadiness').doc(workspaceId);
+  const official = { id: 'official-work', scheduleId: schedule.id, unitId, userId,
+    date: '2027-12-15', type: 'work', startTime: '09:00', endTime: '17:00' };
+  t.after(async () => {
+    globalThis.fetch = originalFetch;
+    if (previousGuard === undefined) delete process.env.DP_ABSENCE_OPERATIONAL_GUARD;
+    else process.env.DP_ABSENCE_OPERATIONAL_GUARD = previousGuard;
+    const logs = await dbAdmin.collection('actionLogs').where('workspace_id', '==', workspaceId).get();
+    await Promise.all(logs.docs.map((doc) => doc.ref.delete()));
+    const clocks = await dbAdmin.collection('dp_absenceOccupancyClocks').where('workspaceId', '==', workspaceId).get();
+    await Promise.all(clocks.docs.map((doc) => doc.ref.delete()));
+    await Promise.all([
+      readiness.delete(),
+      dbAdmin.collection('dp_bizneo_day_off_operations').doc(operationId).delete(),
+      schedule.collection('operationalOverlays').doc(revisionId).collection('entries').doc(shiftId).delete(),
+      schedule.collection('operationalOverlays').doc(revisionId).collection('people').doc(userId).delete(),
+      schedule.collection('revisions').doc(revisionId).collection('entries').doc(official.id).delete(),
+      schedule.collection('revisions').doc(revisionId).collection('people').doc(userId).delete(),
+      schedule.collection('revisions').doc(revisionId).delete(), schedule.delete(),
+      dbAdmin.collection('dp_units').doc(unitId).delete(), dbAdmin.collection('users').doc(userId).delete(),
+    ]);
+  });
+  await Promise.all([
+    readiness.set({ workspaceId, state: 'ready', bootstrapComplete: true, coverageHash: 'absence-occupancy-writers-v1',
+      scopeKind: 'workspace_all', scopeHash: 'a'.repeat(64), epoch: randomUUID() }),
+    schedule.set({ workspaceId, year: 2027, month: 12, unitId, locked: false, shiftCount: 1,
+      activeRevisionId: revisionId, publicationStatus: 'published', publicationVersion: 1,
+      operationalVersion: 0, goalEligibilityVersion: 0, journeyValidationVersion: 0 }),
+    schedule.collection('revisions').doc(revisionId).set({ status: 'ready', scheduleId: schedule.id, shiftCount: 1 }),
+    schedule.collection('revisions').doc(revisionId).collection('entries').doc(official.id).set(official),
+    schedule.collection('revisions').doc(revisionId).collection('people').doc(userId).set({ shifts: [official] }),
+    dbAdmin.collection('dp_units').doc(unitId).set({ name: 'Unidade teste' }),
+    dbAdmin.collection('users').doc(userId).set({ username: 'Colaboradora', isActive: true, registrationIdBizneo: '17044767', unitId }),
+  ]);
+  const input = { userId, unitId, date, source: 'manual' };
+  const result = await publishDayOff({ context, scheduleId: schedule.id, input, requestId: 'guard-publish' });
+  assert.equal(result.dayOff.bizneoSyncStatus, 'published');
+  const removed = await removeDayOff({ context, scheduleId: schedule.id,
+    input: { userId, unitId, date, shiftId }, requestId: 'guard-remove' });
+  assert.equal(removed.removed, true);
 });

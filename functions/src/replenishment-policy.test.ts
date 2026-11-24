@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  calculateReplenishment, effectiveLeadTime, physicalShortage, historyStart, historyEnd,
+  calculateReplenishment, effectiveLeadTime, physicalShortage, historyStart, historyEnd, replenishmentMarginFactor,
 } from './replenishment-policy.js';
 
 const days = Array.from({ length: 14 }, (_, index) => ({
@@ -11,6 +11,15 @@ const days = Array.from({ length: 14 }, (_, index) => ({
 test('monthly and biweekly targets use valid daily average with one 30% margin', () => {
   assert.equal(calculateReplenishment({ days, cycleDays: 30, unit: 'un', source: 'pdv_internal' }).target, 390);
   assert.equal(calculateReplenishment({ days, cycleDays: 15, unit: 'un', source: 'pdv_internal' }).target, 195);
+});
+
+test('amendoim at the CD uses 15%; the same product elsewhere and other products use 30%', () => {
+  const amendoim = 'xeMEVoUWeKSqgcBkO0NH';
+  assert.equal(replenishmentMarginFactor(amendoim, 'matriz'), 1.15);
+  assert.equal(replenishmentMarginFactor(amendoim, 'tirirical'), 1.3);
+  assert.equal(replenishmentMarginFactor('other-product', 'matriz'), 1.3);
+  assert.equal(calculateReplenishment({ days, cycleDays: 30, unit: 'g', source: 'pdv_internal',
+    marginFactor: replenishmentMarginFactor(amendoim, 'matriz') }).target, 345);
 });
 
 test('partial and absent reports remain pending, not zeros', () => {

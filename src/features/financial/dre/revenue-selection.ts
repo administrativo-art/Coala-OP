@@ -22,23 +22,40 @@ export type DreRevenueSelection = {
   revenueSource: "cash_closure" | "unavailable";
   revenueCoverage: DreCoverageStatus;
   cashDifferenceCoverage: DreCoverageStatus;
+  cashDifferenceProvisional: boolean | null;
+  cashDifferenceCoveredDays: number;
+  cashDifferenceTotalDays: number;
   coveredDates: string[];
   /** Coverage concerns observed source data, never monthly closing/finalization. */
   pendingOperatorCount: number | null;
   issues: string[];
 };
 
-/** Unknown units stay unknown: never present a partial company sum as its total. */
+/** Revenue requires all units; cash differences show only the verified partial sum. */
 export function aggregateDreRevenue(rows: readonly DreRevenueSelection[]) {
-  const sum = (key: "revenueCents" | "cashShortageCents" | "cashSurplusCents") => {
-    if (!rows.length || rows.some(row => row[key] === null)) return null;
-    const total = rows.reduce((value, row) => value + row[key]!, 0);
+  const sumRevenue = () => {
+    if (!rows.length || rows.some(row => row.revenueCents === null)) return null;
+    const total = rows.reduce((value, row) => value + row.revenueCents!, 0);
     return Number.isSafeInteger(total) ? total : null;
   };
+  const sumKnown = (key: "cashShortageCents" | "cashSurplusCents") => {
+    const known = rows.filter(row => row[key] !== null);
+    if (!known.length) return null;
+    const total = known.reduce((value, row) => value + row[key]!, 0);
+    return Number.isSafeInteger(total) ? total : null;
+  };
+  const coveredDays = rows.reduce((value, row) => value + row.cashDifferenceCoveredDays, 0);
+  const totalDays = rows.reduce((value, row) => value + row.cashDifferenceTotalDays, 0);
   return {
-    revenueCents: sum("revenueCents"),
-    cashShortageCents: sum("cashShortageCents"),
-    cashSurplusCents: sum("cashSurplusCents"),
+    revenueCents: sumRevenue(),
+    cashShortageCents: sumKnown("cashShortageCents"),
+    cashSurplusCents: sumKnown("cashSurplusCents"),
+    cashDifferenceCoveredDays: coveredDays,
+    cashDifferenceTotalDays: totalDays,
+    cashDifferenceCoverage: rows.length && rows.every(row => row.cashDifferenceCoverage === "complete")
+      ? "complete" as const : coveredDays > 0 ? "incomplete" as const : "unavailable" as const,
+    cashDifferenceProvisional: rows.some(row => row.cashDifferenceProvisional === true
+      || row.cashDifferenceCoverage !== "complete"),
     pendingOperatorCount: rows.some(row => row.pendingOperatorCount === null)
       ? null : rows.reduce((value, row) => value + row.pendingOperatorCount!, 0),
     issues: [...new Set(rows.flatMap(row => row.issues))],
@@ -60,6 +77,9 @@ export function selectDreRevenue(input: {
   const result: DreRevenueSelection = {
     revenueCents: null, cashShortageCents: null, cashSurplusCents: null,
     revenueSource: "unavailable", revenueCoverage: "unavailable", cashDifferenceCoverage: "unavailable",
+    cashDifferenceProvisional: null,
+    cashDifferenceCoveredDays: 0,
+    cashDifferenceTotalDays: new Date(Date.UTC(input.year, input.month, 0)).getUTCDate(),
     coveredDates: [], pendingOperatorCount: null, issues: [],
   };
   const finish = () => {
@@ -89,8 +109,24 @@ export function selectDreRevenue(input: {
     return finish();
   }
   result.coveredDates = [...dates];
+  const cashDates = coverage.cashDifferenceDates;
+  const validCashDates = Array.isArray(cashDates)
+    && coverage.cashDifferenceClosureCount === cashDates.length
+    && new Set(cashDates).size === cashDates.length
+    && isCents(coverage.staleCashDifferenceClosureCount ?? 0)
+    && (coverage.staleCashDifferenceClosureCount ?? 0) >= 0
+    && (coverage.staleCashDifferenceClosureCount ?? 0) <= dates.length - cashDates.length
+    && cashDates.every(date => dates.includes(date));
+  if (validCashDates) result.cashDifferenceCoveredDays = cashDates.length;
+  else result.issues.push("invalid_cash_difference_coverage");
   result.pendingOperatorCount = isCents(coverage.pendingOperatorCount) && coverage.pendingOperatorCount >= 0
     ? coverage.pendingOperatorCount : null;
+  const fallbackCount = coverage.pdvFallbackOperatorCount;
+  result.cashDifferenceProvisional = isCents(fallbackCount) && fallbackCount >= 0
+    && result.pendingOperatorCount !== null && fallbackCount === result.pendingOperatorCount
+    ? fallbackCount > 0 : null;
+  if (result.cashDifferenceProvisional === null) result.issues.push("unknown_cash_difference_source_coverage");
+  else if (result.cashDifferenceProvisional) result.issues.push("pdv_count_provisional");
   if (result.pendingOperatorCount === null) result.issues.push("unknown_operator_finalization_coverage");
   else if (result.pendingOperatorCount > 0) result.issues.push("operators_pending_finalization");
   if ((coverage.staleCashDifferenceClosureCount ?? 0) > 0) result.issues.push("pdv_changed_after_approval");
@@ -102,11 +138,14 @@ export function selectDreRevenue(input: {
   const revenueComplete = knownDaysCovered && covers(coverage.revenueDates, coverage.revenueClosureCount)
     && isCents(row.dreRevenueTotalCents);
   const cashComplete = knownDaysCovered && !(coverage.staleCashDifferenceClosureCount ?? 0)
+    && result.cashDifferenceProvisional !== null
+    && validCashDates
     && covers(coverage.cashDifferenceDates, coverage.cashDifferenceClosureCount)
     && isCents(row.dreCashShortageTotalCents) && row.dreCashShortageTotalCents >= 0
     && isCents(row.dreCashSurplusTotalCents) && row.dreCashSurplusTotalCents >= 0;
   result.revenueCoverage = revenueComplete ? "complete" : "incomplete";
-  result.cashDifferenceCoverage = cashComplete ? "complete" : "incomplete";
+  result.cashDifferenceCoverage = cashComplete ? "complete"
+    : result.cashDifferenceCoveredDays > 0 ? "incomplete" : "unavailable";
   if (!knownDaysCovered) result.issues.push("sales_dates_not_covered");
   if (revenueComplete) {
     result.revenueCents = row.dreRevenueTotalCents!;
@@ -115,6 +154,17 @@ export function selectDreRevenue(input: {
   if (cashComplete) {
     result.cashShortageCents = row.dreCashShortageTotalCents!;
     result.cashSurplusCents = row.dreCashSurplusTotalCents!;
-  } else result.issues.push("incomplete_cash_differences");
+  } else {
+    const known = validCashDates && result.cashDifferenceCoveredDays > 0
+      && (cashDates.length < dates.length || !knownDaysCovered)
+      && isCents(row.dreCashShortageKnownCents) && row.dreCashShortageKnownCents >= 0
+      && isCents(row.dreCashSurplusKnownCents) && row.dreCashSurplusKnownCents >= 0;
+    if (known) {
+      result.cashShortageCents = row.dreCashShortageKnownCents!;
+      result.cashSurplusCents = row.dreCashSurplusKnownCents!;
+      result.cashDifferenceProvisional = true;
+    }
+    result.issues.push("incomplete_cash_differences");
+  }
   return finish();
 }

@@ -14,6 +14,7 @@ function paymentOriginLabel(request: BankPaymentRequest) {
   if (request.sourceType === "purchase_order") return "Pedido de compra";
   if (request.sourceType === "financial_inbox") return "Cobrança recebida por e-mail";
   if (request.sourceType === "expense_boleto") return "Boleto anexado à despesa";
+  if (request.sourceType === "expense_supplier_pix") return "Pix por despesa de fornecedor";
   return "Recibo gerado pelo Coala";
 }
 
@@ -28,7 +29,7 @@ export async function createAndStoreConfirmedPaymentProof(request: BankPaymentRe
   const rows = [
     ["Favorecido", request.beneficiarySnapshot?.name ?? "Cobrança por código de barras"],
     ["CPF/CNPJ", request.beneficiarySnapshot?.document ?? "—"],
-    ["Destino", request.beneficiarySnapshot?.maskedPaymentDestination ?? request.barcodeSnapshot?.maskedCode ?? "—"],
+    ["Destino", request.beneficiarySnapshot?.maskedPaymentDestination ?? request.barcodeSnapshot?.maskedCode ?? (request.pixCopyPasteSnapshot ? `Pix copia e cola ${request.pixCopyPasteSnapshot.maskedPayload} · ${request.pixCopyPasteSnapshot.merchantName}` : "—")],
     ["Valor", money(request.amount)],
     ["Descrição", request.description],
     ["Confirmado em", request.paidAt ?? new Date().toISOString()],

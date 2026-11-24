@@ -490,7 +490,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       const result = await response.json().catch(() => null);
       if (!response.ok) {
-        return { error: result?.error || 'Erro ao criar usuário.' };
+        return { error: result?.error?.message ?? (typeof result?.error === 'string' ? result.error : 'Erro ao criar usuário.') };
       }
       return {
         uid: String(result.uid),

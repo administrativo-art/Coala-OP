@@ -7,14 +7,23 @@ import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
+import { financialExpenseCompetenceMonth, financialCompetenceMonthSchema } from "../../src/features/financial/lib/expense-accounting-contract";
+import { validBrazilianTaxId, normalizeBrazilianDocument } from "../../src/features/financial/beneficiaries/normalization";
 import { firebaseClientConfig } from "../../src/lib/firebase-client-config";
-import { validateOverdueSettlementCliRevision, validatePaymentCliAction, validatePaymentCliCancellation, validatePaymentCliPreparation } from "./payment-cli-contract";
+import { interOverdueMinimumCents } from "../../src/features/financial/payment-requests/inter-overdue-quote";
+import { validateOverdueSettlementCliRevision, validatePaymentCliAction, validatePaymentCliCancellation, validatePaymentCliPixAction, validatePaymentCliPixPreparation, validatePaymentCliPreparation } from "./payment-cli-contract";
 import { paymentReadPath, summarizePaymentRead } from "./payment-cli-read-contract";
 import { paymentLookupQuery, decodeFirestoreValue } from "./payment-cli-query-contract";
 import { mainPaymentLookupQuery, summarizeMainPaymentLookup } from "./payment-cli-main-query-contract";
 import { PaymentCliError, paymentCliErrorMessage, paymentCliFetch, paymentCliJson } from "./payment-cli-transport";
 import { startMemorySessionServer, tokenFromMemorySession } from "./payment-cli-memory-session";
+import { readHiddenPassword, setTerminalEcho } from "./payment-cli-password";
 import { expenseBoletoSchema, validateExpenseBoleto } from "../../src/features/financial/payment-requests/expense-boleto";
+import { assertConfirmedExistingExpense, confirmFinancialInboxDocument, supplierNamesAreCompatible } from "../../src/features/financial/inbox/confirmed-document";
+import { forecastAllocationsMatchConfirmedAmount, parseConfirmedAccountAllocations } from "../../src/features/financial/inbox/account-allocation-confirmation";
+import { inboxDareExpenseFingerprint, inboxDareExpenseSchema } from "../../src/features/financial/inbox/expense-create-contract";
+import type { FinancialInboxClassification } from "../../src/features/financial/inbox/types";
+import type { ConfirmedInboxDocumentInput } from "../../src/features/financial/inbox/confirmed-document";
 import {
   assertPurchaseSnapshot,
   purchaseCreatePayload,
@@ -39,6 +48,26 @@ function requireOption(name: string) {
   return value;
 }
 
+function documentConfirmationOptions(): ConfirmedInboxDocumentInput {
+  const fiscalKind = option("fiscal-kind");
+  if (fiscalKind && !["das", "dare", "darf", "dctfweb", "municipal_tax"].includes(fiscalKind)) throw new PaymentCliError("Natureza da guia inválida.");
+  const fiscalIdentity = fiscalKind ? {
+    documentKind: fiscalKind as "das" | "dare" | "darf" | "dctfweb" | "municipal_tax",
+    collectorName: requireOption("collector-name"),
+    taxpayerName: requireOption("taxpayer-name"),
+    taxpayerTaxId: requireOption("taxpayer-tax-id").replace(/\D/g, ""),
+  } : undefined;
+  return {
+    amountCents: Number(requireOption("amount-cents")),
+    dueDate: requireOption("due-date"),
+    competence: requireOption("competence"),
+    barcode: requireOption("barcode").replace(/\D/g, ""),
+    supplierName: requireOption("supplier-name"),
+    supplierTaxId: option("supplier-tax-id").replace(/\D/g, "") || null,
+    ...(fiscalIdentity ? { fiscalIdentity } : {}),
+  };
+}
+
 function help() {
   stdout.write(`Uso:
   npx tsx scripts/financial/coala-authenticated-payment.mts login
@@ -46,6 +75,9 @@ function help() {
   npx tsx scripts/financial/coala-authenticated-payment.mts find --email EMAIL --query TEXTO --view work|identified [--cursor CURSOR]
   npx tsx scripts/financial/coala-authenticated-payment.mts inspect --email EMAIL --id INBOX_ID
   npx tsx scripts/financial/coala-authenticated-payment.mts analyze --email EMAIL --id INBOX_ID
+  npx tsx scripts/financial/coala-authenticated-payment.mts link-forecast --email EMAIL --id INBOX_ID --provision-id EXPENSE_ID --amount-cents CENTAVOS --due-date AAAA-MM-DD --competence AAAA-MM --barcode CODIGO_COMPLETO --supplier-name NOME [--supplier-tax-id CNPJ] [--fiscal-kind das|dare|darf|dctfweb|municipal_tax --collector-name NOME --taxpayer-name NOME --taxpayer-tax-id CNPJ] [--account-allocations-file JSON] --confirm-financial-actions
+  npx tsx scripts/financial/coala-authenticated-payment.mts link-expense --email EMAIL --id INBOX_ID --expense-id EXPENSE_ID --account-plan-id CONTA --result-center-id CENTRO --amount-cents CENTAVOS --due-date AAAA-MM-DD --competence AAAA-MM --barcode CODIGO_COMPLETO --supplier-name NOME [--supplier-tax-id CNPJ] [--fiscal-kind das|dare|darf|dctfweb|municipal_tax --collector-name NOME --taxpayer-name NOME --taxpayer-tax-id CNPJ] [--apportionments-file JSON] --confirm-financial-actions
+  npx tsx scripts/financial/coala-authenticated-payment.mts create-dare-expense --email EMAIL --id INBOX_ID --manifest JSON --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts reconcile-vivo --email EMAIL --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts document --email EMAIL --collection expenses|bankPaymentRequests|transactions --id ID
   npx tsx scripts/financial/coala-authenticated-payment.mts lookup --email EMAIL --kind expense-amount|expense-supplier|expense-purchase-order|expense-due-date|expense-account|expense-account-center|expense-unit-month|expense-center-due-month --value VALOR
@@ -58,55 +90,37 @@ function help() {
   npx tsx scripts/financial/coala-authenticated-payment.mts supplier-create --email EMAIL --manifest JSON --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts purchase-create --email EMAIL --manifest JSON --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts purchase-fiscal-link --email EMAIL --id ORDER_ID --manifest JSON --confirm-financial-actions
-  npx tsx scripts/financial/coala-authenticated-payment.mts purchase-confirm --email EMAIL --id ORDER_ID --invoice-access-key CHAVE --expected-total-cents CENTAVOS --confirm-financial-actions
+  npx tsx scripts/financial/coala-authenticated-payment.mts purchase-confirm --email EMAIL --id ORDER_ID --invoice-access-key CHAVE_OU_--commercial-order NUMERO --expected-total-cents MERCADORIA_CENTAVOS --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts purchase-sync-expense --email EMAIL --id ORDER_ID --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts purchase-document-attach --email EMAIL --id ORDER_ID --receipt-id RECEIPT_ID --role danfe|boletos --file PDF --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts expense-boleto-attach --email EMAIL --expense-id EXPENSE_ID --installment-number N --file PDF --amount-cents CENTAVOS --due-date AAAA-MM-DD --competence-month AAAA-MM --beneficiary-document CNPJ --document-reference REFERENCIA --barcode CODIGO --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts expense-boleto-prepare --email EMAIL --expense-id EXPENSE_ID --installment-number N --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --barcode CODIGO --confirm-financial-actions
+  npx tsx scripts/financial/coala-authenticated-payment.mts supplier-pix-prepare|supplier-pix-authorize|supplier-pix-send --email EMAIL --expense-id ID --supplier-entity-id ID --beneficiary-document CPF_OU_CNPJ --competence-month AAAA-MM --amount-cents CENTAVOS --confirm-financial-actions
+  supplier-pix-prepare aceita --previous-paid-request-id ID e --preserve-boleto para cobrança histórica PJ; compra NF PJ/Pix PF exige --invoice-access-key CHAVE --indication-reason MOTIVO --indication-evidence EVIDENCIA.
   npx tsx scripts/financial/coala-authenticated-payment.mts requests --email EMAIL --amount-cents CENTAVOS
   npx tsx scripts/financial/coala-authenticated-payment.mts status --email EMAIL --id REQUEST_ID
   npx tsx scripts/financial/coala-authenticated-payment.mts refresh --email EMAIL --id REQUEST_ID
   npx tsx scripts/financial/coala-authenticated-payment.mts cancel-replace --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --current-scheduled-for AAAA-MM-DD --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO --confirm-financial-actions
-  npx tsx scripts/financial/coala-authenticated-payment.mts prepare --email EMAIL --id INBOX_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
-  npx tsx scripts/financial/coala-authenticated-payment.mts authorize --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CPF_OU_CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
-  npx tsx scripts/financial/coala-authenticated-payment.mts send --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CPF_OU_CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
-  npx tsx scripts/financial/coala-authenticated-payment.mts retry-send --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CPF_OU_CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
+  npx tsx scripts/financial/coala-authenticated-payment.mts prepare --email EMAIL --id INBOX_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD [--beneficiary-document CNPJ] --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
+  npx tsx scripts/financial/coala-authenticated-payment.mts authorize --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD [--beneficiary-document CPF_OU_CNPJ] --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
+  npx tsx scripts/financial/coala-authenticated-payment.mts send --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD [--beneficiary-document CPF_OU_CNPJ] --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
+  npx tsx scripts/financial/coala-authenticated-payment.mts retry-send --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD [--beneficiary-document CPF_OU_CNPJ] --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
   npx tsx scripts/financial/coala-authenticated-payment.mts adjust-overdue --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --settlement-amount-cents CENTAVOS --late-charge-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO --source-attachment-id ANEXO_ID --source-attachment-sha256 SHA256
   npx tsx scripts/financial/coala-authenticated-payment.mts send-adjusted --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --settlement-amount-cents CENTAVOS --late-charge-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO --source-attachment-id ANEXO_ID --source-attachment-sha256 SHA256
 
 O login pede a senha diretamente no terminal e guarda somente o refresh token no Chaves do macOS.
 Adicione --temporary-session aos demais comandos para pedir a senha no terminal e usar uma sessão apenas em memória, sem ler ou gravar o Chaves.
 Use --memory-session NOME para reutilizar, sem novo prompt, uma sessão iniciada pelo comando session.
+  npx tsx scripts/financial/coala-authenticated-payment.mts prepare-pix --email EMAIL --id INBOX_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --expense-id EXPENSE_ID --pix-file ARQUIVO
+  npx tsx scripts/financial/coala-authenticated-payment.mts authorize|send --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --expense-id EXPENSE_ID --pix-payload-sha256 SHA256
+prepare-pix aceita somente a guia do FGTS Digital (QR dinâmico da Caixa); o SHA-256 devolvido identifica a ordem em authorize e send.
+--beneficiary-document só pode ser omitido em guia de arrecadação de órgão público (DARF, DAS), cujo valor é conferido pelo próprio código.
 Autorizar no Coala e enviar ao Inter são comandos separados. A aprovação final no Inter continua separada.
 `);
 }
 
 async function hiddenPassword() {
-  if (!stdin.isTTY || !stdin.setRawMode) throw new PaymentCliError("Execute login em um terminal interativo.");
-  stdout.write("Senha do Coala (não será exibida): ");
-  const previousRaw = stdin.isRaw;
-  stdin.setRawMode(true);
-  stdin.resume();
-  return new Promise<string>((resolve, reject) => {
-    let value = "";
-    const finish = (error?: Error) => {
-      stdin.off("data", onData);
-      stdin.setRawMode(previousRaw);
-      stdin.pause();
-      stdout.write("\n");
-      if (error) reject(error);
-      else resolve(value);
-    };
-    const onData = (chunk: Buffer) => {
-      for (const character of chunk.toString("utf8")) {
-        if (character === "\r" || character === "\n") return finish();
-        if (character === "\u0003") return finish(new PaymentCliError("Login cancelado."));
-        if (character === "\u007f") value = value.slice(0, -1);
-        else if (character >= " ") value += character;
-      }
-    };
-    stdin.on("data", onData);
-  });
+  return readHiddenPassword({ input: stdin, output: stdout, setEcho: setTerminalEcho });
 }
 
 async function loginEmail() {
@@ -224,7 +238,11 @@ async function coalaPrepareInbox(token: string, id: string, input: {
   const response = await paymentCliFetch(`${COALA_URL}/api/financial/inbox/${encodeURIComponent(id)}/payment`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      scheduledFor: input.scheduledFor,
+      barcode: input.barcode,
+      ...(input.beneficiaryDocument ? { beneficiaryDocument: input.beneficiaryDocument } : {}),
+    }),
   });
   if (!response.ok) throw new PaymentCliError(`O Coala não confirmou a preparação (HTTP ${response.status}). O resultado pode ser incerto; consulte a cobrança antes de tentar novamente.`);
   const body = await paymentCliJson<{ request?: Record<string, unknown> }>(response);
@@ -309,11 +327,21 @@ async function createPurchase(token: string, input: PurchaseRegistration) {
 
 async function linkPurchaseFiscal(token: string, id: string, expectedTotalCents: number, input: ReturnType<typeof purchaseFiscalSchema.parse>) {
   const before = await coalaPurchaseGet(token, `/api/purchasing/orders/${encodeURIComponent(id)}`);
-  if (before.status !== "created") throw new PaymentCliError("A nota só pode ser vinculada antes da confirmação da compra.");
-  if (Math.round(Number(before.totalEstimated) * 100) !== expectedTotalCents || expectedTotalCents !== input.totalCents) {
+  if (before.status !== "created" && before.status !== "confirmed") throw new PaymentCliError("A compra não está apta para vínculo fiscal.");
+  const separateFreightCents = before.freightPaymentMode === "separate" ? Math.round(Number(before.deliveryFee ?? 0) * 100) : 0;
+  if (Math.round(Number(before.totalEstimated) * 100) - separateFreightCents !== expectedTotalCents || expectedTotalCents !== input.totalCents) {
     throw new PaymentCliError("O total do pedido difere do total confirmado da nota.");
   }
-  if (before.invoiceAccessKey && before.invoiceAccessKey !== input.invoiceAccessKey) throw new PaymentCliError("O pedido já possui outra chave de NF-e.");
+  const issuers = await mainLookupDocs(token, "entity-document", input.supplierDocument);
+  if (!issuers.some((entity) => entity.id === before.supplierId)) {
+    throw new PaymentCliError("O emitente da nota diverge do fornecedor cadastrado do pedido.");
+  }
+  if (before.invoiceAccessKey) {
+    if (before.invoiceAccessKey !== input.invoiceAccessKey || before.invoiceNumber !== input.invoiceNumber) {
+      throw new PaymentCliError("O pedido já possui outra chave de NF-e.");
+    }
+    return { id, invoiceNumber: before.invoiceNumber, invoiceAccessKey: before.invoiceAccessKey };
+  }
   await coalaPurchaseWrite(token, `/api/purchasing/orders/${encodeURIComponent(id)}`, "PATCH", purchaseFiscalPatch(input));
   const after = await coalaPurchaseGet(token, `/api/purchasing/orders/${encodeURIComponent(id)}`);
   if (after.invoiceAccessKey !== input.invoiceAccessKey || after.invoiceNumber !== input.invoiceNumber) {
@@ -330,21 +358,32 @@ async function syncPurchaseExpense(token: string, id: string) {
   if (!expenseId) throw new PaymentCliError("A sincronização não confirmou o identificador da despesa. Consulte pelo pedido; não repita automaticamente.");
   const expense = await coalaRead(token, paymentReadPath({ command: "document", collection: "expenses", id: expenseId }));
   const doc = expense.doc as Record<string, unknown> | undefined;
-  if (!doc || doc.purchaseOrderId !== id || doc.paymentMethod !== "installments") {
-    throw new PaymentCliError("A despesa retornada não preservou o pedido parcelado. Consulte antes de qualquer pagamento.");
+  const billing = doc?.billingIdentity as Record<string, unknown> | undefined;
+  const fiscal = order.fiscal as Record<string, unknown> | undefined;
+  const issuer = normalizeBrazilianDocument(String(fiscal?.issuerCnpj ?? fiscal?.supplierDocument ?? ""));
+  const separateFreightCents = order.freightPaymentMode === "separate" ? Math.round(Number(order.deliveryFee ?? 0) * 100) : 0;
+  const expectedGoodsCents = Math.round(Number(order.totalEstimated) * 100) - separateFreightCents;
+  if (!doc || doc.purchaseOrderId !== id || doc.supplierId !== order.supplierId
+    || doc.unitId !== order.destinationKioskId || !validBrazilianTaxId(billing?.supplierTaxId)
+    || (issuer && normalizeBrazilianDocument(String(billing?.supplierTaxId)) !== issuer)
+    || Math.round(Number(doc.totalValue) * 100) !== expectedGoodsCents
+    || doc.paymentMethod !== (order.paymentCondition === "installments" ? "installments" : "single")) {
+    throw new PaymentCliError("A despesa retornada diverge do fornecedor, unidade, valor ou forma de pagamento do pedido.");
   }
   return { expenseId, status: doc.status, installments: doc.installments };
 }
 
-async function confirmPurchase(token: string, id: string, invoiceAccessKey: string, expectedTotalCents: number) {
+async function confirmPurchase(token: string, id: string, invoiceAccessKey: string | null, expectedTotalCents: number, commercialOrder: string | null) {
   const order = await coalaPurchaseGet(token, `/api/purchasing/orders/${encodeURIComponent(id)}`);
   const itemsResponse = await paymentCliFetch(`${COALA_URL}/api/purchasing/orders/${encodeURIComponent(id)}/items`, {
     headers: { Authorization: `Bearer ${token}` }, cache: "no-store", redirect: "error",
   });
   if (!itemsResponse.ok) throw new PaymentCliError("Não foi possível conferir os itens da compra. Nenhuma confirmação foi feita.");
   const items = await paymentCliJson<Array<Record<string, unknown>>>(itemsResponse);
-  if (order.status !== "created" || order.invoiceAccessKey !== invoiceAccessKey || items.length === 0
-    || Math.round(Number(order.totalEstimated) * 100) !== expectedTotalCents
+  const separateFreightCents = order.freightPaymentMode === "separate" ? Math.round(Number(order.deliveryFee ?? 0) * 100) : 0;
+  if (order.status !== "created" || (invoiceAccessKey ? order.invoiceAccessKey !== invoiceAccessKey : !commercialOrder || order.externalOrderNumber !== commercialOrder)
+    || items.length === 0
+    || Math.round(Number(order.totalEstimated) * 100) - separateFreightCents !== expectedTotalCents
     || Math.round(items.reduce((sum, item) => sum + Number(item.totalOrdered ?? 0), 0) * 100) !== expectedTotalCents) {
     throw new PaymentCliError("A compra diverge da nota confirmada. Nenhuma confirmação foi feita.");
   }
@@ -429,24 +468,26 @@ async function mainLookupDocs(token: string, kind: string, value: string) {
 
 async function createSupplier(token: string, input: ReturnType<typeof supplierEntitySchema.parse>) {
   const existing = await mainLookupDocs(token, "entity-document", input.document);
-  if (existing.length) throw new PaymentCliError("Já existe fornecedor com esse CNPJ. Use o cadastro encontrado; nenhuma criação foi feita.");
-  const formattedDocument = `${input.document.slice(0, 2)}.${input.document.slice(2, 5)}.${input.document.slice(5, 8)}/${input.document.slice(8, 12)}-${input.document.slice(12)}`;
-  const formattedZip = `${input.address.zipCode.slice(0, 5)}-${input.address.zipCode.slice(5)}`;
+  if (existing.length) throw new PaymentCliError("Já existe cadastro com esse CPF/CNPJ. Use o cadastro encontrado; nenhuma criação foi feita.");
+  const formattedDocument = input.type === "pessoa_fisica"
+    ? `${input.document.slice(0, 3)}.${input.document.slice(3, 6)}.${input.document.slice(6, 9)}-${input.document.slice(9)}`
+    : `${input.document.slice(0, 2)}.${input.document.slice(2, 5)}.${input.document.slice(5, 8)}/${input.document.slice(8, 12)}-${input.document.slice(12)}`;
+  const address = input.address
+    ? { ...input.address, zipCode: `${input.address.zipCode.slice(0, 5)}-${input.address.zipCode.slice(5)}` }
+    : undefined;
   const result = await coalaPurchaseWrite(token, "/api/registry/entities", "POST", {
     ...input,
     document: formattedDocument,
-    cnpj: input.document,
-    razao_social: input.name,
-    nome_fantasia: input.fantasyName,
-    address: { ...input.address, zipCode: formattedZip },
+    ...(input.type === "pessoa_juridica" ? { cnpj: input.document, razao_social: input.name, nome_fantasia: input.fantasyName } : {}),
+    ...(address ? { address } : {}),
     status: "active",
   });
   const id = typeof result.id === "string" ? purchaseId(result.id, "fornecedor") : "";
-  if (!id) throw new PaymentCliError("O cadastro não retornou o fornecedor esperado. Consulte pelo CNPJ antes de tentar novamente.");
+  if (!id) throw new PaymentCliError("O cadastro não retornou o fornecedor esperado. Consulte pelo CPF/CNPJ antes de tentar novamente.");
   const stored = await coalaPurchaseGet(token, `/api/registry/entities/${encodeURIComponent(id)}`);
   const storedDocument = String(stored.documentNormalized ?? stored.cnpj ?? stored.document ?? "").replace(/\D/g, "");
-  if (storedDocument !== input.document || stored.name !== input.name) {
-    throw new PaymentCliError("O Coala não confirmou o mesmo fornecedor após o cadastro. Consulte pelo CNPJ; não repita automaticamente.");
+  if (storedDocument !== input.document || stored.name !== input.name || stored.type !== input.type) {
+    throw new PaymentCliError("O Coala não confirmou o mesmo fornecedor após o cadastro. Consulte pelo CPF/CNPJ; não repita automaticamente.");
   }
   return { id, name: stored.name, fantasyName: stored.fantasyName, document: formattedDocument };
 }
@@ -467,7 +508,7 @@ async function purchaseCatalogSearch(token: string, query: string) {
     const rows = await paymentCliJson<Array<Record<string, unknown>>>(response);
     const keys = resource === "operational-categories"
       ? ["id", "name", "destination", "active"]
-      : ["id", "baseProductId", "baseName", "name", "brand", "packageSize", "packageType", "unit", "operationalCategoryId", "operationalCategoryName", "isArchived"];
+      : ["id", "baseProductId", "baseName", "name", "brand", "packageSize", "packageType", "unit", "multiplo_caixa", "rotulo_caixa", "operationalCategoryId", "operationalCategoryName", "isArchived"];
     return rows.filter((row) => normalizeSearch([row.name, row.baseName, row.brand, row.packageType].join(" ")).includes(needle))
       .slice(0, 25)
       .map((row) => Object.fromEntries(keys.filter((key) => Object.hasOwn(row, key)).map((key) => [key, row[key]])));
@@ -655,6 +696,7 @@ function printStatus(request: Record<string, unknown>) {
     id: request.id, status: request.status, amount: request.amount,
     requestedSettlementAmount: request.requestedSettlementAmount ?? null,
     requestedLateChargeAmount: request.requestedLateChargeAmount ?? null,
+    interMinimumAmountCents: interOverdueMinimumCents(request.lastError as { code?: string; details?: string } | null),
     submissionAttemptCount: request.submissionAttemptCount ?? null,
     sourceId: request.sourceId ?? null, expenseId: request.expenseId ?? null,
     scheduledFor: barcode?.scheduledFor ?? null,
@@ -668,7 +710,7 @@ function printStatus(request: Record<string, unknown>) {
 async function main() {
   const command = process.argv[2];
   if (!command || command === "--help" || command === "help") return help();
-  if (!["login", "session", "find", "inspect", "analyze", "reconcile-vivo", "document", "lookup", "main-lookup", "purchase-items", "purchase-options", "purchase-categories", "purchase-units", "purchase-catalog-search", "supplier-create", "purchase-create", "purchase-fiscal-link", "purchase-confirm", "purchase-sync-expense", "purchase-document-attach", "expense-boleto-attach", "expense-boleto-prepare", "requests", "status", "refresh", "cancel-replace", "prepare", "authorize", "send", "retry-send", "adjust-overdue", "send-adjusted"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
+  if (!["login", "session", "find", "inspect", "analyze", "link-forecast", "link-expense", "create-dare-expense", "reconcile-vivo", "document", "lookup", "main-lookup", "purchase-items", "purchase-options", "purchase-categories", "purchase-units", "purchase-catalog-search", "supplier-create", "purchase-create", "purchase-fiscal-link", "purchase-confirm", "purchase-sync-expense", "purchase-document-attach", "expense-boleto-attach", "expense-boleto-prepare", "supplier-pix-prepare", "supplier-pix-authorize", "supplier-pix-send", "requests", "status", "refresh", "cancel-replace", "prepare", "prepare-pix", "authorize", "send", "retry-send", "adjust-overdue", "send-adjusted"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
   const email = command === "login" ? await loginEmail() : requireOption("email").toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new PaymentCliError("E-mail inválido.");
   if (command === "login") return login(email);
@@ -678,6 +720,108 @@ async function main() {
       throw new PaymentCliError("reconcile-vivo analisa, vincula, autoriza e envia pagamentos. Repita com --confirm-financial-actions somente após conferir as duas cobranças.");
     }
     return reconcileVivo(await commandToken(email));
+  }
+  if (command === "supplier-pix-prepare" || command === "supplier-pix-authorize" || command === "supplier-pix-send") {
+    if (!process.argv.includes("--confirm-financial-actions")) {
+      throw new PaymentCliError("Confirme esta etapa com --confirm-financial-actions.");
+    }
+    const expenseId = requireOption("expense-id");
+    const supplierEntityId = requireOption("supplier-entity-id");
+    const idPattern = /^[a-zA-Z0-9_-]{1,150}$/;
+    const amountCents = Number(requireOption("amount-cents"));
+    const competenceMonth = requireOption("competence-month");
+    const beneficiaryDocument = normalizeBrazilianDocument(requireOption("beneficiary-document"));
+    if (![expenseId, supplierEntityId].every((id) => idPattern.test(id))
+      || !Number.isSafeInteger(amountCents) || amountCents <= 0 || amountCents > 100_000_000
+      || !financialCompetenceMonthSchema.safeParse(competenceMonth).success || !validBrazilianTaxId(beneficiaryDocument)) {
+      throw new PaymentCliError("ID, valor, CPF/CNPJ ou competência inválidos.");
+    }
+    const token = await commandToken(email);
+    const expense = (await coalaRead(token, paymentReadPath({ command: "document", collection: "expenses", id: expenseId }))).doc as Record<string, unknown> | undefined;
+    const billingIdentity = expense?.billingIdentity as Record<string, unknown> | undefined;
+    let document = String(billingIdentity?.supplierTaxId ?? "").replace(/\D/g, "");
+    const purchaseOrderId = typeof expense?.purchaseOrderId === "string" ? expense.purchaseOrderId : "";
+    const purchaseOrder = purchaseOrderId ? await coalaPurchaseGet(token, `/api/purchasing/orders/${encodeURIComponent(purchaseId(purchaseOrderId))}`) : null;
+    const purchaseFiscal = purchaseOrder?.fiscal as Record<string, unknown> | undefined;
+    const fiscalDocument = normalizeBrazilianDocument(String(purchaseFiscal?.issuerCnpj ?? purchaseFiscal?.supplierDocument ?? ""));
+    if (!document && purchaseOrder && fiscalDocument) document = fiscalDocument;
+    const indicated = Boolean(purchaseOrder && document && document !== beneficiaryDocument);
+    const indication = indicated && command === "supplier-pix-prepare" ? {
+      confirmed: true as const, reason: option("indication-reason"), evidence: option("indication-evidence"),
+      invoiceAccessKey: option("invoice-access-key").replace(/\D/g, ""),
+    } : undefined;
+    if (indicated && (purchaseOrder?.status !== "confirmed" || purchaseOrder?.supplierId !== expense?.supplierId
+      || purchaseOrder?.destinationKioskId !== expense?.unitId || fiscalDocument !== document
+      || purchaseOrder?.invoiceAccessKey !== (indication?.invoiceAccessKey ?? (expense?.purchasePixIndication as Record<string, unknown> | undefined)?.invoiceAccessKey)
+      || (command === "supplier-pix-prepare" && (!indication || indication.reason.length < 10 || indication.evidence.length < 10)))) {
+      throw new PaymentCliError("A indicação do recebedor exige compra confirmada, NF da empresa, unidade e motivo/evidência.");
+    }
+    const previousPaidRequestId = option("previous-paid-request-id");
+    const confirmation = command === "supplier-pix-prepare" && previousPaidRequestId && idPattern.test(previousPaidRequestId)
+      ? { beneficiaryDocument, competenceMonth, previousPaidRequestId,
+          allowExistingBoleto: process.argv.includes("--preserve-boleto") }
+      : undefined;
+    if ((previousPaidRequestId && !confirmation) || (process.argv.includes("--preserve-boleto") && !confirmation)
+      || (confirmation && beneficiaryDocument.length !== 14)) {
+      throw new PaymentCliError("A confirmação só é aceita no preparo e exige um ID válido de pagamento conciliado.");
+    }
+    const legacyForecast = confirmation && !expense?.workspaceId && expense?.provisionType === "forecast"
+      && expense.sourceType === "recurring_expense_forecast" && typeof expense.unitId === "string";
+    const confirmedForecast = confirmation && (legacyForecast || expense?.workspaceId === "coala")
+      && expense?.provisionType === "forecast" && ["provisioned", "reconciled"].includes(String(expense.status));
+    if (!expense || expense.id !== expenseId || (expense.workspaceId !== "coala" && !legacyForecast)
+      || (!confirmedForecast && expense.status !== "pending")
+      || financialExpenseCompetenceMonth(expense) !== competenceMonth
+      || Math.round(Number(expense.totalValue) * 100) !== amountCents
+      || (!indicated && beneficiaryDocument.length === 11 && expense.supplierId !== supplierEntityId)
+      || (beneficiaryDocument.length === 11 && (expense.provisionType === "forecast" || !expense.unitId || !expense.dueDate
+        || !(expense.accountPlan || expense.accountId) || !(expense.referenceResultCenterId || expense.resultCenterId)))
+      || (!confirmation && !indicated ? document !== beneficiaryDocument : Boolean(confirmation && document && document !== beneficiaryDocument))) {
+      throw new PaymentCliError("A despesa, o valor, a competência, o vínculo ou o CPF/CNPJ divergem. Nenhuma ação foi realizada.");
+    }
+    const replacementOf = option("replacement-of");
+    if (replacementOf && (!idPattern.test(replacementOf) || confirmation)) {
+      throw new PaymentCliError("Informe o ID válido da ordem Pix anterior, sem reconfirmar a cobrança.");
+    }
+    const actualExpenseId = confirmedForecast ? `supplier_pix_actual_${expenseId}` : expenseId;
+    const id = replacementOf ? `supplier_pix_retry_${createHash("sha256").update(replacementOf).digest("hex")}`
+      : `expense_supplier_pix_${actualExpenseId}`;
+    if (command === "supplier-pix-prepare") {
+      const response = await paymentCliFetch(`${COALA_URL}/api/financial/expenses/${expenseId}/supplier-pix`, {
+        method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ supplierEntityId, amountCents, ...(confirmation ? { confirmation } : {}),
+          ...(indication ? { purchaseBeneficiaryIndication: indication } : {}), ...(replacementOf ? { replacementOf } : {}) }), cache: "no-store",
+      });
+      if (!response.ok) {
+        const error = await paymentCliJson<{ error?: { code?: string; message?: string } }>(response).catch(() => null);
+        const message = error?.error?.code?.startsWith("EXPENSE_SUPPLIER_PIX_") ? error.error.message : null;
+        throw new PaymentCliError(message || `O Coala não confirmou o preparo (HTTP ${response.status}). Consulte a despesa antes de repetir.`);
+      }
+      const body = await paymentCliJson<{ request?: Record<string, unknown> }>(response);
+      if (body.request?.id !== id || (confirmation && body.request.expenseId !== actualExpenseId)) {
+        throw new PaymentCliError("O Coala não confirmou a solicitação esperada. Consulte a despesa antes de repetir.");
+      }
+      stdout.write(`${JSON.stringify({ expenseId: actualExpenseId, id, status: body.request.status, amount: amountCents / 100 })}\n`);
+      return;
+    }
+    const request = (await coalaGet(token)).find((item) => item.id === id);
+    const snapshot = request?.beneficiarySnapshot as Record<string, unknown> | undefined;
+    const savedIndication = request?.purchasePixIndication as Record<string, unknown> | undefined;
+    const expectedStatus = command === "supplier-pix-authorize" ? "awaiting_financial_authorization" : "ready_to_submit";
+    if (!request || request.status !== expectedStatus || request.sourceType !== "expense_supplier_pix"
+      || (request.supersedesPaymentRequestId ?? undefined) !== replacementOf
+      || request.sourceId !== expenseId || request.expenseId !== expenseId || expense.paymentRequestId !== id
+      || Math.round(Number(request.amount) * 100) !== amountCents || snapshot?.sourceId !== supplierEntityId
+      || snapshot.documentHash !== createHash("sha256").update(beneficiaryDocument).digest("hex")
+      || (indicated && (savedIndication?.supplierEntityId !== expense.supplierId
+        || savedIndication?.beneficiaryEntityId !== supplierEntityId
+        || savedIndication?.supplierTaxId !== document || savedIndication?.unitId !== expense.unitId
+        || savedIndication?.invoiceAccessKey !== purchaseOrder?.invoiceAccessKey))
+      || (typeof snapshot.destinationHash !== "string" && snapshot.pixKeyType !== "cnpj")
+      || request.submissionStartedAt || request.interRequestId || Number(request.submissionAttemptCount ?? 0) !== 0) {
+      throw new PaymentCliError("A solicitação diverge, já foi enviada ou está em outra etapa. Nenhuma ação foi realizada.");
+    }
+    return printStatus(await coalaPost(token, id, command === "supplier-pix-authorize" ? "authorize" : "submit"));
   }
   if (command === "requests") {
     const cents = Number(requireOption("amount-cents"));
@@ -790,10 +934,12 @@ async function main() {
   if (command === "purchase-confirm") {
     if (!process.argv.includes("--confirm-financial-actions")) throw new PaymentCliError("Confirme explicitamente a compra e a despesa com --confirm-financial-actions.");
     const id = purchaseId(requireOption("id"));
-    const invoiceAccessKey = requireOption("invoice-access-key").replace(/\D/g, "");
+    const invoiceAccessKey = option("invoice-access-key").replace(/\D/g, "");
+    const commercialOrder = option("commercial-order");
     const expectedTotalCents = Number(requireOption("expected-total-cents"));
-    if (!/^\d{44}$/.test(invoiceAccessKey) || !Number.isSafeInteger(expectedTotalCents) || expectedTotalCents <= 0) throw new PaymentCliError("Chave ou total da NF-e inválido.");
-    stdout.write(`${JSON.stringify(await confirmPurchase(await commandToken(email), id, invoiceAccessKey, expectedTotalCents))}\n`);
+    if ((invoiceAccessKey ? !/^\d{44}$/.test(invoiceAccessKey) || Boolean(commercialOrder) : !commercialOrder)
+      || !Number.isSafeInteger(expectedTotalCents) || expectedTotalCents <= 0) throw new PaymentCliError("Informe chave fiscal ou pedido comercial e valor válido.");
+    stdout.write(`${JSON.stringify(await confirmPurchase(await commandToken(email), id, invoiceAccessKey || null, expectedTotalCents, commercialOrder || null))}\n`);
     return;
   }
   if (command === "purchase-sync-expense") {
@@ -848,6 +994,147 @@ async function main() {
     stdout.write(`${JSON.stringify(result)}\n`);
     return;
   }
+  if (command === "link-forecast") {
+    if (!process.argv.includes("--confirm-financial-actions")) throw new PaymentCliError("Confirme explicitamente o vínculo com --confirm-financial-actions.");
+    const id = requireOption("id");
+    const provisionId = requireOption("provision-id");
+    if (!/^[a-zA-Z0-9_-]{8,170}$/.test(id) || !/^[a-zA-Z0-9_-]{1,170}$/.test(provisionId)) throw new PaymentCliError("ID da cobrança ou previsão inválido.");
+    const confirmation = documentConfirmationOptions();
+    const allocationsPath = option("account-allocations-file");
+    let accountAllocations: ReturnType<typeof parseConfirmedAccountAllocations> | undefined;
+    if (allocationsPath) {
+      let parsed: unknown;
+      try { parsed = JSON.parse(await readFile(resolve(allocationsPath), "utf8")); }
+      catch { throw new PaymentCliError("Não foi possível ler o JSON de apropriações da guia."); }
+      try { accountAllocations = parseConfirmedAccountAllocations(parsed, confirmation.amountCents); }
+      catch { throw new PaymentCliError("As apropriações devem ter 2 a 20 contas distintas e somar exatamente o valor confirmado em centavos."); }
+    }
+    const token = await commandToken(email);
+    const before = (await coalaRead(token, paymentReadPath({ command: "inspect", id }))).message as Record<string, unknown> | undefined;
+    if (!before || before.id !== id || before.linkedExpenseId || before.paymentRequestId || !["document_pending", "pending_review", "suggestion_available"].includes(String(before.status))) {
+      throw new PaymentCliError("A cobrança mudou ou já possui vínculo/pedido. Confira a caixa antes de prosseguir.");
+    }
+    try { confirmFinancialInboxDocument(before.classification as FinancialInboxClassification, confirmation); }
+    catch { throw new PaymentCliError("A confirmação documental diverge da cobrança ou do código/valor. Nenhum vínculo foi feito."); }
+    const provision = (await coalaRead(token, paymentReadPath({ command: "document", collection: "expenses", id: provisionId }))).doc as Record<string, unknown> | undefined;
+    if (!provision || provision.id !== provisionId || provision.provisionType !== "forecast" || provision.status !== "provisioned"
+      || provision.provisionCompetence !== confirmation.competence) {
+      throw new PaymentCliError("A previsão não está aberta para a competência confirmada. Nenhum vínculo foi feito.");
+    }
+    if (!supplierNamesAreCompatible(confirmation.supplierName, provision.supplier)) {
+      throw new PaymentCliError("O fornecedor confirmado não corresponde à previsão. Confira o nome na guia antes do vínculo; nenhum vínculo foi feito.");
+    }
+    if (!accountAllocations && !forecastAllocationsMatchConfirmedAmount(provision, confirmation.amountCents)) {
+      throw new PaymentCliError("As apropriações da previsão não somam a guia; informe --account-allocations-file com os componentes reais. Nenhum vínculo foi feito.");
+    }
+    const response = await paymentCliFetch(`${COALA_URL}/api/financial/inbox/${encodeURIComponent(id)}/link`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ provisionExpenseId: provisionId, documentConfirmation: confirmation,
+        ...(accountAllocations ? { accountAllocations } : {}) }),
+      cache: "no-store", redirect: "error", signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) throw new PaymentCliError(`O Coala não confirmou o vínculo (HTTP ${response.status}). Consulte a cobrança antes de tentar novamente.`);
+    const result = await paymentCliJson<{ expenseId?: string; message?: { linkedExpenseId?: string } }>(response);
+    if (!result.expenseId || result.message?.linkedExpenseId !== result.expenseId) {
+      throw new PaymentCliError("O Coala não devolveu o vínculo esperado. Consulte a cobrança antes de tentar novamente.");
+    }
+    stdout.write(`${JSON.stringify({ inboxId: id, provisionId, expenseId: result.expenseId, status: "linked" })}\n`);
+    return;
+  }
+  if (command === "link-expense") {
+    if (!process.argv.includes("--confirm-financial-actions")) throw new PaymentCliError("Confirme explicitamente o vínculo com --confirm-financial-actions.");
+    const id = requireOption("id");
+    const expenseId = requireOption("expense-id");
+    const accountPlanId = requireOption("account-plan-id");
+    const resultCenterId = requireOption("result-center-id");
+    if (!/^[a-zA-Z0-9_-]{8,170}$/.test(id) || !/^[a-zA-Z0-9_-]{1,170}$/.test(expenseId)
+      || !/^[a-zA-Z0-9_-]{1,180}$/.test(accountPlanId) || !/^[a-zA-Z0-9_-]{1,180}$/.test(resultCenterId)) {
+      throw new PaymentCliError("ID de cobrança, despesa, conta ou centro inválido.");
+    }
+    const apportionmentsPath = option("apportionments-file");
+    let apportionments: Array<{ resultCenter: string; percentage: number }> | undefined;
+    if (apportionmentsPath) {
+      let parsed: unknown;
+      try { parsed = JSON.parse(await readFile(resolve(apportionmentsPath), "utf8")); }
+      catch { throw new PaymentCliError("Não foi possível ler o JSON de rateio."); }
+      if (!Array.isArray(parsed) || parsed.length < 2 || parsed.length > 20
+        || parsed.some((entry) => !entry || typeof entry !== "object" || Array.isArray(entry)
+          || typeof entry.resultCenter !== "string" || !entry.resultCenter.trim()
+          || !Number.isFinite(entry.percentage) || entry.percentage <= 0 || entry.percentage > 100)
+        || Math.abs(parsed.reduce((sum, entry) => sum + entry.percentage, 0) - 100) >= 0.001) {
+        throw new PaymentCliError("Rateio inválido; informe unidades e percentuais que somem 100.");
+      }
+      apportionments = parsed.map((entry) => ({ resultCenter: entry.resultCenter.trim(), percentage: entry.percentage }));
+    }
+    const confirmation = documentConfirmationOptions();
+    const token = await commandToken(email);
+    const before = (await coalaRead(token, paymentReadPath({ command: "inspect", id }))).message as Record<string, unknown> | undefined;
+    if (!before || before.id !== id || before.paymentRequestId || before.linkedExpenseId && before.linkedExpenseId !== expenseId
+      || !["document_pending", "pending_review", "suggestion_available", "linked"].includes(String(before.status))) {
+      throw new PaymentCliError("A cobrança mudou ou possui outro vínculo/pedido. Confira a caixa antes de prosseguir.");
+    }
+    try { confirmFinancialInboxDocument(before.classification as FinancialInboxClassification, confirmation); }
+    catch { throw new PaymentCliError("A confirmação documental diverge da cobrança ou do código/valor. Nenhum vínculo foi feito."); }
+    const expense = (await coalaRead(token, paymentReadPath({ command: "document", collection: "expenses", id: expenseId }))).doc as Record<string, unknown> | undefined;
+    if (!expense || expense.id !== expenseId) throw new PaymentCliError("Despesa não encontrada. Nenhum vínculo foi feito.");
+    try { assertConfirmedExistingExpense(expense, id, confirmation, { accountPlanId, resultCenterId, apportionments }); }
+    catch { throw new PaymentCliError("A despesa ou parcela não coincide com valor, vencimento, competência e classificação confirmados. Nenhum vínculo foi feito."); }
+    const response = await paymentCliFetch(`${COALA_URL}/api/financial/inbox/${encodeURIComponent(id)}/link`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ expenseId, documentConfirmation: confirmation,
+        expenseAccountingConfirmation: { accountPlanId, resultCenterId, ...(apportionments ? { apportionments } : {}) } }),
+      cache: "no-store", redirect: "error", signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) throw new PaymentCliError(`O Coala não confirmou o vínculo (HTTP ${response.status}). Consulte a cobrança antes de tentar novamente.`);
+    const result = await paymentCliJson<{ expenseId?: string; message?: { linkedExpenseId?: string; classification?: { barcode?: string } } }>(response);
+    if (result.expenseId !== expenseId || result.message?.linkedExpenseId !== expenseId
+      || result.message?.classification?.barcode !== confirmation.barcode) {
+      throw new PaymentCliError("O Coala não devolveu o vínculo e código esperados. Consulte a cobrança antes de tentar novamente.");
+    }
+    stdout.write(`${JSON.stringify({ inboxId: id, expenseId, accountPlanId, resultCenterId, status: "linked" })}\n`);
+    return;
+  }
+  if (command === "create-dare-expense") {
+    if (!process.argv.includes("--confirm-financial-actions")) throw new PaymentCliError("Confirme explicitamente a criação com --confirm-financial-actions.");
+    const id = requireOption("id");
+    if (!/^[a-zA-Z0-9_-]{8,170}$/.test(id)) throw new PaymentCliError("ID da cobrança inválido.");
+    let raw: unknown;
+    try { raw = JSON.parse(await readFile(resolve(requireOption("manifest")), "utf8")); }
+    catch { throw new PaymentCliError("Não foi possível ler o manifesto da despesa DARE."); }
+    const parsed = inboxDareExpenseSchema.safeParse(raw);
+    if (!parsed.success) throw new PaymentCliError("O manifesto DARE é inválido; confira PDF, guia, conta, centro e rateio.");
+    const input = parsed.data;
+    const token = await commandToken(email);
+    const before = (await coalaRead(token, paymentReadPath({ command: "inspect", id }))).message as Record<string, unknown> | undefined;
+    if (!before || before.id !== id || before.paymentRequestId
+      || before.linkedExpenseId && before.linkedExpenseId !== `inbox_${id}`) {
+      throw new PaymentCliError("A cobrança mudou ou já possui outro vínculo/pedido. Nenhuma despesa foi criada.");
+    }
+    const attachments = Array.isArray(before.attachments) ? before.attachments as Array<Record<string, unknown>> : [];
+    if (!attachments.some((attachment) => attachment.id === input.sourceAttachmentId
+      && attachment.sha256 === input.sourceAttachmentSha256 && attachment.archiveStatus === "stored")) {
+      throw new PaymentCliError("O PDF arquivado não corresponde ao manifesto. Nenhuma despesa foi criada.");
+    }
+    try { confirmFinancialInboxDocument(before.classification as FinancialInboxClassification, input.documentConfirmation); }
+    catch { throw new PaymentCliError("A guia e sua confirmação fiscal divergem. Nenhuma despesa foi criada."); }
+    const response = await paymentCliFetch(`${COALA_URL}/api/financial/inbox/${encodeURIComponent(id)}/expense`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(input), cache: "no-store", redirect: "error", signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) throw new PaymentCliError(`O Coala não confirmou a despesa DARE (HTTP ${response.status}). Consulte a cobrança antes de repetir.`);
+    const result = await paymentCliJson<{ expenseId?: string; duplicate?: boolean }>(response);
+    const expenseId = `inbox_${id}`;
+    if (result.expenseId !== expenseId) throw new PaymentCliError("O Coala devolveu outra despesa. Consulte antes de repetir.");
+    const expense = (await coalaRead(token, paymentReadPath({ command: "document", collection: "expenses", id: expenseId }))).doc as Record<string, unknown> | undefined;
+    if (!expense || expense.financialInboxMessageId !== id
+      || expense.inboxCreationFingerprint !== inboxDareExpenseFingerprint(input)
+      || expense.accountPlan !== input.accountPlanId
+      || expense.referenceResultCenterId !== input.referenceResultCenterId) {
+      throw new PaymentCliError("A despesa criada não corresponde ao manifesto. Consulte antes de continuar.");
+    }
+    stdout.write(`${JSON.stringify({ inboxId: id, expenseId, duplicate: result.duplicate === true, status: "pending_link" })}\n`);
+    return;
+  }
   if (["find", "inspect", "document"].includes(command)) {
     const path = paymentReadPath({ command, query: option("query"), view: option("view"),
       cursor: option("cursor"), collection: option("collection"), id: option("id") });
@@ -859,10 +1146,38 @@ async function main() {
   const id = requireOption("id");
   if (!/^[a-zA-Z0-9_-]{8,170}$/.test(id)) throw new PaymentCliError("ID da solicitação inválido.");
   const token = await commandToken(email);
+  if (command === "prepare-pix") {
+    const amountCents = Number(requireOption("amount-cents"));
+    const scheduledFor = requireOption("scheduled-for");
+    const expenseId = requireOption("expense-id");
+    const pixPayload = (await readFile(resolve(requireOption("pix-file")), "utf8")).trim();
+    const body = await coalaRead(token, paymentReadPath({ command: "inspect", id }));
+    const message = body.message;
+    if (!message || typeof message !== "object" || Array.isArray(message)) throw new PaymentCliError("O Coala não retornou a cobrança esperada. Nenhuma ação foi feita.");
+    const parsed = validatePaymentCliPixPreparation({ message: message as Record<string, unknown>, inboxMessageId: id,
+      amountCents, scheduledFor, expenseId, pixPayload });
+    const response = await paymentCliFetch(`${COALA_URL}/api/financial/inbox/${encodeURIComponent(id)}/pix-payment`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ scheduledFor, pixCopyPaste: parsed.payload }),
+      cache: "no-store", redirect: "error", signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) throw new PaymentCliError(`O Coala não confirmou a preparação (HTTP ${response.status}). O resultado pode ser incerto; consulte a cobrança antes de tentar novamente.`);
+    const current = (await paymentCliJson<{ request?: Record<string, unknown> }>(response)).request ?? {};
+    try {
+      if (current.sourceId !== id) throw new Error("source");
+      validatePaymentCliPixAction({ request: current, action: "authorize", amountCents, scheduledFor, expenseId, pixPayloadSha256: parsed.payloadHash });
+    } catch {
+      throw new PaymentCliError("O Coala não confirmou os dados esperados após preparar. Consulte a solicitação; não repita o comando automaticamente.");
+    }
+    printStatus(current);
+    stdout.write(`${JSON.stringify({ pixPayloadSha256: parsed.payloadHash })}\n`);
+    return;
+  }
   if (command === "prepare") {
     const amountCents = Number(requireOption("amount-cents"));
     const scheduledFor = requireOption("scheduled-for");
-    const beneficiaryDocument = requireOption("beneficiary-document").replace(/\D/g, "");
+    const beneficiaryDocument = (option("beneficiary-document") ?? "").replace(/\D/g, "");
     const expenseId = requireOption("expense-id");
     const barcode = requireOption("barcode").replace(/[.\s-]/g, "");
     const body = await coalaRead(token, paymentReadPath({ command: "inspect", id }));
@@ -903,9 +1218,21 @@ async function main() {
     return printStatus(replacement);
   }
 
+  const pixPayloadSha256 = option("pix-payload-sha256")?.toLowerCase();
+  if (pixPayloadSha256) {
+    if (command !== "authorize" && command !== "send") throw new PaymentCliError("Pix copia e cola aceita somente authorize e send.");
+    const amountCents = Number(requireOption("amount-cents"));
+    const scheduledFor = requireOption("scheduled-for");
+    const expenseId = requireOption("expense-id");
+    validatePaymentCliPixAction({ request, action: command, amountCents, scheduledFor, expenseId, pixPayloadSha256 });
+    const current = await coalaPost(token, id, command === "authorize" ? "authorize" : "submit");
+    printStatus(current);
+    if (command === "send" && !current.interRequestId) throw new PaymentCliError("A resposta não confirmou identificador do Inter. Consulte o status antes de qualquer nova tentativa.");
+    return;
+  }
   const amountCents = Number(requireOption("amount-cents"));
   const scheduledFor = requireOption("scheduled-for");
-  const beneficiaryDocument = requireOption("beneficiary-document").replace(/\D/g, "");
+  const beneficiaryDocument = (option("beneficiary-document") ?? "").replace(/\D/g, "");
   const expenseId = requireOption("expense-id");
   const barcode = requireOption("barcode").replace(/[.\s-]/g, "");
   if (command === "adjust-overdue") {

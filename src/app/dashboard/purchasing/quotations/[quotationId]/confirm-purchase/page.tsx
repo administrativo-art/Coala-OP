@@ -154,9 +154,12 @@ export default function ConfirmPurchasePage() {
   const [paymentDueDate, setPaymentDueDate] = useState(today);
   const [estimatedReceiptDate, setEstimatedReceiptDate] = useState(today);
   const [deliveryFee, setDeliveryFee] = useState(0);
+  const [serviceFee, setServiceFee] = useState(0);
   const [accountPlanId, setAccountPlanId] = useState('');
   const [resultCenterId, setResultCenterId] = useState('');
   const [freightAccountPlanId, setFreightAccountPlanId] = useState('');
+  const [serviceFeeAccountPlanId, setServiceFeeAccountPlanId] = useState('');
+  const [serviceFeePaymentMode, setServiceFeePaymentMode] = useState<PurchaseFreightPaymentMode>('included_with_goods');
   const [freightPaymentMode, setFreightPaymentMode] = useState<PurchaseFreightPaymentMode>('separate');
   const [freightSupplierName, setFreightSupplierName] = useState('');
   const [trackingInfo, setTrackingInfo] = useState('');
@@ -193,6 +196,10 @@ export default function ConfirmPurchasePage() {
     () => flattenedAccountPlans.find((plan) => plan.id === freightAccountPlanId) ?? null,
     [flattenedAccountPlans, freightAccountPlanId],
   );
+  const selectedServiceFeeAccountPlan = useMemo(
+    () => flattenedAccountPlans.find((plan) => plan.id === serviceFeeAccountPlanId),
+    [flattenedAccountPlans, serviceFeeAccountPlanId],
+  );
 
   const selectedResultCenter = useMemo(
     () => (resultCenters ?? []).find((center) => center.id === resultCenterId) ?? null,
@@ -208,7 +215,7 @@ export default function ConfirmPurchasePage() {
     [eligibleItems],
   );
 
-  const grandTotal = itemsSubtotal + deliveryFee;
+  const grandTotal = itemsSubtotal + deliveryFee + serviceFee;
   const normalItems = eligibleItems.filter((i) => !!i.baseItemId);
   const canSubmit =
     normalItems.length > 0 &&
@@ -216,6 +223,7 @@ export default function ConfirmPurchasePage() {
     (!isCardPayment(paymentMethod) || !!selectedPaymentCard) &&
     !!accountPlanId &&
     !!resultCenterId &&
+    (serviceFee <= 0 || !!serviceFeeAccountPlanId) &&
     (deliveryFee <= 0 || (
       !!freightAccountPlanId &&
       (freightPaymentMode !== 'separate' || freightSupplierName.trim().length >= 2)
@@ -253,6 +261,10 @@ export default function ConfirmPurchasePage() {
         resultCenterId,
         resultCenterName: selectedResultCenter?.name,
         deliveryFee,
+        serviceFee,
+        serviceFeeAccountPlanId: serviceFee > 0 ? serviceFeeAccountPlanId : undefined,
+        serviceFeeAccountPlanName: serviceFee > 0 ? selectedServiceFeeAccountPlan?.name : undefined,
+        serviceFeePaymentMode: serviceFee > 0 ? serviceFeePaymentMode : undefined,
         trackingInfo: trackingInfo.trim() || undefined,
         notes: generalNotes.trim() || undefined,
         items: normalItems.map((item) => ({
@@ -510,6 +522,10 @@ export default function ConfirmPurchasePage() {
                 <Label className="text-xs text-muted-foreground">Frete / entrega (opcional)</Label>
                 <CurrencyInput value={deliveryFee} onChange={setDeliveryFee} />
               </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Taxa de serviço da compra on-line</Label>
+                <CurrencyInput value={serviceFee} onChange={setServiceFee} />
+              </div>
             </div>
 
             {/* Pagamento */}
@@ -670,6 +686,28 @@ export default function ConfirmPurchasePage() {
                   </p>
                 </div>
               )}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Plano de contas da taxa de serviço</Label>
+                <AccountPlanTreeSelect
+                  value={serviceFee > 0 ? serviceFeeAccountPlanId : '__none__'}
+                  onChange={(value) => setServiceFeeAccountPlanId(value === '__none__' ? '' : value)}
+                  options={accountPlans}
+                  placeholder="Selecione o plano de contas"
+                  noneLabel="Sem taxa"
+                  allowNone
+                  disabled={serviceFee <= 0}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Liquidação da taxa de serviço</Label>
+                <Select value={serviceFeePaymentMode} onValueChange={(value) => setServiceFeePaymentMode(value as PurchaseFreightPaymentMode)} disabled={serviceFee <= 0}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="included_with_goods">Junto com a mercadoria</SelectItem>
+                    <SelectItem value="separate">Em pagamento separado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* Observações gerais */}
@@ -696,6 +734,10 @@ export default function ConfirmPurchasePage() {
                 <div className="flex justify-between text-muted-foreground">
                   <span>Frete / entrega</span>
                   <span>{fmt(deliveryFee)}</span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Taxa de serviço</span>
+                  <span>{fmt(serviceFee)}</span>
                 </div>
                 {deliveryFee > 0 && (
                   <div className="flex justify-between text-muted-foreground">

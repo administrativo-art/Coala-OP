@@ -1,5 +1,9 @@
 # Ausências do Departamento Pessoal
 
+**Efeito em metas por escala (10/11/2026, alteração local):** a ausência operacional aprovada ou a falta automática por ausência de batida que desloca um turno oficial incrementa `goalEligibilityVersion` da escala; a função de metas reconcilia alvo, dias e turnos de participantes de períodos ainda ativos. A falta automática preserva os turnos no registro de RH e os retira da escala publicada após 24 horas. Uma correção aprovada que inclua batida tenta restaurá-los imediatamente, desde que a revisão permaneça publicada e não exista conflito com a agenda ou marcador de ausência. Ajuste só de descarte não anula a falta. Falha ou conflito deixa estado pendente no RH e abre tarefa de revisão para o DP; a rotina horária retenta sem corte por idade, e o fechamento do ponto recusa a competência enquanto a sincronização estiver pendente. O fechamento da meta relê a escala oficial antes de calcular a premiação. Metas já encerradas não são recalculadas automaticamente.
+
+**Limite da restauração automática:** ela recupera apenas o turno original, na mesma revisão, com verificação de ocupação, folga, descanso e marcador operacional. Uma mudança nas regras da jornada feita fora da revisão da escala não passa por nova validação completa neste fluxo e deve ser examinada pelo DP antes da revisão seguinte.
+
 ## Objetivo e limites
 
 Este fluxo separa quatro responsabilidades:
