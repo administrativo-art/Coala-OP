@@ -65,3 +65,6 @@ Geração guiada persiste partes cadastradas em `partyKeys` com papel participan
 ## DRE mensal e12meses
 
 TelaDRE→DreExportMenu→POST `/api/financial/dre/export`→fontes oficiais autorizadas→núcleo `metrics.ts`→PDFtimbrado `report-pdf.ts` / Excel `report-xlsx.ts`→download transitório. Catálogo `system-financial-dre-report` v1, prévia fictícia. Sem Storage, publicação, assinatura, webhook ou nova instância no acervo. Não gera histórico de pessoa. [Contrato e limites](flows/dre.md#relatórios-mensal-e-de-12-meses--17112026).
+
+
+O contracheque recebido pelo usuário permanece em employeeDocuments/PAYSLIP e não cria modelo gerado. A conferência de eventos lê o mesmo PDF por hash, registra entrega/revisão e integra o bloqueio antes do pacote espelho+contracheque; pacote, tentativa e hrSignatureRequests preservam a prova. O fluxo canônico de geração/assinatura/publicação continua descrito em [Registro REP-P](flows/dp-time-recording.md).

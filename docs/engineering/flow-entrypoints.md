@@ -487,7 +487,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/time-recording/page.tsx`](../../src/app/dashboard/collaborator/time-recording/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/time-recording/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/time-recording/page.tsx), [`src/app/dashboard/dp/fechamento/page.tsx`](../../src/app/dashboard/dp/fechamento/page.tsx).
 
-Arquivos locais percorridos: 72.
+Arquivos locais percorridos: 96.
 
 Chamadas candidatas encontradas:
 
@@ -500,8 +500,10 @@ Chamadas candidatas encontradas:
 - `/api/dp/time-recording/adjustments` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/adjustments/route.ts`](../../src/app/api/dp/time-recording/adjustments/route.ts)
 - `/api/dp/time-recording/adjustments/` — interface [`src/features/dp/time-adjustments/closure-focus-mode.tsx`](../../src/features/dp/time-adjustments/closure-focus-mode.tsx); rota candidata [`src/app/api/dp/time-recording/adjustments/[adjustmentId]/route.ts`](../../src/app/api/dp/time-recording/adjustments/%5BadjustmentId%5D/route.ts)
 - `/api/dp/time-recording/closing-packages` — interface [`src/features/dp/time-adjustments/closing-package-card.tsx`](../../src/features/dp/time-adjustments/closing-package-card.tsx); rota candidata [`src/app/api/dp/time-recording/closing-packages/route.ts`](../../src/app/api/dp/time-recording/closing-packages/route.ts)
+- `/api/dp/time-recording/closing-progress` — interface [`src/features/dp/time-adjustments/closure-section.tsx`](../../src/features/dp/time-adjustments/closure-section.tsx); rota candidata [`src/app/api/dp/time-recording/closing-progress/route.ts`](../../src/app/api/dp/time-recording/closing-progress/route.ts)
 - `/api/dp/time-recording/closures` — interface [`src/features/dp/time-adjustments/closure-alerts-panel.tsx`](../../src/features/dp/time-adjustments/closure-alerts-panel.tsx); rota candidata [`src/app/api/dp/time-recording/closures/route.ts`](../../src/app/api/dp/time-recording/closures/route.ts)
 - `/api/dp/time-recording/closures/` — interface [`src/features/dp/time-adjustments/closure-section.tsx`](../../src/features/dp/time-adjustments/closure-section.tsx); rota candidata [`src/app/api/dp/time-recording/closures/[competence]/route.ts`](../../src/app/api/dp/time-recording/closures/%5Bcompetence%5D/route.ts)
+- `/api/dp/time-recording/day-corrections` — interface [`src/features/dp/time-adjustments/day-corrections-panel.tsx`](../../src/features/dp/time-adjustments/day-corrections-panel.tsx); rota candidata [`src/app/api/dp/time-recording/day-corrections/route.ts`](../../src/app/api/dp/time-recording/day-corrections/route.ts)
 - `/api/dp/time-recording/employees/` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/employees/[employeeUid]/route.ts`](../../src/app/api/dp/time-recording/employees/%5BemployeeUid%5D/route.ts)
 - `/api/dp/time-recording/location-access` — interface [`src/features/dp/rep-p/day-detail.tsx`](../../src/features/dp/rep-p/day-detail.tsx); rota candidata [`src/app/api/dp/time-recording/location-access/route.ts`](../../src/app/api/dp/time-recording/location-access/route.ts)
 - `/api/dp/time-recording/markings` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/markings/route.ts`](../../src/app/api/dp/time-recording/markings/route.ts)
@@ -510,8 +512,11 @@ Chamadas candidatas encontradas:
 - `/api/dp/time-recording/mirrors/pdf` — interface [`src/features/dp/time-adjustments/mirror-card.tsx`](../../src/features/dp/time-adjustments/mirror-card.tsx); rota candidata [`src/app/api/dp/time-recording/mirrors/pdf/route.ts`](../../src/app/api/dp/time-recording/mirrors/pdf/route.ts)
 - `/api/dp/time-recording/month` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/month/route.ts`](../../src/app/api/dp/time-recording/month/route.ts)
 - `/api/dp/time-recording/options` — interface [`src/features/dp/rep-p/use-rep-p-marking.ts`](../../src/features/dp/rep-p/use-rep-p-marking.ts); rota candidata [`src/app/api/dp/time-recording/options/route.ts`](../../src/app/api/dp/time-recording/options/route.ts)
+- `/api/dp/time-recording/payroll-finance` — interface [`src/features/dp/time-adjustments/payroll-finance-panel.tsx`](../../src/features/dp/time-adjustments/payroll-finance-panel.tsx); rota candidata [`src/app/api/dp/time-recording/payroll-finance/route.ts`](../../src/app/api/dp/time-recording/payroll-finance/route.ts)
+- `/api/dp/time-recording/payslip-reconciliation` — interface [`src/features/dp/time-adjustments/payroll-finance-panel.tsx`](../../src/features/dp/time-adjustments/payroll-finance-panel.tsx); rota candidata [`src/app/api/dp/time-recording/payslip-reconciliation/route.ts`](../../src/app/api/dp/time-recording/payslip-reconciliation/route.ts)
 - `/api/dp/time-recording/receipts/` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/receipts/[receiptId]/route.ts`](../../src/app/api/dp/time-recording/receipts/%5BreceiptId%5D/route.ts)
 - `/api/dp/time-recording/time-bank` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/time-bank/route.ts`](../../src/app/api/dp/time-recording/time-bank/route.ts)
+- `/api/financial/inbox/` — interface [`src/features/dp/time-adjustments/payroll-finance-panel.tsx`](../../src/features/dp/time-adjustments/payroll-finance-panel.tsx); rota candidata [`src/app/api/financial/inbox/[id]/route.ts`](../../src/app/api/financial/inbox/%5Bid%5D/route.ts)
 
 Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
 
@@ -521,14 +526,20 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
+- `app.timeRecording.mark` — [`src/features/dp/time-adjustments/service.server.ts`](../../src/features/dp/time-adjustments/service.server.ts)
 - `dashboard.collaborator` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
 - `dashboard.view` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
 - `dp.collaborators.edit` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
 - `dp.collaborators.ownProfileOnly` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
+- `dp.collaborators.view` — [`src/features/dp/employment-reference/service.server.ts`](../../src/features/dp/employment-reference/service.server.ts)
 - `dp.requests.review` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
+- `dp.timeClosure` — [`src/features/dp/time-adjustments/closure.server.ts`](../../src/features/dp/time-adjustments/closure.server.ts)
 - `dp.timeClosure.close` — [`src/app/dashboard/dp/fechamento/page.tsx`](../../src/app/dashboard/dp/fechamento/page.tsx)
 - `dp.timeClosure.reopen` — [`src/app/dashboard/dp/fechamento/page.tsx`](../../src/app/dashboard/dp/fechamento/page.tsx)
 - `dp.timeRecording.view` — [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx)
+- `financial.expenses.edit` — [`src/features/dp/time-adjustments/payroll-finance.server.ts`](../../src/features/dp/time-adjustments/payroll-finance.server.ts)
+- `financial.inbox.view` — [`src/features/dp/time-adjustments/payroll-finance.server.ts`](../../src/features/dp/time-adjustments/payroll-finance.server.ts)
+- `settings.manageUsers` — [`src/features/dp/employment-reference/service.server.ts`](../../src/features/dp/employment-reference/service.server.ts)
 
 ## `dre`
 
@@ -1029,14 +1040,16 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 ## `people-access`
 
-Páginas: [`src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/edit/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx), [`src/app/dashboard/dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`src/app/dashboard/users/inactive/page.tsx`](../../src/app/dashboard/users/inactive/page.tsx).
+Páginas: [`src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/edit/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx), [`src/app/dashboard/dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`src/app/dashboard/dp/prestadores/page.tsx`](../../src/app/dashboard/dp/prestadores/page.tsx), [`src/app/dashboard/users/inactive/page.tsx`](../../src/app/dashboard/users/inactive/page.tsx).
 
-Arquivos locais percorridos: 90.
+Arquivos locais percorridos: 110.
 
 Chamadas candidatas encontradas:
 
 - `/api/audit/log` — interface [`src/features/audit/client.ts`](../../src/features/audit/client.ts); rota candidata [`src/app/api/audit/log/route.ts`](../../src/app/api/audit/log/route.ts)
 - `/api/audit/logs` — interface [`src/features/audit/client.ts`](../../src/features/audit/client.ts); rota candidata [`src/app/api/audit/logs/route.ts`](../../src/app/api/audit/logs/route.ts)
+- `/api/dp/service-providers` — interface [`src/features/service-portal/admin-panel.tsx`](../../src/features/service-portal/admin-panel.tsx); rota candidata [`src/app/api/dp/service-providers/route.ts`](../../src/app/api/dp/service-providers/route.ts)
+- `/api/dp/service-providers/closures` — interface [`src/features/service-portal/closure-release-panel.tsx`](../../src/features/service-portal/closure-release-panel.tsx); rota candidata [`src/app/api/dp/service-providers/closures/route.ts`](../../src/app/api/dp/service-providers/closures/route.ts)
 - `/api/hr/bootstrap` — interface [`src/features/hr/lib/client.ts`](../../src/features/hr/lib/client.ts); rota candidata [`src/app/api/hr/bootstrap/route.ts`](../../src/app/api/hr/bootstrap/route.ts)
 - `/api/hr/collaborators/` — interface [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
 - `/api/hr/departments` — interface [`src/features/hr/lib/client.ts`](../../src/features/hr/lib/client.ts); rota candidata [`src/app/api/hr/departments/route.ts`](../../src/app/api/hr/departments/route.ts)
@@ -1099,7 +1112,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dp.collaborators.syncProfile` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.collaborators.terminate` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
 - `dp.collaborators.view` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
-- `dp.requests.review` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `dp.requests.review` — [`src/app/dashboard/dp/prestadores/page.tsx`](../../src/app/dashboard/dp/prestadores/page.tsx)
 - `dp.requests.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.responsibilities.manage` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.responsibilities.receiveUnassignedAlerts` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
@@ -1117,6 +1130,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dp.settings.manageShifts` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.settings.manageTime` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.settings.manageUnits` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `dp.timeClosure` — [`src/features/dp/rep-p/employee-time-access.server.ts`](../../src/features/dp/rep-p/employee-time-access.server.ts)
 - `dp.timeClosure.close` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
 - `dp.timeClosure.reopen` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
 - `dp.timeRecording.readLocation` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)

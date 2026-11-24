@@ -265,6 +265,16 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
       createDocument: async (params) => { sent.push(params); return { sandbox: true, document: { id: `${prefix}-autentique`, created_at: '2026-10-17T12:00:01Z', signatures: [] } }; },
       downloadSigned: async () => Buffer.from(sent[0].buffer),
     };
+    // This fixture isolates the existing package/signature workflow; the reconciliation
+    // production gate is exercised without stubs in payslip-reconciliation.test.mjs.
+    const fixtureStamp = async () => {
+      const doc = await hrDbAdmin.collection('employeeDocuments').doc(`${prefix}-payslip`).get();
+      return { id: `${prefix}-fixture-review`, inputHash: 'a'.repeat(64), releaseId: `${prefix}-fixture-release`, documentId: doc.id, documentHash: doc.get('contentHash') ?? null, documentVersion: Number(doc.get('version') ?? 1) };
+    };
+    packageDeps.reconciliationGate = {
+      reserve: async () => { const stamp = await fixtureStamp(); return { stamp, lease: { id: 'fixture-lease', until: '2099-01-01T00:00:00Z', reconciliationId: stamp.id, inputHash: stamp.inputHash }, document: { id: stamp.documentId } }; },
+      check: async () => {}, release: async () => {}, current: async () => fixtureStamp(),
+    };
     const packageInput = { action: 'send', competence, expectedVersion: 2, employeeUid: userId };
     await assert.rejects(sendClosingPackage(reviewer, packageInput, packageDeps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
     await assert.rejects(sendClosingPackage(closer, packageInput, packageDeps), { code: 'PTRP_PACKAGE_CONTACT_REQUIRED' });
@@ -534,5 +544,60 @@ test('folha distingue lote parcial, falha persistida, repetição individual e m
   } finally {
     await Promise.all([hrDbAdmin.recursiveDelete(ref), hrDbAdmin.recursiveDelete(priorRef), policyRef.delete()]);
     await Promise.all(users.map((user) => user.delete()));
+  }
+});
+
+test('devolução exige titular, revisão, versão e conclusão antes de fechar', async () => {
+  const { actOnDayCorrection, listDayCorrections, assertNoPendingDayCorrections } =
+    await import('../../src/features/dp/time-adjustments/day-corrections.server.ts');
+  const workspaceId = 'return-' + randomUUID();
+  const uid = workspaceId + '-person';
+  const workDate = '2025-02-10';
+  const actor = { decoded: { uid: 'dp' }, workspace_id: workspaceId, userDoc: {}, permissions: structuredClone(defaultAdminPermissions), isDefaultAdmin: true };
+  const owner = { ...actor, decoded: { uid }, isDefaultAdmin: false };
+  const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, now: () => new Date('2025-03-15T12:00:00Z') };
+  const userRef = dbAdmin.collection('users').doc(uid);
+  const closure = hrDbAdmin.collection(CLOSURES).doc(workspaceId + '_2025-02');
+  const check = () => hrDbAdmin.runTransaction((tx) => assertNoPendingDayCorrections(hrDbAdmin, tx, workspaceId, '2025-02'));
+  let id;
+  try {
+    await userRef.set({ unitIds: ['A', 'B'] });
+    const limited = { ...actor, isDefaultAdmin: false, userDoc: { unitIds: ['A'] } };
+    const request = { action: 'request', employeeUid: uid, workDate, reason: 'Confira as batidas deste dia.' };
+    await assert.rejects(actOnDayCorrection(limited, request, deps));
+    await userRef.set({ unitIds: ['A'] });
+    await assert.rejects(actOnDayCorrection(actor, request, { ...deps, now: () => new Date('2025-02-11T00:30:00Z') }));
+    const results = await Promise.all([actOnDayCorrection(actor, request, deps), actOnDayCorrection(actor, request, deps)]);
+    id = results[0].id;
+    assert.equal(results[0].version, results[1].version);
+    assert.equal((await listDayCorrections(owner, '2025-02', undefined, deps)).items.length, 1);
+    await assert.rejects(check());
+    await assert.rejects(actOnDayCorrection(actor, { action: 'respond', id, expectedVersion: 1, reason: 'Resposta indevida do revisor.' }, deps));
+    await actOnDayCorrection(owner, { action: 'respond', id, expectedVersion: 1, reason: 'Esqueci de registrar a saída.' }, deps);
+    await assert.rejects(actOnDayCorrection(actor, { action: 'accept', id, expectedVersion: 1, reason: 'Conferência com versão antiga.' }, deps));
+    await assert.rejects(check());
+    await actOnDayCorrection(actor, { action: 'return', id, expectedVersion: 2, reason: 'Envie o pedido com o horário correto.' }, deps);
+    await assert.rejects(check());
+    await actOnDayCorrection(owner, { action: 'respond', id, expectedVersion: 3, reason: 'O dia foi conferido junto ao RH.' }, deps);
+    await actOnDayCorrection(actor, { action: 'accept', id, expectedVersion: 4, reason: 'Conferência concluída com as evidências.' }, deps);
+    await check();
+    await hrDbAdmin.collection('ptrp_dayCorrections').doc(id).update({ status: 'responded', version: 100,
+      history: Array.from({ length: 100 }, () => ({ action: 'respond', actorUid: uid, reason: 'Histórico anterior de conferência.', at: '2025-03-01T12:00:00Z', adjustmentId: null })) });
+    await actOnDayCorrection(actor, { action: 'return', id, expectedVersion: 100, reason: 'Envie novamente a informação correta.' }, deps);
+    await actOnDayCorrection(owner, { action: 'respond', id, expectedVersion: 101, reason: 'Resposta conferida com o responsável.' }, deps);
+    await actOnDayCorrection(actor, { action: 'accept', id, expectedVersion: 102, reason: 'Conferência final encerrada pelo RH.' }, deps);
+    await check();
+    assert.equal((await hrDbAdmin.collection('ptrp_dayCorrectionEvents').doc(id + '_103').get()).get('action'), 'accept');
+    await actOnDayCorrection(actor, { ...request, reason: 'Confirme novamente as informações do dia.' }, deps);
+    await assert.rejects(check());
+    await userRef.update({ unitIds: [], isActive: false });
+    assert.equal((await listDayCorrections(actor, '2025-02', uid, deps)).items.length, 1);
+    await actOnDayCorrection(actor, { action: 'cancel', id, expectedVersion: 104, reason: 'Devolução retirada pelo RH após conferência.' }, deps);
+    await check();
+    await closure.set({ status: 'closed' });
+    await assert.rejects(actOnDayCorrection(actor, { ...request, reason: 'Nova conferência depois do fechamento.' }, deps));
+    assert.equal((await hrDbAdmin.collection('ptrp_dayCorrections').doc(id).get()).get('history').length, 100);
+  } finally {
+    await Promise.all([userRef.delete(), closure.delete(), ...(id ? [hrDbAdmin.collection('ptrp_dayCorrections').doc(id).delete()] : [])]);
   }
 });

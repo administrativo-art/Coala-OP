@@ -443,6 +443,21 @@ export async function bankMovementsForAej(workspaceId: string, uid: string, comp
  * fechadas do ciclo; as que faltam aparecem em `missing` (o cliente apura pelo POST). Saldo transportado soma os
  * ciclos anteriores quando o destino do residual é "transportar".
  */
+/** Extrato de uma competência para a entrega contábil; o chamador valida a concessão e o titular. */
+export async function readBankStatementForProvider(
+  workspaceId: string, uid: string, competence: string, tx?: Transaction, injected: Partial<Dependencies> = {},
+) {
+  const { end } = competenceRange(competence);
+  const deps = { ...defaults, ...injected, now: () => new Date(end + 'T23:59:59Z') };
+  const policy = (await policiesAndTarget(deps, uid)).policyOn(end);
+  if (!policy) return { policy: null, statement: null, closures: {} as Record<string, number>, expiration: null };
+  const result = await statementFor(deps, workspaceId, uid, end, tx, policy);
+  return { ...result, expiration: {
+    days: policy.timeBank.expirationDays ?? null,
+    destination: policy.timeBank.expiredBalanceDestination ?? 'review',
+  } };
+}
+
 export async function readBankStatement(context: ServerUserContext, query: { employeeUid?: string; date?: string }, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
   return statementFor(deps, context.workspace_id, await subject(deps, context, query.employeeUid, 'read'), query.date);

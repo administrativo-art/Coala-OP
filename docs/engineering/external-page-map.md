@@ -28,3 +28,6 @@ Este mapa manual liga as **21 páginas** do [inventário gerado](surface-invento
 | [`/vagas/onboarding/[token]`](../../src/app/vagas/onboarding/%5Btoken%5D/page.tsx) | [Formulário da integração](flows/onboarding-public-documents.md) | Cadastro público por token. |
 
 Quando uma página externa for criada, movida ou removida, regenere o [inventário](surface-inventory.md) e atualize esta tabela no mesmo trabalho. O CI detecta mudança de caminho no inventário; a relação com o fluxo depende de revisão humana.
+
+| [`/prestadores`](../../src/app/prestadores/page.tsx) | [Acesso de prestadores](service-provider-access.md) | Login individual e consulta de empresas e competências autorizadas. |
+| [`/prestadores/ativar`](../../src/app/prestadores/ativar/page.tsx) | [Acesso de prestadores](service-provider-access.md) | Definição da senha por convite de uso único no fragmento da URL. |

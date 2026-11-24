@@ -1,0 +1,14 @@
+import {NextResponse,type NextRequest} from 'next/server';
+import {z} from 'zod';
+import {requireUser,type ServerUserContext} from '@/lib/auth-server';
+import {rethrowServerAuthenticationFailure} from '@/lib/server-authentication-failure';
+import {AppError} from '@/lib/observability/app-error';
+import {defineSecurityContract} from '@/lib/security/route-contract';
+import {defineSecurityEnforcer} from '@/lib/security/enforcer';
+import {secureRoute} from '@/lib/security/secure-route.server';
+import {readClosingProgress} from '@/features/dp/time-adjustments/closing-progress.server';
+export const runtime='nodejs';export const dynamic='force-dynamic';
+const schema=z.object({competence:z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)}).strict();
+const contract=defineSecurityContract({schemaVersion:1,id:'dp.closing-progress.read',version:1,surface:{method:'GET',path:'/api/dp/time-recording/closing-progress'},exposure:'authenticated',identity:{kind:'active-user'},authorization:{kind:'custom',strategy:'time-closure'},resourceScope:{kind:'workspace'},input:{kind:'schema',schema:'dp.closing-progress.query',unknownFields:'reject'},effects:{mode:'read',audit:'none'},errorExposure:'sanitized'});
+const enforcer=defineSecurityEnforcer<NextRequest,unknown,unknown,ServerUserContext,z.infer<typeof schema>,{workspaceId:string}>({id:'dp-closing-progress-v1',guarantees:['authenticated-user','active-user','authorization:time-closure','workspace-scoped','input-validated','fields-allowlisted'],async enforce({request}){const actor=await requireUser(request).catch(rethrowServerAuthenticationFailure);const parsed=schema.safeParse(Object.fromEntries(request.nextUrl.searchParams));if(!parsed.success)throw new AppError({code:'PTRP_PROGRESS_INPUT',kind:'VALIDATION',safeMessage:'Escolha uma competência válida.'});return {actor,input:parsed.data,resource:{workspaceId:actor.workspace_id}};}});
+export const GET=secureRoute({contract,enforcer},async({security})=>NextResponse.json(await readClosingProgress(security.actor,security.input.competence),{headers:{'Cache-Control':'private, no-store'}}));

@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 import { PageHero } from "@/components/patterns/page-hero";
 import { CompetenceClosureSection } from "@/features/dp/time-adjustments/closure-section";
@@ -16,6 +17,7 @@ export default function DpTimeClosurePage() {
         title="Fechamento do ponto"
         subtitle="Congela o mês com a declaração de cada pessoa. Pedido de ausência ou ajuste sem decisão impede o fechamento."
       />
+      <Link href="/dashboard/dp/prestadores" className="inline-block text-sm font-semibold underline">Gerenciar acesso de prestadores</Link>
       <CompetenceClosureSection firebaseUser={firebaseUser} people={users} />
     </div>
   );

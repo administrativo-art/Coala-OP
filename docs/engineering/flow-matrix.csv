@@ -182,3 +182,4 @@ src/app/dashboard/users/inactive/page.tsx,active,people-access,
 src/app/dashboard/users/page.tsx,redirect,people-access,/dashboard/dp/collaborators
 src/app/dashboard/documents/history/page.tsx,active,document-central,Histórico agregado por origem autorizada; diferencia eventos de estados atuais legados.
 src/app/dashboard/documents/generated/manage/page.tsx,active,document-generation,Gestão detalhada de revisão auditoria e assinatura dos documentos gerados.
+src/app/dashboard/dp/prestadores/page.tsx,active,people-access,Gestao de escritorios e contas individuais de prestadores com escopo empregador e competencia.

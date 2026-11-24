@@ -279,4 +279,16 @@ Nova consulta auditada e painel de localização na candidata local, com permiss
 
 2026-11-21 — Competência de parcelas no fechamento. O fluxo `month-closing` passa a Traçado. Despesas e Fechamento leem o contrato central para o mês, o valor e o estado das parcelas. A consulta Firestore limitada foi verificada em leitura para outubro e novembro. Verificação HTTP e visual permanecem pendentes.
 
+2026-11-23 — DP ponto: devolução do dia traçada entre modo foco, API day-corrections, coleção privada, Registro do titular e Go. Atores separados, unidades do dia e histórico imutável. Implementação local, publicação e homologação visual pendentes.
+
+2026-11-23 — Acesso de prestadores traçado entre gestão RH, convite individual, portal, sessão e concessões. Namespace independente e fontes pessoais live. Remessa versionada de folha e publicação pendentes.
+
+2026-11-23 — Consulta do fechamento por colaborador traçada entre gestão de prestadores, prévia, publicação imutável, portal e download auditado. Prova de empregador por data e validação de fontes financeiras revisadas. Publicação e homologação real pendentes.
+
+
+23/11/2026 — Conferência de eventos do contracheque traçada no fluxo REP-P: entrada interna, fontes e namespaces, permissões RH/todas unidades, comparação determinística, revisões e bloqueio de envio/reenviou. Integração local em emulador e testes dirigidos; publicação e homologação reais pendentes.
+
+
+23/11/2026 — acompanhamento e conciliação documental da folha implementados localmente. TARS consultou contratos; Nemo implementou e verificou. Grade limitada por competência, gates existentes preservados e conciliação com acesso financeiro próprio. Fontes, efeitos e testes no guia REP-P; produção e arquivos reais pendentes.
+
 2026-11-23 — Interface local do Pix de mercadoria: mapa de Despesas, Compras e solicitações levou à ação de pagamento compartilhada e à API protegida. O diálogo mantém fornecedor fiscal e escolhe recebedor PF/PJ por ID; indicação distinta exige NF, motivo, evidência e confirmação. Compra antiga sem campos canônicos usa `sync-expense` com permissão existente. E2E sintético em Firebase demo/Playwright validou desktop, celular e corpo do preparo; HTTP E2E de backend pertence à etapa Shuri/Nemo. Sem banco real, envio bancário ou publicação nesta etapa; `expenses`, `purchasing` e `payment-requests` permanecem Traçados.
