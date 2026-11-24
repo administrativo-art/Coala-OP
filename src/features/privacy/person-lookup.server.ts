@@ -17,6 +17,7 @@ const employee = (snapshot: FirebaseFirestore.DocumentSnapshot) => snapshot.exis
 } : null;
 
 export const firestorePersonLookup: PersonLookup = {
+  async providerMember(id) { const row = await dbAdmin.collection("providerMembers").doc(id).get(); return row.exists ? { id: row.id } : null; },
   async processById(id) { const row = await hrDbAdmin.collection("onboardingProcesses").doc(id).get(); return row.exists ? { ...row.data(), id: row.id } : null; },
   async onboardingPerson(id) {
     const rows = await hrDbAdmin.collection("onboardingProcesses").where("personIdentity.ref.id", "==", id).limit(2).select("workspaceId", "workspace_id", "unitId", "source", "applicationId", "jobOpeningId", "jobRoleId", "functionId", "employerUnitId", "employmentRelationshipType", "integrationV2.snapshot.schemaVersion", "personIdentity", "personProvisioning", "collaboratorUserId", "employeeId", "candidateId").get();

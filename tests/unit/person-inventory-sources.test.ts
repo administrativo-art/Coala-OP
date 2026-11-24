@@ -11,7 +11,7 @@ test('every registered source declares an exact namespace, field, role and hones
     assert.ok(source.permissionPolicy && source.scopePolicy);
     assert.ok(['source-policy', 'document-policy', 'rep-p-statutory', 'financial-policy', 'privacy-ttl', 'audit-ttl', 'cursor-ttl'].includes(source.retention));
     assert.ok(['subject', 'owner', 'actor', 'signer', 'participant'].includes(source.role));
-    assert.ok(['main.users', 'hr.employees', 'hr.candidates', 'hr.onboardingPersons', 'subjectKeys'].includes(source.namespace));
+    assert.ok(['main.users', 'hr.employees', 'hr.candidates', 'hr.onboardingPersons', 'main.providerMembers', 'subjectKeys'].includes(source.namespace));
     assert.ok(source.coverage === 'live' || source.coverage === 'legacy_gap' && source.reason);
     assert.equal(sourceById(source.id), source);
   }
@@ -87,3 +87,13 @@ test('cabeçalho PIX que admite CPF é pessoal com lacuna explícita, sem equiva
 });
 
 test("XML bruto da carteira permanece lacuna explícita sem identidade inventada",()=>{const source=sourceById("stone-portfolio-raw-xml-identity-gap");assert.equal(source?.collection,"stonePortfolioFiles");assert.equal(source?.field,"xml");assert.equal(source?.coverage,"legacy_gap");assert.equal(source?.namespace,"subjectKeys");assert.match(source?.reason??"",/Consulta por pessoa indisponível/);});
+
+
+test('day correction separates its subject, request author and historical actors', () => {
+  assert.equal(sourceById('day-correction-subjects')?.field, 'employeeUid');
+  assert.equal(sourceById('day-correction-subjects')?.role, 'subject');
+  assert.equal(sourceById('day-correction-requesters')?.field, 'requestedBy');
+  assert.equal(sourceById('day-correction-actors')?.field, 'actorKeys');
+  assert.equal(sourceById('day-correction-actors')?.role, 'actor');
+  assert.equal(sourceById('user-notification-owners')?.field, 'ownerUid');
+});

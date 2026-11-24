@@ -468,6 +468,10 @@ service cloud.firestore {
 
     // E-mails financeiros e anexos são expostos somente pelas APIs autenticadas
     // para evitar acesso direto a documentos de cobrança pelo cliente.
+    match /payrollFinancialReviews/{document=**} { allow read, write: if false; }
+    match /payrollFinancialReviewState/{document=**} { allow read, write: if false; }
+    match /payrollFinancialReviewClaims/{document=**} { allow read, write: if false; }
+
     match /financialInboxMessages/{messageId} {
       allow read, write: if false;
       match /events/{eventId} {

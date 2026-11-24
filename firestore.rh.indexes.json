@@ -1,5 +1,9 @@
 {
   "indexes": [
+    {"collectionGroup": "providerClosureReleases", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "competence", "order": "ASCENDING"}, {"fieldPath": "employeeUid", "order": "ASCENDING"}]},
+    {"collectionGroup":"providerClosureAccess","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"grantId","order":"ASCENDING"}]},
+    {"collectionGroup":"ptrp_dayCorrections","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"employeeUid","order":"ASCENDING"},{"fieldPath":"competence","order":"ASCENDING"}]},
+    {"collectionGroup":"ptrp_dayCorrections","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"competence","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"}]},
     {"collectionGroup":"ptrp_treatments","queryScope":"COLLECTION","fields":[{"fieldPath":"employeeUid","order":"ASCENDING"},{"fieldPath":"executionUnitId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
     {"collectionGroup":"terminationProcesses","queryScope":"COLLECTION","fields":[{"fieldPath":"employeeId","order":"ASCENDING"},{"fieldPath":"unitId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
     {"collectionGroup":"dp_absenceRequests","queryScope":"COLLECTION","fields":[{"fieldPath":"beneficiaryUid","order":"ASCENDING"},{"fieldPath":"unitId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
