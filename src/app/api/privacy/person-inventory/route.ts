@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 type RouteContext = { params: Promise<Record<string, never>> };
 const schema = z.object({
-  namespace: z.enum(["main.users", "hr.employees", "hr.candidates", "hr.onboardingPersons"]), id: z.string().trim().min(1).max(180).refine((id) => !id.includes("/")),
+  namespace: z.enum(["main.users", "main.entities", "hr.employees", "hr.candidates", "hr.onboardingPersons"]), id: z.string().trim().min(1).max(180).refine((id) => !id.includes("/")),
   source: z.string().trim().max(80).optional(), cursor: z.string().max(600).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(25),
 }).strict();

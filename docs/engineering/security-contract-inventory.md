@@ -3,8 +3,8 @@
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
 - Arquivos de rota: **577**
-- Totalmente contratados: **257**
-- Legados congelados: **313**
+- Totalmente contratados: **258**
+- Legados congelados: **312**
 - Exceções temporárias: **7**
 - Violações: **0**
 
@@ -204,7 +204,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/analysis-routines` | GET, POST | `LEGACY_BASELINE` | [src/app/api/financial/analysis-routines/route.ts](../../src/app/api/financial/analysis-routines/route.ts) |
 | `/api/financial/analysis-routines/scheduler` | POST | `LEGACY_BASELINE` | [src/app/api/financial/analysis-routines/scheduler/route.ts](../../src/app/api/financial/analysis-routines/scheduler/route.ts) |
 | `/api/financial/beneficiaries` | GET | `LEGACY_BASELINE` | [src/app/api/financial/beneficiaries/route.ts](../../src/app/api/financial/beneficiaries/route.ts) |
-| `/api/financial/beneficiaries/entities/[entityId]` | GET, PATCH | `LEGACY_BASELINE` | [src/app/api/financial/beneficiaries/entities/[entityId]/route.ts](../../src/app/api/financial/beneficiaries/entities/[entityId]/route.ts) |
+| `/api/financial/beneficiaries/entities/[entityId]` | GET ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/financial/beneficiaries/entities/[entityId]/route.ts](../../src/app/api/financial/beneficiaries/entities/[entityId]/route.ts) |
 | `/api/financial/bootstrap` | POST | `LEGACY_BASELINE` | [src/app/api/financial/bootstrap/route.ts](../../src/app/api/financial/bootstrap/route.ts) |
 | `/api/financial/budget-inputs` | GET | `LEGACY_BASELINE` | [src/app/api/financial/budget-inputs/route.ts](../../src/app/api/financial/budget-inputs/route.ts) |
 | `/api/financial/budget-projects` | GET, POST | `LEGACY_BASELINE` | [src/app/api/financial/budget-projects/route.ts](../../src/app/api/financial/budget-projects/route.ts) |

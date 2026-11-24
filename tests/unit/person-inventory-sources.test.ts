@@ -11,7 +11,7 @@ test('every registered source declares an exact namespace, field, role and hones
     assert.ok(source.permissionPolicy && source.scopePolicy);
     assert.ok(['source-policy', 'document-policy', 'rep-p-statutory', 'financial-policy', 'privacy-ttl', 'audit-ttl', 'cursor-ttl'].includes(source.retention));
     assert.ok(['subject', 'owner', 'actor', 'signer', 'participant'].includes(source.role));
-    assert.ok(['main.users', 'hr.employees', 'hr.candidates', 'hr.onboardingPersons', 'subjectKeys'].includes(source.namespace));
+    assert.ok(['main.users', 'main.entities', 'hr.employees', 'hr.candidates', 'hr.onboardingPersons', 'subjectKeys'].includes(source.namespace));
     assert.ok(source.coverage === 'live' || source.coverage === 'legacy_gap' && source.reason);
     assert.equal(sourceById(source.id), source);
   }
@@ -41,6 +41,33 @@ test('unknown permission policy denies by default', () => {
   const source = { ...PERSON_SOURCES[0], permissionPolicy: 'unknown' } as unknown as Parameters<typeof canViewPersonSource>[1];
   assert.equal(canViewPersonSource(actor, source), false);
   assert.equal(canViewPersonSource(actor, PERSON_SOURCES[0]), true);
+});
+
+test('entity person sources are exact and keep supplier, request and actor roles separate', () => {
+  for (const [id, collection, field] of [
+    ['entity-persons', 'entities', '__name__'],
+    ['financial-entity-person-expenses', 'expenses', 'supplierId'],
+    ['financial-entity-person-pix-requests', 'bankPaymentRequests', 'beneficiaryReference.sourceId'],
+    ['supplier-payment-profile-entity-persons', 'supplierPaymentProfiles', '__name__'],
+  ]) {
+    const source = sourceById(id)!;
+    assert.equal(source.collection, collection);
+    assert.equal(source.field, field);
+    assert.equal(source.namespace, 'main.entities');
+    assert.equal(source.role, 'subject');
+    assert.equal(source.permissionPolicy, 'financial-counterparty');
+    assert.equal(source.coverage, 'live');
+  }
+  assert.equal(sourceById('financial-expense-creators')?.namespace, 'main.users');
+  assert.equal(sourceById('supplier-payment-profile-validators')?.role, 'actor');
+  const actor = { isDefaultAdmin: false, workspace_id: 'w', userDoc: { unitAccessScope: 'selected', unitAccessUnitIds: ['A'] },
+    permissions: { financial: { view: true, expenses: { view: true }, paymentRequests: { view: true } } } } as Parameters<typeof canViewPersonRecord>[0];
+  const expense = sourceById('financial-entity-person-expenses')!;
+  assert.equal(canViewPersonRecord(actor, expense, { workspaceId: 'w', unitId: 'A' }), true);
+  assert.equal(canViewPersonRecord(actor, expense, { workspaceId: 'w', unitId: 'B' }), false);
+  assert.equal(canViewPersonRecord(actor, expense, { workspaceId: 'other', unitId: 'A' }), false);
+  assert.equal(canViewPersonRecord(actor, expense, { unitId: 'A' }), false);
+  assert.equal(canViewPersonSource({ ...actor, permissions: { financial: { view: true, expenses: { view: true } } } } as typeof actor, expense), false);
 });
 
 

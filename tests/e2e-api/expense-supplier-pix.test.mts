@@ -3,7 +3,7 @@ import test from "node:test";
 import { spawn } from "node:child_process";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
 
 import { encryptPaymentDestination } from "../../src/features/financial/beneficiaries/security.server";
 import { assertFirestoreEmulatorSafety } from "../helpers/firestore-emulator-safety.mjs";
@@ -18,6 +18,12 @@ const origin = "http://127.0.0.1:3113";
 const encryptionKey = "ab".repeat(32);
 
 test("API E2E: prepara Pix por despesa e bloqueia envio divergente antes do banco", { timeout: 240_000 }, async (context) => {
+  const originalEncryptionKey = process.env.PAYMENT_DATA_ENCRYPTION_KEY;
+  process.env.PAYMENT_DATA_ENCRYPTION_KEY = encryptionKey;
+  context.after(() => {
+    if (originalEncryptionKey === undefined) delete process.env.PAYMENT_DATA_ENCRYPTION_KEY;
+    else process.env.PAYMENT_DATA_ENCRYPTION_KEY = originalEncryptionKey;
+  });
   const server = spawn("node_modules/.bin/next", ["dev", "--hostname", "127.0.0.1", "--port", "3113"], {
     env: { ...process.env, NODE_ENV: "development", PAYMENT_DATA_ENCRYPTION_KEY: encryptionKey },
     stdio: ["ignore", "pipe", "pipe"],
@@ -82,6 +88,11 @@ test("API E2E: prepara Pix por despesa e bloqueia envio divergente antes do banc
 
   const token = await createUser("supplier-pix-admin", true);
   const restricted = await createUser("supplier-pix-restricted", false);
+  const scopedToken = await createUser("supplier-pix-unit-a", false);
+  await db.collection("profiles").doc("supplier-pix-unit-a").update({ permissions: { financial: {
+    view: true, expenses: { view: true, edit: true, create: true }, paymentRequests: { view: true, create: true, authorize: true, submit: true },
+  }, registration: { entities: { edit: true } } } });
+  await db.collection("users").doc("supplier-pix-unit-a").update({ unitAccessScope: "selected", unitAccessUnitIds: ["unit-a"] });
   const supplierEntityId = "supplier-pix-entity";
   const document = "11222333000181";
   const expenseId = "supplier-pix-september";
@@ -107,6 +118,22 @@ test("API E2E: prepara Pix por despesa e bloqueia envio divergente antes do banc
     method: "POST", headers: { Authorization: `Bearer ${access}`, "Content-Type": "application/json" },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
+
+  const deniedCompanyId = "supplier-pix-company-other-unit";
+  await expenses.doc(deniedCompanyId).set({ ...(await expense.get()).data(), unitId: "unit-b", paymentRequestId: null });
+  assert.equal((await post(`/api/financial/expenses/${deniedCompanyId}/supplier-pix`, scopedToken,
+    { supplierEntityId, amountCents: 53664 })).status, 403);
+  assert.equal((await requests.doc(`expense_supplier_pix_${deniedCompanyId}`).get()).exists, false);
+  assert.equal((await expenses.doc(deniedCompanyId).get()).get("paymentRequestId"), null);
+  const raceCompanyId = "supplier-pix-company-unit-race";
+  await expenses.doc(raceCompanyId).set({ ...(await expense.get()).data(), unitId: "unit-a", paymentRequestId: null });
+  const { prepareExpenseSupplierPix: prepareWithUnitRace } = await import("../../src/features/financial/payment-requests/expense-supplier-pix.server");
+  await assert.rejects(() => prepareWithUnitRace(raceCompanyId, supplierEntityId, 53664, "coala",
+    { uid: "supplier-pix-unit-a" }, undefined, undefined, undefined,
+    async () => { await expenses.doc(raceCompanyId).update({ unitId: "unit-b" }); }), /sem acesso à unidade/);
+  assert.equal((await requests.doc(`expense_supplier_pix_${raceCompanyId}`).get()).exists, false);
+  assert.equal((await expenses.doc(raceCompanyId).get()).get("paymentRequestId"), null);
+
   const path = `/api/financial/expenses/${expenseId}/supplier-pix`;
   const prepare = (access = token, amountCents = 53664) => post(path, access, { supplierEntityId, amountCents });
   assert.equal((await prepare(restricted)).status, 403);
@@ -127,6 +154,18 @@ test("API E2E: prepara Pix por despesa e bloqueia envio divergente antes do banc
   assert.equal((await requests.where("expenseId", "==", expenseId).get()).size, 1);
   assert.equal((await requests.doc(requestId).collection("events").get()).size, 1);
 
+  const { registerReportedPayment } = await import("../../src/features/financial/obligations/service.server");
+  const manualInput = {
+    idempotencyKey: "manual-supplier-pix-test-2026-11", paidAt: "2026-11-23T12:00:00-03:00",
+    interest: 0, fine: 0, notes: "", splits: [{ accountId: "inter", accountName: "Inter",
+      paymentMethodId: "pix", paymentMethodLabel: "Pix", amount: 536.64 }],
+  };
+  await assert.rejects(registerReportedPayment(expenseId, manualInput, { uid: "supplier-pix-admin" }), /Pix vinculado.*encerramento bancário seguro/);
+  const missingRequestExpenseId = "supplier-pix-missing-request";
+  await expenses.doc(missingRequestExpenseId).set({ ...(await expense.get()).data(), paymentRequestId: "missing-bank-request" });
+  await assert.rejects(registerReportedPayment(missingRequestExpenseId, manualInput, { uid: "supplier-pix-admin" }), /solicitação bancária vinculada.*não foi encontrada/);
+  assert.equal((await financial.collection("payments").where("expenseId", "==", expenseId).get()).size, 0);
+
   const requestPath = `/api/financial/payment-requests/${requestId}`;
   const authorization = await post(`${requestPath}/authorize`, token);
   const authorized = await authorization.json();
@@ -145,6 +184,274 @@ test("API E2E: prepara Pix por despesa e bloqueia envio divergente antes do banc
   const request = await requests.doc(requestId).get();
   assert.equal(request.get("status"), "ready_to_submit");
   assert.equal(request.get("interRequestId"), undefined);
+
+  const receiptExpenseId = "generated-receipt-direct-api";
+  const receiptId = "generated-receipt-direct-api-owned";
+  const receiptExpense = expenses.doc(receiptExpenseId);
+  await receiptExpense.set({ ...(await expense.get()).data(),
+    status: "pending", paymentRequestId: null, originModule: "generated_receipt", generatedReceiptId: receiptId,
+    beneficiaryReference: { sourceType: "entity", sourceId: supplierEntityId },
+    totalValue: 500, netPayableValue: 450,
+    installments: [{ number: 1, value: 500, status: "pending" }],
+  });
+  const receiptInput = { sourceType: "generated_receipt", sourceId: receiptId, expenseId: receiptExpenseId,
+    beneficiaryReference: { sourceType: "entity", sourceId: supplierEntityId },
+    amount: 500, description: "Recibo sintético de teste" };
+  const receiptPost = (body = receiptInput) => post("/api/financial/payment-requests", token, body);
+  assert.equal((await receiptPost()).status, 400, "líquido 450 não permite Pix 500");
+  await receiptExpense.update({ netPayableValue: 500 });
+  assert.equal((await receiptPost({ ...receiptInput, sourceId: "generated-receipt-other" })).status, 400,
+    "recibo sem vínculo com a despesa não pode criar pedido");
+  assert.equal((await receiptPost({ ...receiptInput, amount: 450 })).status, 400,
+    "valor inferior ao total também não pode criar pedido");
+  assert.equal((await requests.where("expenseId", "==", receiptExpenseId).get()).size, 0);
+  const receiptCreated = await receiptPost();
+  assert.equal(receiptCreated.status, 201, JSON.stringify(await receiptCreated.clone().json()));
+  const receiptRequestId = (await receiptCreated.json()).request.id as string;
+  assert.equal((await receiptExpense.get()).get("paymentRequestId"), receiptRequestId);
+  assert.equal((await post(`/api/financial/payment-requests/${receiptRequestId}/authorize`, token)).status, 200);
+  await receiptExpense.update({ netPayableValue: 450 });
+  await assert.rejects(() => submitPaymentRequest(receiptRequestId, { uid: "supplier-pix-admin" }), /valor líquido não correspondem/);
+  await receiptExpense.update({ netPayableValue: 500, generatedReceiptId: "generated-receipt-other" });
+  await assert.rejects(() => submitPaymentRequest(receiptRequestId, { uid: "supplier-pix-admin" }), /recibo.*não correspondem/);
+  assert.equal((await requests.doc(receiptRequestId).get()).get("status"), "ready_to_submit");
+  assert.equal((await requests.doc(receiptRequestId).get()).get("submissionAttemptCount"), undefined);
+
+  const { createPaymentRequest } = await import("../../src/features/financial/payment-requests/service.server");
+  await receiptExpense.update({ generatedReceiptId: receiptId, paymentRequestId: FieldValue.delete() });
+  await assert.rejects(() => createPaymentRequest(receiptInput, { uid: "supplier-pix-admin" }, async () => {
+    await receiptExpense.update({ netPayableValue: 450 });
+  }), /valor líquido não correspondem/);
+  assert.equal((await receiptExpense.get()).get("paymentRequestId"), undefined,
+    "a religação precisa rejeitar mudança entre consulta e transação");
+  await receiptExpense.update({ netPayableValue: 500 });
+  assert.equal((await createPaymentRequest(receiptInput, { uid: "supplier-pix-admin" })).id, receiptRequestId);
+  assert.equal((await receiptExpense.get()).get("paymentRequestId"), receiptRequestId);
+
+  const afterReservation = async (change: Record<string, unknown>) => {
+    const reserved = await requests.doc(receiptRequestId).get();
+    assert.equal(reserved.get("status"), "submitting");
+    assert.equal(reserved.get("submissionAttemptCount"), 1);
+    assert.equal(typeof reserved.get("submissionReservationId"), "string");
+    await receiptExpense.update(change);
+  };
+  await assert.rejects(() => submitPaymentRequest(receiptRequestId, { uid: "supplier-pix-admin" },
+    () => afterReservation({ netPayableValue: 450 })), /valor líquido não correspondem/);
+  let recovered = await requests.doc(receiptRequestId).get();
+  assert.equal(recovered.get("status"), "ready_to_submit");
+  assert.equal(recovered.get("submissionStartedAt"), undefined);
+  assert.equal(recovered.get("submissionAttemptCount"), undefined);
+  assert.equal(recovered.get("submissionReservationId"), undefined);
+  await receiptExpense.update({ netPayableValue: 500 });
+  await assert.rejects(() => submitPaymentRequest(receiptRequestId, { uid: "supplier-pix-admin" },
+    () => afterReservation({ generatedReceiptId: "generated-receipt-other" })), /recibo.*não correspondem/);
+  recovered = await requests.doc(receiptRequestId).get();
+  assert.equal(recovered.get("status"), "ready_to_submit");
+  assert.equal(recovered.get("submissionAttemptCount"), undefined);
+  assert.equal((await requests.doc(receiptRequestId).collection("events").where("type", "==", "INTER_SUBMISSION_FAILED").get()).size, 0);
+  await receiptExpense.update({ generatedReceiptId: receiptId });
+  await assert.rejects(() => submitPaymentRequest(receiptRequestId, { uid: "supplier-pix-admin" }, async () => {
+    await profile.update({ updatedAt: "2026-11-24T10:00:00.000Z" });
+  }), /dados do favorecido mudaram/);
+  recovered = await requests.doc(receiptRequestId).get();
+  assert.equal(recovered.get("status"), "ready_to_submit");
+  assert.equal(recovered.get("submissionAttemptCount"), undefined);
+  await profile.update({ updatedAt: now });
+  await assert.rejects(() => submitPaymentRequest(receiptRequestId, { uid: "supplier-pix-admin" },
+    undefined, async () => { throw new Error("Resultado bancário sintético incerto"); }), /Não foi possível concluir a comunicação/);
+  recovered = await requests.doc(receiptRequestId).get();
+  assert.equal(recovered.get("status"), "failed");
+  assert.equal(recovered.get("submissionAttemptCount"), 1);
+  assert.equal(typeof recovered.get("submissionStartedAt"), "string");
+  await assert.rejects(() => submitPaymentRequest(receiptRequestId, { uid: "supplier-pix-admin" }), /Envio anterior exige conferência manual/);
+
+  const cpf = "52998224725";
+  const personalKeys = [
+    { type: "cpf", key: cpf },
+    { type: "email", key: "prestador@example.test" },
+    { type: "phone", key: "+5511999998888" },
+    { type: "random", key: "123e4567-e89b-12d3-a456-426614174000" },
+  ];
+  for (const { type, key } of personalKeys) {
+    const entityId = `supplier-pix-person-${type}`;
+    const actualId = `supplier-pix-person-expense-${type}`;
+    const personalProfile = financial.collection("supplierPaymentProfiles").doc(entityId);
+    await db.collection("entities").doc(entityId).set({ type: "pessoa_fisica", workspaceId: "coala", name: "Prestador de teste", document: cpf, status: "active" });
+    if (type === "phone") {
+      const profileResponse = await fetch(`${origin}/api/financial/beneficiaries/entities/${entityId}`, {
+        method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ pixKey: "(11) 99999-8888", pixKeyType: "phone" }),
+      });
+      assert.equal(profileResponse.status, 200, JSON.stringify(await profileResponse.json()));
+      assert.equal((await personalProfile.get()).get("pixKeyType"), "phone");
+    } else {
+      await personalProfile.set({
+        entityId, workspaceId: "coala", active: true, paymentMethod: "pix_key", pixKeyType: type, holderDocument: cpf,
+        encryptedPaymentData: encryptPaymentDestination({ pixKey: key }, encryptionKey),
+        validatedAt: now, updatedAt: now,
+      });
+    }
+    const personalExpense = expenses.doc(actualId);
+    await personalExpense.set({
+      workspaceId: "coala", status: "pending", provisionType: "actual", paymentMethod: "single",
+      supplierId: entityId, billingIdentity: { supplierTaxId: cpf }, totalValue: 500,
+      description: `Serviço de teste ${type}`, competenceMonth: "2026-11", dueDate: "2026-11-30",
+      unitId: "test-unit", accountPlan: "test-account", referenceResultCenterId: "test-center",
+      installments: [{ number: 1, value: 500, status: "pending" }],
+    });
+    const personalPath = `/api/financial/expenses/${actualId}/supplier-pix`;
+    const personalPrepare = () => post(personalPath, token, { supplierEntityId: entityId, amountCents: 50000 });
+    if (type === "cpf") {
+      assert.equal((await post(personalPath, scopedToken, { supplierEntityId: entityId, amountCents: 50000 })).status, 403);
+      assert.equal((await requests.doc(`expense_supplier_pix_${actualId}`).get()).exists, false);
+      assert.equal((await personalExpense.get()).get("paymentRequestId"), undefined);
+    }
+    const duplicate = await Promise.all([personalPrepare(), personalPrepare()]);
+    const personalRequestId = `expense_supplier_pix_${actualId}`;
+    for (const response of duplicate) {
+      const body = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(body));
+      assert.equal(body.request.id, personalRequestId);
+    }
+    assert.equal((await requests.where("expenseId", "==", actualId).get()).size, 1);
+    assert.equal(typeof (await requests.doc(personalRequestId).get()).get("beneficiarySnapshot.destinationHash"), "string");
+    if (type === "email") {
+      const authorized = await post(`/api/financial/payment-requests/${personalRequestId}/authorize`, token);
+      assert.equal(authorized.status, 200);
+      await personalProfile.update({ encryptedPaymentData: encryptPaymentDestination({ pixKey: "outro@example.test" }, encryptionKey) });
+      await assert.rejects(() => submitPaymentRequest(personalRequestId, { uid: "supplier-pix-admin" }), /chave Pix ou a identidade fiscal mudou/);
+      assert.equal((await requests.doc(personalRequestId).get()).get("interRequestId"), undefined);
+    }
+  }
+
+  const validCpfExpense = (await expenses.doc("supplier-pix-person-expense-cpf").get()).data();
+  assert.ok(validCpfExpense);
+  const unlinkedExpenseId = "supplier-pix-manual-unlinked";
+  await expenses.doc(unlinkedExpenseId).set({ ...validCpfExpense, paymentRequestId: null });
+  const manual500 = { ...manualInput, idempotencyKey: "manual-supplier-pix-unlinked-2026-11",
+    splits: [{ ...manualInput.splits[0], amount: 500 }] };
+  const unlinkedManual = await registerReportedPayment(unlinkedExpenseId, manual500, { uid: "supplier-pix-admin" });
+  assert.equal((await financial.collection("payments").doc(unlinkedManual.payment.id).get()).get("expenseId"), unlinkedExpenseId);
+  assert.equal((await requests.doc(`expense_supplier_pix_${unlinkedExpenseId}`).get()).exists, false);
+
+  const concurrentExpenseId = "supplier-pix-manual-concurrent";
+  await expenses.doc(concurrentExpenseId).set({ ...validCpfExpense, paymentRequestId: null });
+  const [concurrentPrepare, concurrentManual] = await Promise.all([
+    post(`/api/financial/expenses/${concurrentExpenseId}/supplier-pix`, token,
+      { supplierEntityId: "supplier-pix-person-cpf", amountCents: 50000 }),
+    registerReportedPayment(concurrentExpenseId,
+      { ...manual500, idempotencyKey: "manual-supplier-pix-concurrent-2026-11" },
+      { uid: "supplier-pix-admin" }).then(() => true, () => false),
+  ]);
+  assert.notEqual(concurrentPrepare.status === 200, concurrentManual,
+    "preparo Pix e baixa manual concorrentes não podem ambos vencer ou ambos falhar");
+  assert.equal((await requests.doc(`expense_supplier_pix_${concurrentExpenseId}`).get()).exists,
+    concurrentPrepare.status === 200);
+  assert.equal((await financial.collection("payments").where("expenseId", "==", concurrentExpenseId).get()).size,
+    concurrentManual ? 1 : 0);
+
+  const netExpenseId = "supplier-pix-net-discount";
+  await expenses.doc(netExpenseId).set({ ...validCpfExpense, paymentRequestId: null, netPayableValue: 450 });
+  const netPath = `/api/financial/expenses/${netExpenseId}/supplier-pix`;
+  assert.equal((await post(netPath, token, { supplierEntityId: "supplier-pix-person-cpf", amountCents: 50000 })).status, 409);
+  await expenses.doc(netExpenseId).update({ netPayableValue: 500 });
+  assert.equal((await post(netPath, token, { supplierEntityId: "supplier-pix-person-cpf", amountCents: 50000 })).status, 200);
+  const netRequestId = `expense_supplier_pix_${netExpenseId}`;
+  assert.equal((await post(`/api/financial/payment-requests/${netRequestId}/authorize`, token)).status, 200);
+  await expenses.doc(netExpenseId).update({ netPayableValue: 450 });
+  await assert.rejects(() => submitPaymentRequest(netRequestId, { uid: "supplier-pix-admin" }), /valor líquido da despesa diverge/);
+  assert.equal((await requests.doc(netRequestId).get()).get("status"), "ready_to_submit");
+  const invalidAnchors = [
+    { name: "missing-type", entity: { workspaceId: "coala" }, profile: {} },
+    { name: "missing-workspace", entity: { type: "pessoa_fisica" }, profile: {} },
+    { name: "pj-type", entity: { type: "pessoa_juridica", workspaceId: "coala" }, profile: {} },
+    { name: "foreign-entity", entity: { type: "pessoa_fisica", workspaceId: "foreign" }, profile: {} },
+    { name: "foreign-alias", entity: { type: "pessoa_fisica", workspaceId: "coala", workspace_id: "foreign" }, profile: {} },
+    { name: "wrong-profile-id", entity: { type: "pessoa_fisica", workspaceId: "coala" }, profile: { entityId: "other-entity" } },
+    { name: "foreign-profile", entity: { type: "pessoa_fisica", workspaceId: "coala" }, profile: { workspaceId: "foreign" } },
+    { name: "foreign-profile-alias", entity: { type: "pessoa_fisica", workspaceId: "coala" }, profile: { workspace_id: "foreign" } },
+  ];
+  for (const item of invalidAnchors) {
+    const entityId = `supplier-pix-invalid-${item.name}`;
+    const invalidExpenseId = `supplier-pix-invalid-expense-${item.name}`;
+    await db.collection("entities").doc(entityId).set({ name: "Prestador de teste", document: cpf, status: "active", ...item.entity });
+    await financial.collection("supplierPaymentProfiles").doc(entityId).set({
+      entityId, workspaceId: "coala", active: true, paymentMethod: "pix_key", pixKeyType: "cpf", holderDocument: cpf,
+      encryptedPaymentData: encryptPaymentDestination({ pixKey: cpf }, encryptionKey), validatedAt: now, updatedAt: now,
+      ...item.profile,
+    });
+    await expenses.doc(invalidExpenseId).set({ ...validCpfExpense, supplierId: entityId, paymentRequestId: null });
+    const invalidResponse = await post(`/api/financial/expenses/${invalidExpenseId}/supplier-pix`, token,
+      { supplierEntityId: entityId, amountCents: 50000 });
+    assert.ok(invalidResponse.status >= 400, `${item.name}: ${invalidResponse.status}`);
+    assert.equal((await requests.doc(`expense_supplier_pix_${invalidExpenseId}`).get()).exists, false);
+    if (["foreign-entity", "foreign-alias", "wrong-profile-id", "foreign-profile", "foreign-profile-alias"].includes(item.name)) {
+      const profileRead = await fetch(`${origin}/api/financial/beneficiaries/entities/${entityId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      assert.ok(profileRead.status >= 400, `${item.name}: GET ${profileRead.status}`);
+    }
+  }
+  const invalidProfilePatch = await fetch(`${origin}/api/financial/beneficiaries/entities/supplier-pix-invalid-missing-type`, {
+    method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ pixKey: cpf, pixKeyType: "cpf" }),
+  });
+  assert.ok(invalidProfilePatch.status >= 400);
+  const missingTypePatch = await fetch(`${origin}/api/financial/beneficiaries/entities/supplier-pix-person-cpf`, {
+    method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ pixKey: cpf }),
+  });
+  assert.ok(missingTypePatch.status >= 400);
+
+  const legacyCompanyExpenseId = "supplier-pix-legacy-company-scope";
+  await expenses.doc(legacyCompanyExpenseId).set({ ...(await expense.get()).data(), paymentRequestId: null });
+  const legacyCompanyPrepare = () => post(`/api/financial/expenses/${legacyCompanyExpenseId}/supplier-pix`, token,
+    { supplierEntityId, amountCents: 53664 });
+  const companyEntityRef = db.collection("entities").doc(supplierEntityId);
+  await companyEntityRef.update({ workspaceId: "foreign" });
+  assert.ok((await legacyCompanyPrepare()).status >= 400);
+  await companyEntityRef.update({ workspaceId: FieldValue.delete() });
+  await profile.update({ workspace_id: "foreign" });
+  assert.ok((await legacyCompanyPrepare()).status >= 400);
+  await profile.update({ workspace_id: FieldValue.delete() });
+  assert.equal((await requests.doc(`expense_supplier_pix_${legacyCompanyExpenseId}`).get()).exists, false);
+  await expenses.doc(legacyCompanyExpenseId).update({ unitId: "test-unit" });
+  assert.equal((await legacyCompanyPrepare()).status, 200);
+  const legacyCompanyRequestId = `expense_supplier_pix_${legacyCompanyExpenseId}`;
+  await expenses.doc(legacyCompanyExpenseId).update({ status: "paid" });
+  assert.equal((await post(`/api/financial/payment-requests/${legacyCompanyRequestId}/authorize`, token)).status, 409);
+  await expenses.doc(legacyCompanyExpenseId).update({ status: "pending" });
+
+  const cpfRequestId = "expense_supplier_pix_supplier-pix-person-expense-cpf";
+  assert.equal((await post(`/api/financial/payment-requests/${cpfRequestId}/authorize`, scopedToken)).status, 409);
+  assert.equal((await requests.doc(cpfRequestId).get()).get("status"), "awaiting_financial_authorization");
+  assert.equal((await post(`/api/financial/payment-requests/${cpfRequestId}/authorize`, token)).status, 200);
+  assert.equal((await post(`/api/financial/payment-requests/${legacyCompanyRequestId}/authorize`, scopedToken)).status, 409);
+  assert.equal((await post(`/api/financial/payment-requests/${legacyCompanyRequestId}/authorize`, token)).status, 200);
+  await assert.rejects(() => submitPaymentRequest(legacyCompanyRequestId, { uid: "supplier-pix-unit-a" }), /sem acesso à unidade/);
+  const cpfEntityRef = db.collection("entities").doc("supplier-pix-person-cpf");
+  const cpfProfileRef = financial.collection("supplierPaymentProfiles").doc("supplier-pix-person-cpf");
+  const submitCpf = () => submitPaymentRequest(cpfRequestId, { uid: "supplier-pix-admin" });
+  await assert.rejects(() => submitPaymentRequest(cpfRequestId, { uid: "supplier-pix-unit-a" }), /sem acesso à unidade/);
+  await cpfProfileRef.update({ entityId: "other-entity" });
+  await assert.rejects(submitCpf, /perfil de pagamento precisa estar ativo/);
+  await cpfProfileRef.update({ entityId: "supplier-pix-person-cpf" });
+  await cpfEntityRef.update({ workspaceId: "foreign" });
+  await assert.rejects(submitCpf, /perfil de pagamento precisa estar ativo/);
+  await cpfEntityRef.update({ workspaceId: "coala" });
+  await cpfProfileRef.update({ workspaceId: "foreign" });
+  await assert.rejects(submitCpf, /perfil de pagamento precisa estar ativo/);
+  assert.equal((await requests.doc(cpfRequestId).get()).get("status"), "ready_to_submit");
+  assert.equal((await requests.doc(cpfRequestId).get()).get("submissionAttemptCount"), undefined);
+  await cpfProfileRef.update({ workspaceId: "coala" });
+
+  const wrongEntity = expenses.doc("supplier-pix-person-unlinked");
+  await wrongEntity.set({ ...(await expenses.doc("supplier-pix-person-expense-cpf").get()).data(), supplierId: "another-entity", paymentRequestId: null });
+  assert.equal((await post(`/api/financial/expenses/${wrongEntity.id}/supplier-pix`, token,
+    { supplierEntityId: "supplier-pix-person-cpf", amountCents: 50000 })).status, 409);
+  await wrongEntity.update({ supplierId: "supplier-pix-person-cpf", billingIdentity: { supplierTaxId: "11111111111" } });
+  assert.equal((await post(`/api/financial/expenses/${wrongEntity.id}/supplier-pix`, token,
+    { supplierEntityId: "supplier-pix-person-cpf", amountCents: 50000 })).status, 409);
 
   const octoberEntity = "supplier-pix-missing-document";
   const octoberDocument = "11444777000161";
@@ -169,9 +476,46 @@ test("API E2E: prepara Pix por despesa e bloqueia envio divergente antes do banc
     supplierEntityId: octoberEntity, amountCents: 53664,
     confirmation: { beneficiaryDocument: octoberDocument, competenceMonth, previousPaidRequestId: paidRequest, allowExistingBoleto: false },
   });
+  assert.equal((await post(`/api/financial/expenses/${octoberForecast}/supplier-pix`, scopedToken, {
+    supplierEntityId: octoberEntity, amountCents: 53664,
+    confirmation: { beneficiaryDocument: octoberDocument, competenceMonth: "2026-10",
+      previousPaidRequestId: paidRequest, allowExistingBoleto: false },
+  })).status, 403);
+  assert.equal((await expenses.doc(octoberActual).get()).exists, false);
   assert.equal((await confirmOctober("2026-11")).status, 409);
   assert.equal((await expenses.doc(octoberActual).get()).exists, false);
   assert.equal((await db.collection("entities").doc(octoberEntity).get()).get("document"), "");
+  assert.equal((await confirmOctober("2026-10")).status, 409,
+    "a confirmação não completa CNPJ ou perfil ausente");
+  assert.equal((await db.collection("entities").doc(octoberEntity).get()).get("document"), "");
+  assert.equal((await financial.collection("supplierPaymentProfiles").doc(octoberEntity).get()).exists, false);
+  await db.collection("entities").doc(octoberEntity).update({ document: octoberDocument, documentNormalized: octoberDocument });
+  assert.equal((await confirmOctober("2026-10")).status, 409,
+    "perfil Pix deve ser configurado e validado em ação própria");
+  const octoberProfile = financial.collection("supplierPaymentProfiles").doc(octoberEntity);
+  await octoberProfile.set({ entityId: octoberEntity, workspaceId: "coala", active: true, paymentMethod: "pix_key",
+    pixKeyType: "cnpj", holderDocument: octoberDocument,
+    encryptedPaymentData: encryptPaymentDestination({ pixKey: octoberDocument }, encryptionKey),
+    validatedAt: now, updatedAt: now });
+
+  const raceForecastId = "supplier-pix-forecast-unit-race";
+  const raceForecastActualId = `supplier_pix_actual_${raceForecastId}`;
+  await expenses.doc(raceForecastId).set({ ...(await expenses.doc(octoberForecast).get()).data(),
+    unitId: "unit-a", provisionSeriesKey: "recurring:prestador:race", paymentRequestId: null });
+  const entityBeforeRace = (await db.collection("entities").doc(octoberEntity).get()).data();
+  const profileBeforeRace = (await octoberProfile.get()).data();
+  const { confirmSupplierPixSource } = await import("../../src/features/financial/payment-requests/supplier-pix-confirmation.server");
+  await assert.rejects(() => confirmSupplierPixSource(raceForecastId, octoberEntity, 53664, "coala",
+    { uid: "supplier-pix-unit-a" },
+    { beneficiaryDocument: octoberDocument, competenceMonth: "2026-10",
+      previousPaidRequestId: paidRequest, allowExistingBoleto: false },
+    (current) => { if (current?.unitId !== "unit-a") throw new Error("Operador sem acesso à unidade"); },
+    async () => { await expenses.doc(raceForecastId).update({ unitId: "unit-b" }); }), /sem acesso à unidade/);
+  assert.deepEqual((await db.collection("entities").doc(octoberEntity).get()).data(), entityBeforeRace);
+  assert.deepEqual((await octoberProfile.get()).data(), profileBeforeRace);
+  assert.equal((await expenses.doc(raceForecastActualId).get()).exists, false);
+  assert.equal((await requests.where("expenseId", "==", raceForecastActualId).get()).size, 0);
+
   const confirmedOctober = await confirmOctober("2026-10");
   const octoberResponse = await confirmedOctober.json();
   assert.equal(confirmedOctober.status, 200, JSON.stringify(octoberResponse));
@@ -203,12 +547,6 @@ test("API E2E: prepara Pix por despesa e bloqueia envio divergente antes do banc
   const mismatched = { ...withBoleto, boletoAttachment: { ...withBoleto.boletoAttachment, amountCents: 53665 } };
   assert.throws(() => assertExpenseSupplierPixTarget(mismatched, "coala", octoberEntity, octoberDocument, 53664, pin), /arquivo do boleto/);
 
-  const originalEncryptionKey = process.env.PAYMENT_DATA_ENCRYPTION_KEY;
-  process.env.PAYMENT_DATA_ENCRYPTION_KEY = encryptionKey;
-  context.after(() => {
-    if (originalEncryptionKey === undefined) delete process.env.PAYMENT_DATA_ENCRYPTION_KEY;
-    else process.env.PAYMENT_DATA_ENCRYPTION_KEY = originalEncryptionKey;
-  });
   const { prepareExpenseSupplierPix } = await import("../../src/features/financial/payment-requests/expense-supplier-pix.server");
   const octoberRequest = requests.doc(octoberResponse.request.id);
   await octoberRequest.update({ status: "approval_expired", interRequestId: "test-expired-pix", bankStatus: "EXPIRADO" });

@@ -8,7 +8,7 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
 import { financialExpenseCompetenceMonth, financialCompetenceMonthSchema } from "../../src/features/financial/lib/expense-accounting-contract";
-import { CnpjValidator } from "../../src/lib/company/cnpj-validator";
+import { validBrazilianTaxId, normalizeBrazilianDocument } from "../../src/features/financial/beneficiaries/normalization";
 import { firebaseClientConfig } from "../../src/lib/firebase-client-config";
 import { interOverdueMinimumCents } from "../../src/features/financial/payment-requests/inter-overdue-quote";
 import { validateOverdueSettlementCliRevision, validatePaymentCliAction, validatePaymentCliCancellation, validatePaymentCliPixAction, validatePaymentCliPixPreparation, validatePaymentCliPreparation } from "./payment-cli-contract";
@@ -95,8 +95,8 @@ function help() {
   npx tsx scripts/financial/coala-authenticated-payment.mts purchase-document-attach --email EMAIL --id ORDER_ID --receipt-id RECEIPT_ID --role danfe|boletos --file PDF --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts expense-boleto-attach --email EMAIL --expense-id EXPENSE_ID --installment-number N --file PDF --amount-cents CENTAVOS --due-date AAAA-MM-DD --competence-month AAAA-MM --beneficiary-document CNPJ --document-reference REFERENCIA --barcode CODIGO --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts expense-boleto-prepare --email EMAIL --expense-id EXPENSE_ID --installment-number N --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --barcode CODIGO --confirm-financial-actions
-  npx tsx scripts/financial/coala-authenticated-payment.mts supplier-pix-prepare|supplier-pix-authorize|supplier-pix-send --email EMAIL --expense-id ID --supplier-entity-id ID --beneficiary-document CNPJ --competence-month AAAA-MM --amount-cents CENTAVOS --confirm-financial-actions
-  supplier-pix-prepare aceita --previous-paid-request-id ID e --preserve-boleto para confirmar a origem da cobrança.
+  npx tsx scripts/financial/coala-authenticated-payment.mts supplier-pix-prepare|supplier-pix-authorize|supplier-pix-send --email EMAIL --expense-id ID --supplier-entity-id ID --beneficiary-document CPF_OU_CNPJ --competence-month AAAA-MM --amount-cents CENTAVOS --confirm-financial-actions
+  supplier-pix-prepare aceita --previous-paid-request-id ID e --preserve-boleto somente para confirmar cobrança histórica de PJ por CNPJ.
   npx tsx scripts/financial/coala-authenticated-payment.mts requests --email EMAIL --amount-cents CENTAVOS
   npx tsx scripts/financial/coala-authenticated-payment.mts status --email EMAIL --id REQUEST_ID
   npx tsx scripts/financial/coala-authenticated-payment.mts refresh --email EMAIL --id REQUEST_ID
@@ -447,24 +447,26 @@ async function mainLookupDocs(token: string, kind: string, value: string) {
 
 async function createSupplier(token: string, input: ReturnType<typeof supplierEntitySchema.parse>) {
   const existing = await mainLookupDocs(token, "entity-document", input.document);
-  if (existing.length) throw new PaymentCliError("Já existe fornecedor com esse CNPJ. Use o cadastro encontrado; nenhuma criação foi feita.");
-  const formattedDocument = `${input.document.slice(0, 2)}.${input.document.slice(2, 5)}.${input.document.slice(5, 8)}/${input.document.slice(8, 12)}-${input.document.slice(12)}`;
-  const formattedZip = `${input.address.zipCode.slice(0, 5)}-${input.address.zipCode.slice(5)}`;
+  if (existing.length) throw new PaymentCliError("Já existe cadastro com esse CPF/CNPJ. Use o cadastro encontrado; nenhuma criação foi feita.");
+  const formattedDocument = input.type === "pessoa_fisica"
+    ? `${input.document.slice(0, 3)}.${input.document.slice(3, 6)}.${input.document.slice(6, 9)}-${input.document.slice(9)}`
+    : `${input.document.slice(0, 2)}.${input.document.slice(2, 5)}.${input.document.slice(5, 8)}/${input.document.slice(8, 12)}-${input.document.slice(12)}`;
+  const address = input.address
+    ? { ...input.address, zipCode: `${input.address.zipCode.slice(0, 5)}-${input.address.zipCode.slice(5)}` }
+    : undefined;
   const result = await coalaPurchaseWrite(token, "/api/registry/entities", "POST", {
     ...input,
     document: formattedDocument,
-    cnpj: input.document,
-    razao_social: input.name,
-    nome_fantasia: input.fantasyName,
-    address: { ...input.address, zipCode: formattedZip },
+    ...(input.type === "pessoa_juridica" ? { cnpj: input.document, razao_social: input.name, nome_fantasia: input.fantasyName } : {}),
+    ...(address ? { address } : {}),
     status: "active",
   });
   const id = typeof result.id === "string" ? purchaseId(result.id, "fornecedor") : "";
-  if (!id) throw new PaymentCliError("O cadastro não retornou o fornecedor esperado. Consulte pelo CNPJ antes de tentar novamente.");
+  if (!id) throw new PaymentCliError("O cadastro não retornou o fornecedor esperado. Consulte pelo CPF/CNPJ antes de tentar novamente.");
   const stored = await coalaPurchaseGet(token, `/api/registry/entities/${encodeURIComponent(id)}`);
   const storedDocument = String(stored.documentNormalized ?? stored.cnpj ?? stored.document ?? "").replace(/\D/g, "");
-  if (storedDocument !== input.document || stored.name !== input.name) {
-    throw new PaymentCliError("O Coala não confirmou o mesmo fornecedor após o cadastro. Consulte pelo CNPJ; não repita automaticamente.");
+  if (storedDocument !== input.document || stored.name !== input.name || stored.type !== input.type) {
+    throw new PaymentCliError("O Coala não confirmou o mesmo fornecedor após o cadastro. Consulte pelo CPF/CNPJ; não repita automaticamente.");
   }
   return { id, name: stored.name, fantasyName: stored.fantasyName, document: formattedDocument };
 }
@@ -707,11 +709,11 @@ async function main() {
     const idPattern = /^[a-zA-Z0-9_-]{1,150}$/;
     const amountCents = Number(requireOption("amount-cents"));
     const competenceMonth = requireOption("competence-month");
-    const beneficiary = CnpjValidator.validate(requireOption("beneficiary-document"));
+    const beneficiaryDocument = normalizeBrazilianDocument(requireOption("beneficiary-document"));
     if (![expenseId, supplierEntityId].every((id) => idPattern.test(id))
       || !Number.isSafeInteger(amountCents) || amountCents <= 0 || amountCents > 100_000_000
-      || !financialCompetenceMonthSchema.safeParse(competenceMonth).success || !beneficiary.valid) {
-      throw new PaymentCliError("ID, valor, CNPJ ou competência inválidos.");
+      || !financialCompetenceMonthSchema.safeParse(competenceMonth).success || !validBrazilianTaxId(beneficiaryDocument)) {
+      throw new PaymentCliError("ID, valor, CPF/CNPJ ou competência inválidos.");
     }
     const token = await commandToken(email);
     const expense = (await coalaRead(token, paymentReadPath({ command: "document", collection: "expenses", id: expenseId }))).doc as Record<string, unknown> | undefined;
@@ -719,10 +721,11 @@ async function main() {
     const document = String(billingIdentity?.supplierTaxId ?? "").replace(/\D/g, "");
     const previousPaidRequestId = option("previous-paid-request-id");
     const confirmation = command === "supplier-pix-prepare" && previousPaidRequestId && idPattern.test(previousPaidRequestId)
-      ? { beneficiaryDocument: beneficiary.clean, competenceMonth, previousPaidRequestId,
+      ? { beneficiaryDocument, competenceMonth, previousPaidRequestId,
           allowExistingBoleto: process.argv.includes("--preserve-boleto") }
       : undefined;
-    if ((previousPaidRequestId && !confirmation) || (process.argv.includes("--preserve-boleto") && !confirmation)) {
+    if ((previousPaidRequestId && !confirmation) || (process.argv.includes("--preserve-boleto") && !confirmation)
+      || (confirmation && beneficiaryDocument.length !== 14)) {
       throw new PaymentCliError("A confirmação só é aceita no preparo e exige um ID válido de pagamento conciliado.");
     }
     const legacyForecast = confirmation && !expense?.workspaceId && expense?.provisionType === "forecast"
@@ -733,8 +736,11 @@ async function main() {
       || (!confirmedForecast && expense.status !== "pending")
       || financialExpenseCompetenceMonth(expense) !== competenceMonth
       || Math.round(Number(expense.totalValue) * 100) !== amountCents
-      || (!confirmation ? document !== beneficiary.clean : Boolean(document && document !== beneficiary.clean))) {
-      throw new PaymentCliError("A despesa, o valor, a competência ou o CNPJ divergem. Nenhuma ação foi realizada.");
+      || (beneficiaryDocument.length === 11 && expense.supplierId !== supplierEntityId)
+      || (beneficiaryDocument.length === 11 && (expense.provisionType === "forecast" || !expense.unitId || !expense.dueDate
+        || !(expense.accountPlan || expense.accountId) || !(expense.referenceResultCenterId || expense.resultCenterId)))
+      || (!confirmation ? document !== beneficiaryDocument : Boolean(document && document !== beneficiaryDocument))) {
+      throw new PaymentCliError("A despesa, o valor, a competência, o vínculo ou o CPF/CNPJ divergem. Nenhuma ação foi realizada.");
     }
     const replacementOf = option("replacement-of");
     if (replacementOf && (!idPattern.test(replacementOf) || confirmation)) {
@@ -767,7 +773,8 @@ async function main() {
       || (request.supersedesPaymentRequestId ?? undefined) !== replacementOf
       || request.sourceId !== expenseId || request.expenseId !== expenseId || expense.paymentRequestId !== id
       || Math.round(Number(request.amount) * 100) !== amountCents || snapshot?.sourceId !== supplierEntityId
-      || snapshot.documentHash !== createHash("sha256").update(beneficiary.clean).digest("hex")
+      || snapshot.documentHash !== createHash("sha256").update(beneficiaryDocument).digest("hex")
+      || (typeof snapshot.destinationHash !== "string" && snapshot.pixKeyType !== "cnpj")
       || request.submissionStartedAt || request.interRequestId || Number(request.submissionAttemptCount ?? 0) !== 0) {
       throw new PaymentCliError("A solicitação diverge, já foi enviada ou está em outra etapa. Nenhuma ação foi realizada.");
     }

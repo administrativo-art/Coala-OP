@@ -7,13 +7,14 @@ import type { SubjectRef } from "@/features/privacy/person-subject";
 
 export const personNamespaceLabels: Record<SubjectRef["namespace"], string> = {
   "main.users": "Conta do sistema",
+  "main.entities": "Pessoa física cadastrada",
   "hr.employees": "Cadastro RH",
   "hr.candidates": "Candidatura",
   "hr.onboardingPersons": "Pessoa em admissão",
 };
 
-export function PersonReferenceFields({ prefix, namespace, id, onChange, optional = false }: {
-  prefix: string; namespace: string; id: string; optional?: boolean;
+export function PersonReferenceFields({ prefix, namespace, id, onChange, optional = false, allowEntities = false }: {
+  prefix: string; namespace: string; id: string; optional?: boolean; allowEntities?: boolean;
   onChange: (namespace: string, id: string) => void;
 }) {
   return (
@@ -23,7 +24,7 @@ export function PersonReferenceFields({ prefix, namespace, id, onChange, optiona
           <SelectTrigger id={`${prefix}-namespace`} className={fieldInputClass}><SelectValue /></SelectTrigger>
           <SelectContent>
             {optional ? <SelectItem value="unlinked">Sem vínculo com cadastro</SelectItem> : null}
-            {Object.entries(personNamespaceLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+            {Object.entries(personNamespaceLabels).filter(([value]) => allowEntities || value !== "main.entities").map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
           </SelectContent>
         </Select>
       </Field>

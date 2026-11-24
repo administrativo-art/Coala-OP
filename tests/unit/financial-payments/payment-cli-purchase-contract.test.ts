@@ -85,6 +85,21 @@ test("manifesto do fornecedor normaliza CNPJ e CEP sem aceitar campos extras", (
     notes: "NF-e 22930",
   });
   assert.equal(supplier.document, "02911413000153");
-  assert.equal(supplier.address.zipCode, "75465086");
+  assert.equal(supplier.address?.zipCode, "75465086");
   assert.equal(supplierEntitySchema.safeParse({ ...supplier, token: "segredo" }).success, false);
+});
+
+test("manifesto de prestador pessoa física exige CPF válido e tipo compatível", () => {
+  const base = {
+    type: "pessoa_fisica" as const, name: "Prestador de teste", document: "529.982.247-25",
+  };
+  assert.equal(supplierEntitySchema.parse(base).document, "52998224725");
+  const withAddress = supplierEntitySchema.parse({
+    ...base, address: { street: "Rua Teste", number: "1", neighborhood: "Centro", city: "Belém", state: "PA", zipCode: "66000-000" },
+  });
+  assert.equal(withAddress.address?.zipCode, "66000000");
+  assert.equal(supplierEntitySchema.safeParse({ ...base, address: { street: "Rua Teste" } }).success, false);
+  assert.equal(supplierEntitySchema.safeParse({ ...base, document: "11111111111" }).success, false);
+  assert.equal(supplierEntitySchema.safeParse({ ...base, type: "pessoa_juridica" }).success, false);
+  assert.equal(supplierEntitySchema.safeParse({ ...base, type: "pessoa_juridica", document: "02.911.413/0001-53", fantasyName: "Fornecedor" }).success, false);
 });
