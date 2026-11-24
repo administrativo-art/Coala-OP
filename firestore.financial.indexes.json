@@ -1,5 +1,7 @@
 {
   "indexes": [
+    {"collectionGroup":"financialBudgetProjects","queryScope":"COLLECTION","fields":[{"fieldPath":"active","order":"ASCENDING"},{"fieldPath":"cashPlanningEnabled","order":"ASCENDING"},{"fieldPath":"cashPlanStartDate","order":"ASCENDING"}]},
+    {"collectionGroup":"items","queryScope":"COLLECTION_GROUP","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"closureId","order":"ASCENDING"}]},
     {"collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "employeeId", "order": "ASCENDING"}, {"fieldPath": "provisionCompetence", "order": "ASCENDING"}, {"fieldPath": "payrollEarningType", "order": "ASCENDING"}]},
     {"collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "fiscalIdentity.taxpayerTaxId", "order": "ASCENDING"}, {"fieldPath": "competenceMonth", "order": "ASCENDING"}]},
     {"collectionGroup": "financialInboxMessages", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "linkedExpenseId", "order": "ASCENDING"}]},

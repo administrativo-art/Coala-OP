@@ -1,5 +1,10 @@
 {
   "indexes": [
+    {"collectionGroup":"repP_events","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"establishmentId","order":"ASCENDING"},{"fieldPath":"recordedDate","order":"ASCENDING"},{"fieldPath":"nsr","order":"ASCENDING"}]},
+    {"collectionGroup":"repP_receipts","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"employeeId","order":"ASCENDING"},{"fieldPath":"recordedDate","order":"ASCENDING"}]},
+    {"collectionGroup":"repP_receipts","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"establishmentId","order":"ASCENDING"},{"fieldPath":"recordedDate","order":"ASCENDING"}]},
+    {"collectionGroup":"repP_receipts","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"createdAt","order":"ASCENDING"}]},
+    {"collectionGroup":"repP_receipts","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"nextAttemptAt","order":"ASCENDING"}]},
     {"collectionGroup": "providerClosureReleases", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "competence", "order": "ASCENDING"}, {"fieldPath": "employeeUid", "order": "ASCENDING"}]},
     {"collectionGroup":"providerClosureAccess","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"grantId","order":"ASCENDING"}]},
     {"collectionGroup":"ptrp_dayCorrections","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"employeeUid","order":"ASCENDING"},{"fieldPath":"competence","order":"ASCENDING"}]},
@@ -398,6 +403,7 @@
     ] }
   ],
   "fieldOverrides": [
+    {"collectionGroup":"repP_locationEvidence","fieldPath":"expiresAt","ttl":true,"indexes":[]},
     { "collectionGroup": "dp_journeyLocationEvents", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
     { "collectionGroup": "dp_journeyLocationSessions", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
     { "collectionGroup": "dp_journeyLocationLeases", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
