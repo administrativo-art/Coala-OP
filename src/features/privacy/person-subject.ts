@@ -1,19 +1,20 @@
 import { onboardingOrigin, provenPlaceholder, readOnboardingPerson, record } from "./onboarding-person";
 /** A person identifier is meaningful only together with its source namespace. */
-export type SubjectRef = { namespace: "main.users" | "main.entities" | "hr.employees" | "hr.candidates" | "hr.onboardingPersons"; id: string };
+export type SubjectRef = { namespace: "main.users" | "main.entities" | "main.providerMembers" | "hr.employees" | "hr.candidates" | "hr.onboardingPersons"; id: string };
 export type PersonResolution = { refs: SubjectRef[]; conflicts: string[]; gaps?: string[] };
 
 /** Invalid legacy values remain unlinked; display text never becomes an identity. */
 export function readSubjectRef(value: unknown): SubjectRef | null {
   if (!value || typeof value !== "object") return null;
   const { namespace, id } = value as Record<string, unknown>;
-  if (namespace !== "main.users" && namespace !== "main.entities" && namespace !== "hr.employees" && namespace !== "hr.candidates" && namespace !== "hr.onboardingPersons") return null;
+  if (namespace !== "main.users" && namespace !== "main.entities" && namespace !== "main.providerMembers" && namespace !== "hr.employees" && namespace !== "hr.candidates" && namespace !== "hr.onboardingPersons") return null;
   if (typeof id !== "string" || !id || id.length > 180 || id.trim() !== id || id.includes("/")) return null;
   return { namespace, id };
 }
 
 export type PersonProcess = Record<string, unknown> & { id: string; candidateId?: string | null; collaboratorUserId?: string | null };
 export interface PersonLookup {
+  providerMember?(id: string): Promise<{ id: string } | null>;
   entity?(id: string): Promise<{ id: string; type?: string; workspaceId?: string } | null>;
   onboardingPerson?(id: string): Promise<{ id: string; processId: string; process: PersonProcess } | null>;
   processById?(id: string): Promise<PersonProcess | null>;
@@ -27,7 +28,7 @@ export interface PersonLookup {
 }
 
 export function subjectKey(ref: SubjectRef): string {
-  if (ref.namespace !== "main.users" && ref.namespace !== "main.entities" && ref.namespace !== "hr.employees" && ref.namespace !== "hr.candidates" && ref.namespace !== "hr.onboardingPersons") throw new Error("Namespace pessoal inválido.");
+  if (ref.namespace !== "main.users" && ref.namespace !== "main.entities" && ref.namespace !== "main.providerMembers" && ref.namespace !== "hr.employees" && ref.namespace !== "hr.candidates" && ref.namespace !== "hr.onboardingPersons") throw new Error("Namespace pessoal inválido.");
   if (!ref.id.trim() || ref.id !== ref.id.trim() || ref.id.includes("/")) throw new Error("Identificador pessoal inválido.");
   return `${ref.namespace}:${ref.id}`;
 }
@@ -38,6 +39,7 @@ export async function resolveStrictPersonRefs(ref: SubjectRef, lookup: PersonLoo
   const refs: SubjectRef[] = [ref];
   const conflicts: string[] = [];
   const gaps: string[] = [];
+  if (ref.namespace === "main.providerMembers") return { refs, conflicts: await lookup.providerMember?.(ref.id) ? [] : ["provider_member_missing"] };
   if (ref.namespace === "main.entities") {
     const entity = await lookup.entity?.(ref.id);
     return { refs, conflicts: entity?.type === "pessoa_fisica" ? [] : ["entity_person_missing"] };

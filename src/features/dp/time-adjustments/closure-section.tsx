@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { User as FirebaseUser } from "firebase/auth";
 
 import { cn } from "@/lib/utils";
@@ -13,6 +13,8 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
 
 import type { PayrollReadiness } from "../time-bank/payroll-readiness";
+import { PayrollFinancePanel } from "./payroll-finance-panel";
+import { CLOSING_PHASES, type ClosingPhase } from "./closing-progress";
 import type { ClosurePerson } from "./closure-core";
 import { rosterReasons } from "./closure-roster";
 import { ClosureAlertsPanel } from "./closure-alerts-panel";
@@ -30,8 +32,9 @@ type ClosureView = {
   reopenings: Array<{ at: string; by: string; reason: string; fromVersion: number }>;
 };
 type ClosingSummary = {
+  canReadFinance?: boolean; canWriteFinance?: boolean;
   counts: { total: number; closed: number; pending: number; overdue: number };
-  people: Array<{ uid: string; name: string | null; status: "closed" | "pending"; packageStatus: string; sentAt: string | null; closedAt: string | null; overdue: boolean }>;
+  people: Array<{ uid: string; name: string | null; phase?: ClosingPhase; status: "closed" | "pending"; packageStatus: string; sentAt: string | null; closedAt: string | null; overdue: boolean }>;
   overdue: Array<{ uid: string; name: string | null; status: string; sentAt: string | null }>;
   finalization: { at: string; by: string; people?: number; signed?: number } | null;
 };
@@ -59,6 +62,7 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
   const [detailOpen, setDetailOpen] = useState(false);
   const organizationOf = useOrganizationOf(people);
   const [sidebarQuery, setSidebarQuery] = useState("");
+  const [progressFilter, setProgressFilter] = useState<ClosingPhase | "">("");
   const [orgName, setOrgName] = useState<string | null>(null);
   const [data, setData] = useState<ClosurePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +75,9 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
   const [confirmBulk, setConfirmBulk] = useState(false);
   const [packagesKey, setPackagesKey] = useState(0);
   const [summary, setSummary] = useState<ClosingSummary | null>(null);
+  const summaryRequest = useRef(0);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const [confirmFinalize, setConfirmFinalize] = useState(false);
   const directoryTeam = people.filter((person) => belongsToTimeClosureRoster(person.employmentRelationshipType));
   const team = detailOpen ? (data?.people ?? []).map((person) => ({ id: person.uid, username: person.name ?? undefined })) : directoryTeam;
@@ -137,9 +144,14 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
   }
 
   const loadSummary = useCallback(async () => {
-    if (!closedVersion) { setSummary(null); return; }
-    try { setSummary(await request<ClosingSummary>(`/api/dp/time-recording/closing-packages?competence=${competence}`, { fallbackError: "Não foi possível ler os pacotes." })); }
-    catch { setSummary(null); }
+    const generation = ++summaryRequest.current;
+    setSummary(null); setSummaryError(null); setSummaryLoading(Boolean(closedVersion));
+    if (!closedVersion) return;
+    try {
+      const result = await request<ClosingSummary>(`/api/dp/time-recording/closing-progress?competence=${competence}`, { fallbackError: "Não foi possível ler os pacotes." });
+      if (generation === summaryRequest.current) setSummary(result);
+    } catch (cause) { if (generation === summaryRequest.current) setSummaryError(errorMessageOf(cause, "Não foi possível consultar o acompanhamento.")); }
+    finally { if (generation === summaryRequest.current) setSummaryLoading(false); }
   }, [closedVersion, competence, request]);
   useEffect(() => { void loadSummary(); }, [loadSummary, packagesKey]);
 
@@ -341,22 +353,28 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
             : <Button variant="primary-page" size="sm" disabled={busy || summary.counts.total === 0 || summary.counts.pending > 0}
                 onClick={() => setConfirmFinalize(true)}>Concluir fechamento geral</Button>) : null}
           {data.can.close ? (confirmBulk
-            ? <InlineConfirm message={`Enviar os pacotes de ${orgTeam.length} pessoas? Quem ainda não tem contracheque ou e-mail fica de fora e aparece na lista.`} confirmLabel="Enviar todos os prontos"
+            ? <InlineConfirm message={`Enviar os pacotes de ${orgTeam.length} pessoas? Quem ainda não tem contracheque, conferência compatível ou e-mail fica de fora e aparece na lista.`} confirmLabel="Enviar todos os prontos"
                 loadingLabel="Enviando…" loading={bulk?.running ?? false} onConfirm={() => void sendAll()} onCancel={() => setConfirmBulk(false)} />
             : <Button variant="ds-secondary" size="sm" disabled={bulk?.running} onClick={() => setConfirmBulk(true)}>Enviar todos os prontos</Button>) : null}
           {bulk ? <p role="status" className="text-xs text-ds-ink-muted">{bulk.running ? "Enviando…" : "Concluído."} {bulk.sent} enviados ou já em assinatura.{bulk.skipped.length ? ` Ficaram de fora: ${bulk.skipped.join("; ")}.` : ""}</p> : null}
-          {orgTeam.map((person) => {
+          {summaryError ? <p role="alert" className="text-sm text-ds-danger">{summaryError}</p> : null}
+          <Button size="sm" variant="ds-secondary" disabled={summaryLoading} onClick={() => void loadSummary()}>{summaryLoading ? "Consultando acompanhamento…" : "Atualizar acompanhamento"}</Button>
+          <label className="block text-sm">Situação do fechamento<select aria-label="Situação do fechamento" className="ml-2 h-10 max-w-full rounded-md border border-ds-border bg-ds-surface px-3" value={progressFilter} onChange={(event) => setProgressFilter(event.target.value as ClosingPhase | "")}><option value="">Todas as situações</option>{Object.entries(CLOSING_PHASES).map(([key,label]) => <option key={key} value={key}>{label} · {orgTeam.filter((person) => individualByUid.get(person.id)?.phase === key).length}</option>)}</select></label>
+          <p className="text-xs text-ds-ink-muted">O acompanhamento consulta os registros disponíveis. Ao enviar, o sistema revalida o documento, a conferência e as fontes do fechamento.</p>
+          {progressFilter && !orgTeam.some((person) => individualByUid.get(person.id)?.phase === progressFilter) ? <p className="text-sm text-ds-ink-muted">Nenhum colaborador nesta situação.</p> : null}
+          {orgTeam.filter((person) => !progressFilter || individualByUid.get(person.id)?.phase === progressFilter).map((person) => {
             const individual = individualByUid.get(person.id);
             return <LiftRow key={`${person.id}-${packagesKey}`} table onClick={() => setSelected(data.people.find((item) => item.uid === person.id) ?? { uid: person.id, name: person.username ?? null, adjustments: [], absences: [], shiftSwaps: [] })}
               className="flex items-center justify-between gap-3">
               <span className="truncate text-sm font-bold text-ds-ink">{person.username ?? "Sem nome"}</span>
-              {individual?.status === "closed" ? <StatusPill variant="ok">Individual fechado</StatusPill>
-                : individual?.overdue ? <StatusPill variant="danger">Individual atrasado</StatusPill>
-                  : <StatusPill variant="warn">Individual pendente</StatusPill>}
+              <StatusPill variant={individual?.phase === "signed" ? "ok" : individual?.phase && ["divergent", "stale", "refused", "send_failed", "overdue"].includes(individual.phase) ? "danger" : "warn"}>{individual?.phase ? CLOSING_PHASES[individual.phase] : summaryError ? "Situação indisponível" : "Consultando situação"}</StatusPill>
             </LiftRow>;
           })}
         </div> : null}
         </TrailStep>
+        {summary?.canReadFinance ? <TrailStep number={4} title="Conciliação financeira da folha" state={closed ? "active" : "locked"} summary="Conferir recibos e guias com os títulos existentes">
+          {closed ? <PayrollFinancePanel key={`${competence}/${activeOrg}`} firebaseUser={firebaseUser} competence={competence} people={orgTeam} /> : null}
+        </TrailStep> : null}
       </> : null}
       {detailOpen && selected ? (() => {
         const person = data?.people.find((item) => item.uid === selected.uid) ?? selected;

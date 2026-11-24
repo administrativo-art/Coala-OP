@@ -830,12 +830,41 @@ private fun purposeColor(purpose: String?) = when (purpose) {
     }
 }
 
+@Composable private fun DayCorrectionsList(state: TimeState, busy: Boolean, vm: TimeViewModel) {
+    state.dayCorrections.forEach { item ->
+        var response by rememberSaveable(item.id, item.version) { mutableStateOf("") }
+        var adjustmentId by rememberSaveable(item.id, item.version) { mutableStateOf("") }
+        Column(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Conferência de " + java.time.LocalDate.parse(item.workDate).format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")), color = Tokens.ink)
+            Text(item.reason, color = Tokens.ink)
+            Text(when (item.status) {
+                "requested" -> "Aguardando sua resposta"
+                "responded" -> "Aguardando decisão do RH"
+                else -> "Conferência concluída"
+            }, color = Tokens.ink)
+            item.response?.let { Text(it, color = Tokens.ink) }
+            if (item.status == "requested") {
+                Text("Se precisar corrigir horários, envie primeiro o pedido de ajuste e selecione-o abaixo.", color = Tokens.ink)
+                TextButton({ adjustmentId = "" }, enabled = !busy) { Text(if (adjustmentId.isEmpty()) "✓ Somente justificativa" else "Somente justificativa") }
+                state.adjustments.filter { it.workDate == item.workDate && it.scope != "pilot" }.forEach { adjustment ->
+                    TextButton({ adjustmentId = adjustment.id }, enabled = !busy) {
+                        Text((if (adjustmentId == adjustment.id) "✓ " else "") + "Vincular ajuste " + adjustment.status + " · " + adjustment.id.takeLast(8))
+                    }
+                }
+                OutlinedTextField(response, { response = it.take(1000) }, label = { Text("Resposta ao RH") }, enabled = !busy, modifier = Modifier.fillMaxWidth())
+                Button({ vm.respondToDayCorrection(item, response, adjustmentId.ifEmpty { null }) }, enabled = !busy && response.trim().length >= 10) { Text("Enviar resposta") }
+            }
+        }
+    }
+}
+
 @Composable private fun AdjustmentHistoryTab(state: TimeState, busy: Boolean, vm: TimeViewModel, onDay: (String) -> Unit) {
     AuxiliaryMonthPicker(state, busy, vm)
     if (!state.monthDataAvailable) {
         EmptyState("Ajustes ainda não consultados", "Puxe para atualizar quando a consulta estiver disponível.")
         return
     }
+    DayCorrectionsList(state, busy, vm)
     var filter by rememberSaveable { mutableStateOf("all") }
     if (state.adjustments.isEmpty() && !busy) EmptyState("Nenhum ajuste neste mês", "Os pedidos enviados aparecem aqui com a decisão do gestor ou do DP.")
     if (state.adjustments.isNotEmpty()) {

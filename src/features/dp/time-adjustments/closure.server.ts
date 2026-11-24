@@ -1,4 +1,5 @@
 import 'server-only';
+import { assertNoPendingDayCorrections } from './day-corrections.server';
 
 import { randomUUID } from 'node:crypto';
 
@@ -393,6 +394,7 @@ export async function closeCompetence(context: ServerUserContext, input: Closure
     }
     record = await deps.hrDb.runTransaction(async (tx: Transaction) => {
     const [snapshot, classificationPending] = await Promise.all([tx.get(ref), tx.get(classificationPendingQuery)]);
+    await assertNoPendingDayCorrections(deps.hrDb, tx, context.workspace_id, input.competence);
     const current = snapshot.exists ? snapshot.data() as ClosureRecord : null;
     if (current?.status === 'closed') throw fail('PTRP_CLOSURE_ALREADY_CLOSED', 'Esta competência já está fechada.', 'CONFLICT');
     if ((current?.version ?? 0) !== input.expectedVersion) throw fail('PTRP_CLOSURE_VERSION_CONFLICT', 'O fechamento mudou desde a sua leitura. Atualize e confira.', 'CONFLICT');

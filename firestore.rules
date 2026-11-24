@@ -1065,6 +1065,17 @@ service cloud.firestore {
     // Continuations are server-only and contain private scan positions.
     match /privacyPersonCursorStates/{id} { allow read, write: if false; }
 
+    // Diretório e credenciais de prestadores são acessados somente por APIs.
+    match /providerOffices/{id} { allow read, write: if false; }
+    match /providerMembers/{id} { allow read, write: if false; }
+    match /providerPortalGrants/{id} { allow read, write: if false; }
+    match /providerPortalInvitations/{id} { allow read, write: if false; }
+    match /providerPortalSessions/{id} { allow read, write: if false; }
+    match /providerPortalEmailLookups/{id} { allow read, write: if false; }
+    match /providerPortalOperations/{id} { allow read, write: if false; }
+    match /providerPortalAudit/{id} { allow read, write: if false; }
+    match /providerPortalLoginAttempts/{id} { allow read, write: if false; }
+
     // --- CATCH-ALL: bloqueia tudo não mapeado ---
     match /{document=**} {
       allow read, write: if false;

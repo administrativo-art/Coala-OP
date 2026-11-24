@@ -43,3 +43,5 @@ Para uma pergunta ou mudança, siga o [procedimento de investigação](investiga
 Entradas sem tela: [jobs, gatilhos e webhooks](runtime-surfaces.md); [autenticação, privacidade e reparos](access-and-privacy.md). A política incremental de rotas está no [contrato executável de segurança](security-contract.md) e no [inventário de contratos](security-contract-inventory.md). Cada API, página externa e export de Functions tem destino no [inventário](surface-inventory.md). O progresso está em [acompanhamento](system-map-execution.md).
 
 Orçamentos por categoria/projeto, [comparação com despesas](../../src/app/dashboard/financial/budget-comparison/page.tsx) e simulação no caixa: [guia de orçamentos](flows/financial-budgets.md).
+
+Prestadores de serviço e Portal do Contador — [gestão e acesso](service-provider-access.md), [página administrativa](../../src/app/dashboard/dp/prestadores/page.tsx).

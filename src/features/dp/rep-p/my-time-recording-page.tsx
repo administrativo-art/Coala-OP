@@ -1,4 +1,5 @@
 "use client";
+import { DayCorrectionsPanel, DayCorrectionBatch } from "@/features/dp/time-adjustments/day-corrections-panel";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarPlus, ChevronDown, ChevronLeft, ChevronRight, Eye, Info } from "lucide-react";
@@ -391,6 +392,10 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records", embe
           : <p className="text-sm text-ds-ink-muted">Os espelhos deste colaborador exigem a permissão de fechamento do ponto.</p>
       ) : (
         <div className="min-w-0 space-y-3">
+          {embedded && employeeUid ? <DayCorrectionBatch key={employeeUid + month} firebaseUser={firebaseUser} employeeUid={employeeUid}
+            dates={days.filter((day) => day.date < today && day.incidents.some((incident) => INCIDENT_SEVERITY[incident] === "danger")).map((day) => day.date)}
+            onChanged={() => setReloadKey((current) => current + 1)} /> : null}
+          {!readOnly ? <DayCorrectionsPanel firebaseUser={firebaseUser} month={month} adjustments={adjustments} onChanged={() => setReloadKey((current) => current + 1)} /> : null}
           <div className="flex flex-wrap items-center justify-between gap-3">
             {embedded ? <h3 className="text-sm font-black text-ds-ink">{monthLabel(month)}</h3> : (
             <div className="flex flex-wrap items-center gap-2">
@@ -535,7 +540,7 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records", embe
       )}
 
       {embedded ? <ClosureFocusMode open={focus.open} onOpenChange={(open) => setFocus((current) => ({ ...current, open }))} startDate={focus.date}
-        days={days} today={today} adjustments={adjustments} unitNames={unitNames} employeeName={employeeName ?? "Colaborador"} firebaseUser={firebaseUser}
+        days={days} today={today} adjustments={adjustments} unitNames={unitNames} employeeName={employeeName ?? "Colaborador"} employeeUid={employeeUid!} firebaseUser={firebaseUser}
         bank={bank ? { policyName: bank.policy?.name ?? null, lines: bank.statement?.lines ?? [] } : null}
         onChanged={() => setReloadKey((current) => current + 1)} /> : null}
       <DayDetailPanel day={openDate ? days.find((day) => day.date === openDate) ?? (openDate === today ? todayView : null) : null}

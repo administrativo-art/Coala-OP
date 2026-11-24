@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **577 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **588 rotas de API** e **24 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **67 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -24,6 +24,8 @@ Inclui **67 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/login` | [src/app/login/page.tsx](../../src/app/login/page.tsx) | [access-and-privacy](access-and-privacy.md) |
 | `/patrimonio/[code]` | [src/app/patrimonio/[code]/page.tsx](../../src/app/patrimonio/%5Bcode%5D/page.tsx) | [assets](flows/assets.md) |
 | `/player` | [src/app/player/page.tsx](../../src/app/player/page.tsx) | [signage](flows/signage.md) |
+| `/prestadores` | [src/app/prestadores/page.tsx](../../src/app/prestadores/page.tsx) | [access-and-privacy](access-and-privacy.md) |
+| `/prestadores/ativar` | [src/app/prestadores/ativar/page.tsx](../../src/app/prestadores/ativar/page.tsx) | [access-and-privacy](access-and-privacy.md) |
 | `/primeiro-acesso/[token]` | [src/app/primeiro-acesso/[token]/page.tsx](../../src/app/primeiro-acesso/%5Btoken%5D/page.tsx) | [onboarding-activation](flows/onboarding-activation.md) |
 | `/tv/[kioskId]` | [src/app/tv/[kioskId]/page.tsx](../../src/app/tv/%5BkioskId%5D/page.tsx) | [signage](flows/signage.md) |
 | `/vagas` | [src/app/vagas/page.tsx](../../src/app/vagas/page.tsx) | [recruitment](flows/recruitment.md) |
@@ -171,6 +173,8 @@ Inclui **67 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/dp/schedules/[scheduleId]/shifts/bulk` | POST | [src/app/api/dp/schedules/[scheduleId]/shifts/bulk/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/shifts/bulk/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/schedules/[scheduleId]/vacations` | GET | [src/app/api/dp/schedules/[scheduleId]/vacations/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/vacations/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/schedules/manual-journey` | POST | [src/app/api/dp/schedules/manual-journey/route.ts](../../src/app/api/dp/schedules/manual-journey/route.ts) | [dp-schedules](flows/dp-schedules.md) |
+| `/api/dp/service-providers` | GET, POST | [src/app/api/dp/service-providers/route.ts](../../src/app/api/dp/service-providers/route.ts) | [access-and-privacy](access-and-privacy.md) |
+| `/api/dp/service-providers/closures` | GET, POST | [src/app/api/dp/service-providers/closures/route.ts](../../src/app/api/dp/service-providers/closures/route.ts) | [service-provider-access](service-provider-access.md) |
 | `/api/dp/time-recording/adjustments` | GET, POST | [src/app/api/dp/time-recording/adjustments/route.ts](../../src/app/api/dp/time-recording/adjustments/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/adjustments/[adjustmentId]` | PATCH | [src/app/api/dp/time-recording/adjustments/[adjustmentId]/route.ts](../../src/app/api/dp/time-recording/adjustments/%5BadjustmentId%5D/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/adjustments/[adjustmentId]/day` | GET | [src/app/api/dp/time-recording/adjustments/[adjustmentId]/day/route.ts](../../src/app/api/dp/time-recording/adjustments/%5BadjustmentId%5D/day/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
@@ -179,8 +183,10 @@ Inclui **67 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/dp/time-recording/afd` | POST | [src/app/api/dp/time-recording/afd/route.ts](../../src/app/api/dp/time-recording/afd/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/availability` | GET | [src/app/api/dp/time-recording/availability/route.ts](../../src/app/api/dp/time-recording/availability/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/closing-packages` | GET, POST | [src/app/api/dp/time-recording/closing-packages/route.ts](../../src/app/api/dp/time-recording/closing-packages/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/dp/time-recording/closing-progress` | GET | [src/app/api/dp/time-recording/closing-progress/route.ts](../../src/app/api/dp/time-recording/closing-progress/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/closures` | GET, POST | [src/app/api/dp/time-recording/closures/route.ts](../../src/app/api/dp/time-recording/closures/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/closures/[competence]` | PATCH | [src/app/api/dp/time-recording/closures/[competence]/route.ts](../../src/app/api/dp/time-recording/closures/%5Bcompetence%5D/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/dp/time-recording/day-corrections` | GET, POST | [src/app/api/dp/time-recording/day-corrections/route.ts](../../src/app/api/dp/time-recording/day-corrections/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/employees/[employeeUid]` | POST | [src/app/api/dp/time-recording/employees/[employeeUid]/route.ts](../../src/app/api/dp/time-recording/employees/%5BemployeeUid%5D/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/fiscal-options` | GET | [src/app/api/dp/time-recording/fiscal-options/route.ts](../../src/app/api/dp/time-recording/fiscal-options/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/journey-location` | POST | [src/app/api/dp/time-recording/journey-location/route.ts](../../src/app/api/dp/time-recording/journey-location/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
@@ -195,6 +201,8 @@ Inclui **67 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/dp/time-recording/offline-cycles` | POST | [src/app/api/dp/time-recording/offline-cycles/route.ts](../../src/app/api/dp/time-recording/offline-cycles/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/offline-permits` | POST | [src/app/api/dp/time-recording/offline-permits/route.ts](../../src/app/api/dp/time-recording/offline-permits/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/options` | GET | [src/app/api/dp/time-recording/options/route.ts](../../src/app/api/dp/time-recording/options/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/dp/time-recording/payroll-finance` | GET, POST | [src/app/api/dp/time-recording/payroll-finance/route.ts](../../src/app/api/dp/time-recording/payroll-finance/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/dp/time-recording/payslip-reconciliation` | GET, POST | [src/app/api/dp/time-recording/payslip-reconciliation/route.ts](../../src/app/api/dp/time-recording/payslip-reconciliation/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/pending-receipts` | GET | [src/app/api/dp/time-recording/pending-receipts/route.ts](../../src/app/api/dp/time-recording/pending-receipts/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/receipts/[receiptId]` | GET, POST | [src/app/api/dp/time-recording/receipts/[receiptId]/route.ts](../../src/app/api/dp/time-recording/receipts/%5BreceiptId%5D/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/receipts/export` | GET | [src/app/api/dp/time-recording/receipts/export/route.ts](../../src/app/api/dp/time-recording/receipts/export/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
@@ -537,6 +545,11 @@ Inclui **67 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/rh/employee-profile/[employeeId]/image-voice-consent` | POST | [src/app/api/rh/employee-profile/[employeeId]/image-voice-consent/route.ts](../../src/app/api/rh/employee-profile/%5BemployeeId%5D/image-voice-consent/route.ts) | [rh-bizneo](flows/rh-bizneo.md) |
 | `/api/rh/field-map` | GET, PUT | [src/app/api/rh/field-map/route.ts](../../src/app/api/rh/field-map/route.ts) | [rh-bizneo](flows/rh-bizneo.md) |
 | `/api/rh/field-visibility` | GET, PATCH | [src/app/api/rh/field-visibility/route.ts](../../src/app/api/rh/field-visibility/route.ts) | [people-access](flows/people-access.md) |
+| `/api/service-portal/activate` | POST | [src/app/api/service-portal/activate/route.ts](../../src/app/api/service-portal/activate/route.ts) | [access-and-privacy](access-and-privacy.md) |
+| `/api/service-portal/closures` | GET, POST | [src/app/api/service-portal/closures/route.ts](../../src/app/api/service-portal/closures/route.ts) | [service-provider-access](service-provider-access.md) |
+| `/api/service-portal/login` | POST | [src/app/api/service-portal/login/route.ts](../../src/app/api/service-portal/login/route.ts) | [access-and-privacy](access-and-privacy.md) |
+| `/api/service-portal/logout` | POST | [src/app/api/service-portal/logout/route.ts](../../src/app/api/service-portal/logout/route.ts) | [access-and-privacy](access-and-privacy.md) |
+| `/api/service-portal/session` | GET | [src/app/api/service-portal/session/route.ts](../../src/app/api/service-portal/session/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/settings/ai-management` | GET | [src/app/api/settings/ai-management/route.ts](../../src/app/api/settings/ai-management/route.ts) | [settings](flows/settings.md) |
 | `/api/settings/public-bio` | GET, PUT | [src/app/api/settings/public-bio/route.ts](../../src/app/api/settings/public-bio/route.ts) | [settings](flows/settings.md) |
 | `/api/settings/public-bio/media` | POST | [src/app/api/settings/public-bio/media/route.ts](../../src/app/api/settings/public-bio/media/route.ts) | [settings](flows/settings.md) |

@@ -156,3 +156,7 @@ Motivo, ator e antes/depois ficam em `users/{id}/contractualChanges`, subcoleç�
 2026-11-03 — Passe de revisão do inventário pessoal: ACL nativa por unidade de execução/snapshot e todas as unidades de ajuste; readLocation expresso inclusive para admin; pagamentos exigem financial.paymentRequests.view junto às leituras financeira/pessoal. Workspace bruto contraditório/inválido é recusado em núcleo, censo, âncoras/processos/targets antes da projeção. Policy/scope desconhecidos negam antes de qualquer bypass/lookup. Detalhes e cobertura em [rastreabilidade por pessoa](document-person-traceability.md).
 
 2026-11-03 — Revisão residual: GET inventário declara cache write privado (token randômico, ator real/efetivo, workspace/ref/source/limit, TTL15min, uso único), sem emitir posição/IDs negados. [TTL e implantação](person-inventory-cursor-ttl.md). Geração/partes migradas para secureRoute e autorização RH namespace-aware no servidor antes de detalhes/CPF; fontes patrimoniais separam assets.view de viewHistory. Escopos restantes conferidos contra produtores nativos e recibo pai oficial. [Detalhes e custo](document-person-traceability.md).
+
+## Prestadores de serviço
+
+A categoria Prestador de serviço possui diretório e sessão próprios, gestão pelo RH e concessões por pessoa, empregador e competência. O perfil inicial é Contabilidade. O [contrato de acesso de prestadores](service-provider-access.md) documenta identidade, convite, sessão, revogação, auditoria, dados e implantação.

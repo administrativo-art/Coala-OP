@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { SubjectRef } from "@/features/privacy/person-subject";
 
 export const personNamespaceLabels: Record<SubjectRef["namespace"], string> = {
+  "main.providerMembers": "Profissional prestador de serviço",
   "main.users": "Conta do sistema",
   "main.entities": "Pessoa física cadastrada",
   "hr.employees": "Cadastro RH",
