@@ -13,6 +13,7 @@ import { createBeneficiarySnapshot, resolveValidatedEntityPixBeneficiary } from 
 import { assertExpenseAllowsNewPayment } from "../lib/source-settlement";
 import { paymentRequestRef } from "./repository.server";
 import type { PaymentActor, PixBankPaymentRequest } from "./types";
+import { loadPurchasePixSource, assertPurchasePixIndication, assertPurchasePixSource, purchasePixSourceSnapshot, type PurchasePixIndicationInput, type PurchasePixIndication } from "./purchase-supplier-pix.server";
 
 function attachedBoletoCode(data: FirebaseFirestore.DocumentData) {
   const installments = Array.isArray(data.installments) ? data.installments : [];
@@ -63,6 +64,7 @@ export function assertExpenseSupplierPixTarget(
   document: string,
   amountCents: number,
   confirmation?: PixBankPaymentRequest["supplierPixConfirmation"],
+  indication?: PurchasePixIndication,
 ) {
   if (!data || data.workspaceId !== workspaceId) conflict("Despesa indisponível no ambiente financeiro.");
   assertExpenseAllowsNewPayment(data);
@@ -87,11 +89,13 @@ export function assertExpenseSupplierPixTarget(
       conflict("O arquivo do boleto preservado diverge do CPF/CNPJ, valor ou competência do Pix.");
     }
   }
+  const purchaseSingle = data.originModule === "purchasing" && data.purchaseOrderId
+    && ["goods", "combined"].includes(data.purchaseExpenseRole);
   if (data.provisionType === "forecast" || data.status !== "pending" || data.paymentMethod !== "single"
     || data.paidAt || data.paymentState === "paid" || data.linkedBankTransactionId
     || data.financialInboxMessageId
-    || !Array.isArray(installments) || installments.length > 1
-    || installments.some((item) => !item ||
+    || (!Array.isArray(installments) && !purchaseSingle) || (Array.isArray(installments) && installments.length > 1)
+    || installments.some((item: FirebaseFirestore.DocumentData) => !item ||
       item.paidAt || item.status !== "pending" || item.linkedBankTransactionId
       || item.financialInboxMessageId || item.paymentRequestId
       || Math.round(Number(item.value) * 100) !== amountCents)) {
@@ -104,8 +108,10 @@ export function assertExpenseSupplierPixTarget(
     conflict("O valor líquido da despesa diverge do Pix. Confira descontos antes de preparar ou enviar.");
   }
   if (!description || Math.round(Number(data.totalValue) * 100) !== amountCents
-    || normalizeBrazilianDocument(data.billingIdentity?.supplierTaxId) !== document
-    || (document.length === 11 ? data.supplierId !== supplierEntityId : Boolean(data.supplierId && data.supplierId !== supplierEntityId))) {
+    || normalizeBrazilianDocument(data.billingIdentity?.supplierTaxId) !== (indication?.supplierTaxId ?? document)
+    || (indication
+      ? data.supplierId !== indication.supplierEntityId || indication.beneficiaryEntityId !== supplierEntityId
+      : document.length === 11 ? data.supplierId !== supplierEntityId : Boolean(data.supplierId && data.supplierId !== supplierEntityId))) {
     conflict("O valor ou a identidade do fornecedor diverge da despesa.");
   }
   return description;
@@ -164,6 +170,7 @@ export async function prepareExpenseSupplierPix(
   replacementOf?: string,
   readBank = getInterPixStatus,
   onBeforeTransaction?: () => Promise<void>,
+  indicationInput?: PurchasePixIndicationInput,
 ) {
   const sourceExpenseId = expenseId;
   const user = await dbAdmin.collection("users").doc(actor.uid).get();
@@ -186,11 +193,41 @@ export async function prepareExpenseSupplierPix(
   const document = assertSupplierPixBeneficiary(beneficiary);
 
   const expenseRef = financialDbAdmin.collection("expenses").doc(expenseId);
+  const initialExpense = await expenseRef.get();
   const previousRef = replacementOf ? paymentRequestRef(replacementOf) : null;
   const previousSnapshot = previousRef ? await previousRef.get() : null;
   const previous = previousSnapshot?.exists
     ? { ...previousSnapshot.data(), id: previousSnapshot.id } as PixBankPaymentRequest
     : null;
+  const orderId = String(initialExpense.get("purchaseOrderId") ?? "");
+  const purchaseSource = orderId && initialExpense.get("purchaseExpenseRole") !== "freight"
+    ? await loadPurchasePixSource(orderId) : null;
+  const purchasePixSource = purchaseSource ? purchasePixSourceSnapshot(orderId, purchaseSource, amountCents) : undefined;
+  if (indicationInput && (!purchaseSource || confirmation || replacementOf || !validBrazilianTaxId(document)
+    || !/^\d{44}$/.test(indicationInput.invoiceAccessKey)
+    || purchaseSource.order.invoiceAccessKey !== indicationInput.invoiceAccessKey
+    || !String(purchaseSource.order.fiscal?.issuerCnpj ?? purchaseSource.order.fiscal?.supplierDocument ?? "").trim()
+    || purchaseSource.supplierTaxId.length !== 14)) {
+    conflict("A indicação exige compra confirmada com NF e recebedor Pix validado.");
+  }
+  if (purchaseSource && purchaseSource.supplierTaxId === document && indicationInput) {
+    conflict("A indicação excepcional só se aplica quando fornecedor fiscal e favorecido são distintos.");
+  }
+  if (purchaseSource && purchaseSource.supplierTaxId !== document && !indicationInput && !previous?.purchasePixIndication) {
+    conflict("O favorecido difere do fornecedor da nota; confirme expressamente a indicação.");
+  }
+  const purchasePixIndication: PurchasePixIndication | undefined = indicationInput && purchaseSource ? {
+    purchaseOrderId: orderId, supplierEntityId: purchaseSource.order.supplierId,
+    supplierTaxId: purchaseSource.supplierTaxId, beneficiaryEntityId: supplierEntityId,
+    unitId: purchaseSource.order.destinationKioskId,
+    amountCents, invoiceAccessKey: indicationInput.invoiceAccessKey,
+    orderFingerprint: purchaseSource.fingerprint,
+    reason: indicationInput.reason.trim(), evidence: indicationInput.evidence.trim(),
+    confirmedBy: actor.uid, confirmedAt: new Date().toISOString(),
+  } : previous?.purchasePixIndication;
+  if (purchasePixIndication && (purchasePixIndication.reason.length < 10 || purchasePixIndication.evidence.length < 10)) {
+    conflict("Informe motivo e evidência fiscal da indicação do favorecido.");
+  }
   const requestRef = paymentRequestRef(replacementOf
     ? `supplier_pix_retry_${createHash("sha256").update(replacementOf).digest("hex")}`
     : `expense_supplier_pix_${expenseId}`);
@@ -204,7 +241,7 @@ export async function prepareExpenseSupplierPix(
     conflict("A solicitação anterior diverge da despesa ou do favorecido.");
   }
   if (previous && !previous.supersededByPaymentRequestId) await assertSupplierPixBankClosed(previous, readBank);
-  const before = confirmation || previous ? (await expenseRef.get()).data() : undefined;
+  const before = confirmation || previous ? initialExpense.data() : undefined;
   const code = before ? attachedBoletoCode(before) : null;
   if (confirmation && Boolean(code) !== confirmation.allowExistingBoleto) {
     conflict("A confirmação para preservar o boleto diverge dos anexos atuais.");
@@ -223,16 +260,42 @@ export async function prepareExpenseSupplierPix(
   return financialDbAdmin.runTransaction(async (transaction) => {
     const [expense, existing] = await Promise.all([transaction.get(expenseRef), transaction.get(requestRef)]);
     const data = expense.data();
-    assertUnitAccess(data);
+    assertUnitAccess(data && purchaseSource && !data.unitId
+      ? { ...data, unitId: purchaseSource.order.destinationKioskId } : data);
     const expenseDocument = normalizeBrazilianDocument(data?.billingIdentity?.supplierTaxId);
     if (confirmation && (document !== confirmation.beneficiaryDocument || (expenseDocument && expenseDocument !== document))) {
       conflict("O CPF/CNPJ fiscal da despesa mudou durante a confirmação.");
     }
-    const billingPatch = confirmation && !expenseDocument && data
-      ? { billingIdentity: { ...data.billingIdentity, supplierTaxId: document }, supplierId: supplierEntityId }
-      : {};
-    const target = data ? { ...data, ...billingPatch } : undefined;
-    const description = assertExpenseSupplierPixTarget(target, workspaceId, supplierEntityId, document, amountCents, supplierPixConfirmation);
+    if (purchaseSource && (!data || data.purchaseOrderId !== orderId || data.originModule !== "purchasing"
+      || !["goods", "combined"].includes(data.purchaseExpenseRole)
+      || (data.supplierId && data.supplierId !== purchaseSource.order.supplierId)
+      || (data.unitId && data.unitId !== purchaseSource.order.destinationKioskId)
+      || (expenseDocument && expenseDocument !== purchaseSource.supplierTaxId)
+      || purchaseSource.order.linkedExpenseId !== expenseId)) {
+      conflict("A despesa da compra diverge do pedido ou do fornecedor fiscal.");
+    }
+    const canonicalDocument = purchaseSource?.supplierTaxId ?? document;
+    const billingPatch = data ? {
+      ...(!expenseDocument && (confirmation || purchaseSource)
+        ? { billingIdentity: { ...data.billingIdentity, supplierTaxId: canonicalDocument } } : {}),
+      ...(!data.supplierId && (confirmation || purchaseSource)
+        ? { supplierId: purchaseSource?.order.supplierId ?? supplierEntityId } : {}),
+      ...(!data.unitId && purchaseSource ? { unitId: purchaseSource.order.destinationKioskId } : {}),
+      ...(purchaseSource ? {
+        purchaseInvoiceAccessKey: purchaseSource.order.invoiceAccessKey ?? null,
+        purchaseInvoiceNumber: purchaseSource.order.invoiceNumber ?? purchaseSource.order.fiscal?.number ?? null,
+      } : {}),
+    } : {};
+    const target = data ? { ...data, ...billingPatch,
+      ...(purchasePixIndication ? { purchasePixIndication } : {}) } : undefined;
+    if (purchasePixSource && purchaseSource) assertPurchasePixSource(expenseId, target, purchasePixSource, purchaseSource);
+    if (purchasePixIndication && purchaseSource) {
+      if (data?.purchasePixIndication && data.purchasePixIndication.orderFingerprint !== purchasePixIndication.orderFingerprint) {
+        conflict("A indicação do favorecido da despesa mudou.");
+      }
+      assertPurchasePixIndication(expenseId, target, purchasePixIndication, purchaseSource);
+    }
+    const description = assertExpenseSupplierPixTarget(target, workspaceId, supplierEntityId, document, amountCents, supplierPixConfirmation, purchasePixIndication);
     if (existing.exists) {
       const prior = { ...existing.data(), id: existing.id } as PixBankPaymentRequest;
       if (data?.paymentRequestId !== prior.id || prior.workspaceId !== workspaceId
@@ -243,7 +306,13 @@ export async function prepareExpenseSupplierPix(
         || Math.round(prior.amount * 100) !== amountCents || prior.description !== description
         || prior.supplierPixConfirmation?.competenceMonth !== supplierPixConfirmation?.competenceMonth
         || prior.supplierPixConfirmation?.previousPaidRequestId !== supplierPixConfirmation?.previousPaidRequestId
-        || prior.supplierPixConfirmation?.replacedBoletoHash !== supplierPixConfirmation?.replacedBoletoHash) {
+        || prior.supplierPixConfirmation?.replacedBoletoHash !== supplierPixConfirmation?.replacedBoletoHash
+        || prior.purchasePixIndication?.orderFingerprint !== purchasePixIndication?.orderFingerprint
+        || prior.purchasePixIndication?.beneficiaryEntityId !== purchasePixIndication?.beneficiaryEntityId
+        || prior.purchasePixIndication?.reason !== purchasePixIndication?.reason
+        || prior.purchasePixIndication?.evidence !== purchasePixIndication?.evidence
+        || prior.purchasePixSource?.orderFingerprint !== purchasePixSource?.orderFingerprint
+        || (prior.purchasePixIndication && data?.purchasePixIndication?.confirmedAt !== prior.purchasePixIndication.confirmedAt)) {
         conflict("Já existe uma solicitação com dados diferentes para esta despesa.");
       }
       return { id: prior.id, status: prior.status, ...(confirmation ? { expenseId } : {}) };
@@ -269,6 +338,8 @@ export async function prepareExpenseSupplierPix(
       amount: amountCents / 100, description, status: "awaiting_financial_authorization",
       idempotencyKey, createdAt: now, updatedAt: now, createdBy: actor.uid,
       ...(supplierPixConfirmation ? { supplierPixConfirmation } : {}),
+      ...(purchasePixIndication ? { purchasePixIndication } : {}),
+      ...(purchasePixSource ? { purchasePixSource } : {}),
       ...(previous ? { supersedesPaymentRequestId: previous.id } : {}),
     };
     transaction.create(requestRef, request);
@@ -278,11 +349,18 @@ export async function prepareExpenseSupplierPix(
         type: "SUPPLIER_PIX_REPLACED", at: now, actorId: actor.uid, replacementId: requestRef.id,
       });
     }
-    transaction.update(expenseRef, { ...billingPatch, paymentRequestId: requestRef.id, updatedAt: now, updatedBy: actor.uid });
+    transaction.update(expenseRef, { ...billingPatch,
+      ...(purchasePixIndication ? { purchasePixIndication } : {}),
+      paymentRequestId: requestRef.id, updatedAt: now, updatedBy: actor.uid });
     transaction.create(requestRef.collection("events").doc(), {
       type: "PAYMENT_REQUEST_CREATED", at: now, actorId: actor.uid,
       status: request.status, sourceType: request.sourceType, sourceId: expenseId, amount: request.amount,
       ...(supplierPixConfirmation ? { supplierPixConfirmation, sourceExpenseId } : {}),
+      ...(purchasePixIndication ? { purchasePixIndication: {
+        confirmedBy: purchasePixIndication.confirmedBy,
+        confirmedAt: purchasePixIndication.confirmedAt,
+        orderFingerprint: purchasePixIndication.orderFingerprint,
+      } } : {}),
     });
     return { id: requestRef.id, status: request.status, ...(confirmation ? { expenseId } : {}) };
   });

@@ -90,13 +90,13 @@ function help() {
   npx tsx scripts/financial/coala-authenticated-payment.mts supplier-create --email EMAIL --manifest JSON --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts purchase-create --email EMAIL --manifest JSON --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts purchase-fiscal-link --email EMAIL --id ORDER_ID --manifest JSON --confirm-financial-actions
-  npx tsx scripts/financial/coala-authenticated-payment.mts purchase-confirm --email EMAIL --id ORDER_ID --invoice-access-key CHAVE --expected-total-cents CENTAVOS --confirm-financial-actions
+  npx tsx scripts/financial/coala-authenticated-payment.mts purchase-confirm --email EMAIL --id ORDER_ID --invoice-access-key CHAVE_OU_--commercial-order NUMERO --expected-total-cents MERCADORIA_CENTAVOS --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts purchase-sync-expense --email EMAIL --id ORDER_ID --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts purchase-document-attach --email EMAIL --id ORDER_ID --receipt-id RECEIPT_ID --role danfe|boletos --file PDF --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts expense-boleto-attach --email EMAIL --expense-id EXPENSE_ID --installment-number N --file PDF --amount-cents CENTAVOS --due-date AAAA-MM-DD --competence-month AAAA-MM --beneficiary-document CNPJ --document-reference REFERENCIA --barcode CODIGO --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts expense-boleto-prepare --email EMAIL --expense-id EXPENSE_ID --installment-number N --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --barcode CODIGO --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts supplier-pix-prepare|supplier-pix-authorize|supplier-pix-send --email EMAIL --expense-id ID --supplier-entity-id ID --beneficiary-document CPF_OU_CNPJ --competence-month AAAA-MM --amount-cents CENTAVOS --confirm-financial-actions
-  supplier-pix-prepare aceita --previous-paid-request-id ID e --preserve-boleto somente para confirmar cobrança histórica de PJ por CNPJ.
+  supplier-pix-prepare aceita --previous-paid-request-id ID e --preserve-boleto para cobrança histórica PJ; compra NF PJ/Pix PF exige --invoice-access-key CHAVE --indication-reason MOTIVO --indication-evidence EVIDENCIA.
   npx tsx scripts/financial/coala-authenticated-payment.mts requests --email EMAIL --amount-cents CENTAVOS
   npx tsx scripts/financial/coala-authenticated-payment.mts status --email EMAIL --id REQUEST_ID
   npx tsx scripts/financial/coala-authenticated-payment.mts refresh --email EMAIL --id REQUEST_ID
@@ -327,11 +327,21 @@ async function createPurchase(token: string, input: PurchaseRegistration) {
 
 async function linkPurchaseFiscal(token: string, id: string, expectedTotalCents: number, input: ReturnType<typeof purchaseFiscalSchema.parse>) {
   const before = await coalaPurchaseGet(token, `/api/purchasing/orders/${encodeURIComponent(id)}`);
-  if (before.status !== "created") throw new PaymentCliError("A nota só pode ser vinculada antes da confirmação da compra.");
-  if (Math.round(Number(before.totalEstimated) * 100) !== expectedTotalCents || expectedTotalCents !== input.totalCents) {
+  if (before.status !== "created" && before.status !== "confirmed") throw new PaymentCliError("A compra não está apta para vínculo fiscal.");
+  const separateFreightCents = before.freightPaymentMode === "separate" ? Math.round(Number(before.deliveryFee ?? 0) * 100) : 0;
+  if (Math.round(Number(before.totalEstimated) * 100) - separateFreightCents !== expectedTotalCents || expectedTotalCents !== input.totalCents) {
     throw new PaymentCliError("O total do pedido difere do total confirmado da nota.");
   }
-  if (before.invoiceAccessKey && before.invoiceAccessKey !== input.invoiceAccessKey) throw new PaymentCliError("O pedido já possui outra chave de NF-e.");
+  const issuers = await mainLookupDocs(token, "entity-document", input.supplierDocument);
+  if (!issuers.some((entity) => entity.id === before.supplierId)) {
+    throw new PaymentCliError("O emitente da nota diverge do fornecedor cadastrado do pedido.");
+  }
+  if (before.invoiceAccessKey) {
+    if (before.invoiceAccessKey !== input.invoiceAccessKey || before.invoiceNumber !== input.invoiceNumber) {
+      throw new PaymentCliError("O pedido já possui outra chave de NF-e.");
+    }
+    return { id, invoiceNumber: before.invoiceNumber, invoiceAccessKey: before.invoiceAccessKey };
+  }
   await coalaPurchaseWrite(token, `/api/purchasing/orders/${encodeURIComponent(id)}`, "PATCH", purchaseFiscalPatch(input));
   const after = await coalaPurchaseGet(token, `/api/purchasing/orders/${encodeURIComponent(id)}`);
   if (after.invoiceAccessKey !== input.invoiceAccessKey || after.invoiceNumber !== input.invoiceNumber) {
@@ -348,21 +358,32 @@ async function syncPurchaseExpense(token: string, id: string) {
   if (!expenseId) throw new PaymentCliError("A sincronização não confirmou o identificador da despesa. Consulte pelo pedido; não repita automaticamente.");
   const expense = await coalaRead(token, paymentReadPath({ command: "document", collection: "expenses", id: expenseId }));
   const doc = expense.doc as Record<string, unknown> | undefined;
-  if (!doc || doc.purchaseOrderId !== id || doc.paymentMethod !== "installments") {
-    throw new PaymentCliError("A despesa retornada não preservou o pedido parcelado. Consulte antes de qualquer pagamento.");
+  const billing = doc?.billingIdentity as Record<string, unknown> | undefined;
+  const fiscal = order.fiscal as Record<string, unknown> | undefined;
+  const issuer = normalizeBrazilianDocument(String(fiscal?.issuerCnpj ?? fiscal?.supplierDocument ?? ""));
+  const separateFreightCents = order.freightPaymentMode === "separate" ? Math.round(Number(order.deliveryFee ?? 0) * 100) : 0;
+  const expectedGoodsCents = Math.round(Number(order.totalEstimated) * 100) - separateFreightCents;
+  if (!doc || doc.purchaseOrderId !== id || doc.supplierId !== order.supplierId
+    || doc.unitId !== order.destinationKioskId || !validBrazilianTaxId(billing?.supplierTaxId)
+    || (issuer && normalizeBrazilianDocument(String(billing?.supplierTaxId)) !== issuer)
+    || Math.round(Number(doc.totalValue) * 100) !== expectedGoodsCents
+    || doc.paymentMethod !== (order.paymentCondition === "installments" ? "installments" : "single")) {
+    throw new PaymentCliError("A despesa retornada diverge do fornecedor, unidade, valor ou forma de pagamento do pedido.");
   }
   return { expenseId, status: doc.status, installments: doc.installments };
 }
 
-async function confirmPurchase(token: string, id: string, invoiceAccessKey: string, expectedTotalCents: number) {
+async function confirmPurchase(token: string, id: string, invoiceAccessKey: string | null, expectedTotalCents: number, commercialOrder: string | null) {
   const order = await coalaPurchaseGet(token, `/api/purchasing/orders/${encodeURIComponent(id)}`);
   const itemsResponse = await paymentCliFetch(`${COALA_URL}/api/purchasing/orders/${encodeURIComponent(id)}/items`, {
     headers: { Authorization: `Bearer ${token}` }, cache: "no-store", redirect: "error",
   });
   if (!itemsResponse.ok) throw new PaymentCliError("Não foi possível conferir os itens da compra. Nenhuma confirmação foi feita.");
   const items = await paymentCliJson<Array<Record<string, unknown>>>(itemsResponse);
-  if (order.status !== "created" || order.invoiceAccessKey !== invoiceAccessKey || items.length === 0
-    || Math.round(Number(order.totalEstimated) * 100) !== expectedTotalCents
+  const separateFreightCents = order.freightPaymentMode === "separate" ? Math.round(Number(order.deliveryFee ?? 0) * 100) : 0;
+  if (order.status !== "created" || (invoiceAccessKey ? order.invoiceAccessKey !== invoiceAccessKey : !commercialOrder || order.externalOrderNumber !== commercialOrder)
+    || items.length === 0
+    || Math.round(Number(order.totalEstimated) * 100) - separateFreightCents !== expectedTotalCents
     || Math.round(items.reduce((sum, item) => sum + Number(item.totalOrdered ?? 0), 0) * 100) !== expectedTotalCents) {
     throw new PaymentCliError("A compra diverge da nota confirmada. Nenhuma confirmação foi feita.");
   }
@@ -718,7 +739,23 @@ async function main() {
     const token = await commandToken(email);
     const expense = (await coalaRead(token, paymentReadPath({ command: "document", collection: "expenses", id: expenseId }))).doc as Record<string, unknown> | undefined;
     const billingIdentity = expense?.billingIdentity as Record<string, unknown> | undefined;
-    const document = String(billingIdentity?.supplierTaxId ?? "").replace(/\D/g, "");
+    let document = String(billingIdentity?.supplierTaxId ?? "").replace(/\D/g, "");
+    const purchaseOrderId = typeof expense?.purchaseOrderId === "string" ? expense.purchaseOrderId : "";
+    const purchaseOrder = purchaseOrderId ? await coalaPurchaseGet(token, `/api/purchasing/orders/${encodeURIComponent(purchaseId(purchaseOrderId))}`) : null;
+    const purchaseFiscal = purchaseOrder?.fiscal as Record<string, unknown> | undefined;
+    const fiscalDocument = normalizeBrazilianDocument(String(purchaseFiscal?.issuerCnpj ?? purchaseFiscal?.supplierDocument ?? ""));
+    if (!document && purchaseOrder && fiscalDocument) document = fiscalDocument;
+    const indicated = Boolean(purchaseOrder && document && document !== beneficiaryDocument);
+    const indication = indicated && command === "supplier-pix-prepare" ? {
+      confirmed: true as const, reason: option("indication-reason"), evidence: option("indication-evidence"),
+      invoiceAccessKey: option("invoice-access-key").replace(/\D/g, ""),
+    } : undefined;
+    if (indicated && (purchaseOrder?.status !== "confirmed" || purchaseOrder?.supplierId !== expense?.supplierId
+      || purchaseOrder?.destinationKioskId !== expense?.unitId || fiscalDocument !== document
+      || purchaseOrder?.invoiceAccessKey !== (indication?.invoiceAccessKey ?? (expense?.purchasePixIndication as Record<string, unknown> | undefined)?.invoiceAccessKey)
+      || (command === "supplier-pix-prepare" && (!indication || indication.reason.length < 10 || indication.evidence.length < 10)))) {
+      throw new PaymentCliError("A indicação do recebedor exige compra confirmada, NF da empresa, unidade e motivo/evidência.");
+    }
     const previousPaidRequestId = option("previous-paid-request-id");
     const confirmation = command === "supplier-pix-prepare" && previousPaidRequestId && idPattern.test(previousPaidRequestId)
       ? { beneficiaryDocument, competenceMonth, previousPaidRequestId,
@@ -736,10 +773,10 @@ async function main() {
       || (!confirmedForecast && expense.status !== "pending")
       || financialExpenseCompetenceMonth(expense) !== competenceMonth
       || Math.round(Number(expense.totalValue) * 100) !== amountCents
-      || (beneficiaryDocument.length === 11 && expense.supplierId !== supplierEntityId)
+      || (!indicated && beneficiaryDocument.length === 11 && expense.supplierId !== supplierEntityId)
       || (beneficiaryDocument.length === 11 && (expense.provisionType === "forecast" || !expense.unitId || !expense.dueDate
         || !(expense.accountPlan || expense.accountId) || !(expense.referenceResultCenterId || expense.resultCenterId)))
-      || (!confirmation ? document !== beneficiaryDocument : Boolean(document && document !== beneficiaryDocument))) {
+      || (!confirmation && !indicated ? document !== beneficiaryDocument : Boolean(confirmation && document && document !== beneficiaryDocument))) {
       throw new PaymentCliError("A despesa, o valor, a competência, o vínculo ou o CPF/CNPJ divergem. Nenhuma ação foi realizada.");
     }
     const replacementOf = option("replacement-of");
@@ -752,7 +789,8 @@ async function main() {
     if (command === "supplier-pix-prepare") {
       const response = await paymentCliFetch(`${COALA_URL}/api/financial/expenses/${expenseId}/supplier-pix`, {
         method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ supplierEntityId, amountCents, ...(confirmation ? { confirmation } : {}), ...(replacementOf ? { replacementOf } : {}) }), cache: "no-store",
+        body: JSON.stringify({ supplierEntityId, amountCents, ...(confirmation ? { confirmation } : {}),
+          ...(indication ? { purchaseBeneficiaryIndication: indication } : {}), ...(replacementOf ? { replacementOf } : {}) }), cache: "no-store",
       });
       if (!response.ok) {
         const error = await paymentCliJson<{ error?: { code?: string; message?: string } }>(response).catch(() => null);
@@ -768,12 +806,17 @@ async function main() {
     }
     const request = (await coalaGet(token)).find((item) => item.id === id);
     const snapshot = request?.beneficiarySnapshot as Record<string, unknown> | undefined;
+    const savedIndication = request?.purchasePixIndication as Record<string, unknown> | undefined;
     const expectedStatus = command === "supplier-pix-authorize" ? "awaiting_financial_authorization" : "ready_to_submit";
     if (!request || request.status !== expectedStatus || request.sourceType !== "expense_supplier_pix"
       || (request.supersedesPaymentRequestId ?? undefined) !== replacementOf
       || request.sourceId !== expenseId || request.expenseId !== expenseId || expense.paymentRequestId !== id
       || Math.round(Number(request.amount) * 100) !== amountCents || snapshot?.sourceId !== supplierEntityId
       || snapshot.documentHash !== createHash("sha256").update(beneficiaryDocument).digest("hex")
+      || (indicated && (savedIndication?.supplierEntityId !== expense.supplierId
+        || savedIndication?.beneficiaryEntityId !== supplierEntityId
+        || savedIndication?.supplierTaxId !== document || savedIndication?.unitId !== expense.unitId
+        || savedIndication?.invoiceAccessKey !== purchaseOrder?.invoiceAccessKey))
       || (typeof snapshot.destinationHash !== "string" && snapshot.pixKeyType !== "cnpj")
       || request.submissionStartedAt || request.interRequestId || Number(request.submissionAttemptCount ?? 0) !== 0) {
       throw new PaymentCliError("A solicitação diverge, já foi enviada ou está em outra etapa. Nenhuma ação foi realizada.");
@@ -891,10 +934,12 @@ async function main() {
   if (command === "purchase-confirm") {
     if (!process.argv.includes("--confirm-financial-actions")) throw new PaymentCliError("Confirme explicitamente a compra e a despesa com --confirm-financial-actions.");
     const id = purchaseId(requireOption("id"));
-    const invoiceAccessKey = requireOption("invoice-access-key").replace(/\D/g, "");
+    const invoiceAccessKey = option("invoice-access-key").replace(/\D/g, "");
+    const commercialOrder = option("commercial-order");
     const expectedTotalCents = Number(requireOption("expected-total-cents"));
-    if (!/^\d{44}$/.test(invoiceAccessKey) || !Number.isSafeInteger(expectedTotalCents) || expectedTotalCents <= 0) throw new PaymentCliError("Chave ou total da NF-e inválido.");
-    stdout.write(`${JSON.stringify(await confirmPurchase(await commandToken(email), id, invoiceAccessKey, expectedTotalCents))}\n`);
+    if ((invoiceAccessKey ? !/^\d{44}$/.test(invoiceAccessKey) || Boolean(commercialOrder) : !commercialOrder)
+      || !Number.isSafeInteger(expectedTotalCents) || expectedTotalCents <= 0) throw new PaymentCliError("Informe chave fiscal ou pedido comercial e valor válido.");
+    stdout.write(`${JSON.stringify(await confirmPurchase(await commandToken(email), id, invoiceAccessKey || null, expectedTotalCents, commercialOrder || null))}\n`);
     return;
   }
   if (command === "purchase-sync-expense") {

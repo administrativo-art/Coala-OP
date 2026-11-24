@@ -1,7 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { PERSON_SOURCES, sourceById } from '../../src/features/privacy/person-inventory';
 import { canViewPersonSource, canViewPersonRecord } from '../../src/features/privacy/person-inventory.server';
+
+test('consulta do operador da indicação Pix tem índice de grupo implantável', () => {
+  const source = sourceById('financial-purchase-pix-event-confirmers')!;
+  const config = JSON.parse(readFileSync('firestore.financial.indexes.json', 'utf8'));
+  const field = config.fieldOverrides.find((entry: { collectionGroup: string; fieldPath: string }) =>
+    entry.collectionGroup === source.collection && entry.fieldPath === source.field);
+  assert.ok(field?.indexes.some((entry: { order?: string; queryScope: string }) =>
+    entry.order === 'ASCENDING' && entry.queryScope === 'COLLECTION_GROUP'));
+});
 
 test('every registered source declares an exact namespace, field, role and honest coverage', () => {
   assert.equal(new Set(PERSON_SOURCES.map((source) => source.id)).size, PERSON_SOURCES.length);
@@ -47,6 +57,7 @@ test('entity person sources are exact and keep supplier, request and actor roles
   for (const [id, collection, field] of [
     ['entity-persons', 'entities', '__name__'],
     ['financial-entity-person-expenses', 'expenses', 'supplierId'],
+    ['financial-purchase-pix-receivers', 'expenses', 'purchasePixIndication.beneficiaryEntityId'],
     ['financial-entity-person-pix-requests', 'bankPaymentRequests', 'beneficiaryReference.sourceId'],
     ['supplier-payment-profile-entity-persons', 'supplierPaymentProfiles', '__name__'],
   ]) {
@@ -60,6 +71,18 @@ test('entity person sources are exact and keep supplier, request and actor roles
   }
   assert.equal(sourceById('financial-expense-creators')?.namespace, 'main.users');
   assert.equal(sourceById('supplier-payment-profile-validators')?.role, 'actor');
+  for (const [sourceId, collection, field] of [
+    ['financial-purchase-pix-expense-confirmers', 'expenses', 'purchasePixIndication.confirmedBy'],
+    ['financial-purchase-pix-request-confirmers', 'bankPaymentRequests', 'purchasePixIndication.confirmedBy'],
+    ['financial-purchase-pix-event-confirmers', 'events', 'purchasePixIndication.confirmedBy'],
+  ]) {
+    const source = sourceById(sourceId)!;
+    assert.equal(source.collection, collection);
+    assert.equal(source.field, field);
+    assert.equal(source.namespace, 'main.users');
+    assert.equal(source.role, 'actor');
+    assert.equal(source.coverage, 'live');
+  }
   const actor = { isDefaultAdmin: false, workspace_id: 'w', userDoc: { unitAccessScope: 'selected', unitAccessUnitIds: ['A'] },
     permissions: { financial: { view: true, expenses: { view: true }, paymentRequests: { view: true } } } } as Parameters<typeof canViewPersonRecord>[0];
   const expense = sourceById('financial-entity-person-expenses')!;

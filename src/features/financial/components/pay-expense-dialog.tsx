@@ -29,9 +29,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useEntities } from "@/hooks/use-entities";
+import { canManagePurchaseFinancials, canViewPurchasing } from "@/lib/purchasing-permissions";
+import { maskBrazilianDocument, normalizeBrazilianDocument, validBrazilianTaxId } from "@/features/financial/beneficiaries/normalization";
 import type { PaymentBeneficiaryReference } from "@/features/financial/beneficiaries/types";
-import { supplierPixPrepareInput, type SupplierPixExpense } from "@/features/financial/lib/expense-supplier-pix-ui";
+import { purchasePixNeedsSync, supplierPixPrepareInput, type SupplierPixExpense } from "@/features/financial/lib/expense-supplier-pix-ui";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
+import type { PurchaseOrder } from "@/types";
 import Link from "next/link";
 
 const splitSchema = z.object({
@@ -95,7 +99,17 @@ export function PayExpenseDialog({
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
   const [pixError, setPixError] = useState<string | null>(null);
+  const [pixEntityId, setPixEntityId] = useState("");
+  const [pixEntitySearch, setPixEntitySearch] = useState("");
+  const [pixIndicationConfirmed, setPixIndicationConfirmed] = useState(false);
+  const [pixReason, setPixReason] = useState("");
+  const [pixEvidence, setPixEvidence] = useState("");
+  const [purchaseOrder, setPurchaseOrder] = useState<PurchaseOrder | null>(null);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [orderError, setOrderError] = useState<string | null>(null);
+  const purchaseOrderCacheRef = useRef<{ id: string; order: PurchaseOrder } | null>(null);
   const idempotencyKeyRef = useRef<string | null>(null);
+  const { entities, loading: entitiesLoading } = useEntities();
   const { data: accountsData } = useFinancialCollection<any>(financialCollection("bankAccounts"));
   const { data: accountPlansData } = useFinancialCollection<any>(financialCollection("accounts"));
   const { data: expensesData } = useFinancialCollection<any>(financialCollection("expenses"));
@@ -133,6 +147,28 @@ export function PayExpenseDialog({
   const remaining = totalDue - totalPaid;
   const isOver = remaining < -0.01;
   const supplierPixInput = expense ? supplierPixPrepareInput(expense) : null;
+  const needsPurchaseSync = expense ? purchasePixNeedsSync(expense) : false;
+  const purchaseGoods = expense?.originModule === "purchasing" && Boolean(expense.purchaseOrderId)
+    && (expense.purchaseExpenseRole === "goods" || expense.purchaseExpenseRole === "combined");
+  const invoiceAccessKey = purchaseOrder?.invoiceAccessKey ?? "";
+  const supplierEntity = entities.find(entity => entity.id === expense?.supplierId);
+  const selectedEntityId = pixEntityId || expense?.supplierId || "";
+  const selectedEntity = entities.find(entity => entity.id === selectedEntityId);
+  const supplierDocument = normalizeBrazilianDocument(expense?.billingIdentity?.supplierTaxId);
+  const selectedDocument = normalizeBrazilianDocument(selectedEntity?.document);
+  const differentReceiver = Boolean(purchaseGoods && selectedEntity && selectedDocument !== supplierDocument);
+  const canIndicate = isDefaultAdmin || Boolean(permissions.registration?.entities?.edit
+    && permissions.financial?.expenses?.create);
+  const canReadEntities = isDefaultAdmin || Boolean(permissions.registration?.view || canViewPurchasing(permissions));
+  const canReadPurchase = isDefaultAdmin || canViewPurchasing(permissions);
+  const canSyncPurchase = isDefaultAdmin || canManagePurchaseFinancials(permissions);
+  const candidateEntities = entities.filter(entity => entity.status !== "inactive"
+    && validBrazilianTaxId(entity.document)
+    && `${entity.name} ${entity.fantasyName ?? ""} ${entity.document}`.toLocaleLowerCase("pt-BR")
+      .includes(pixEntitySearch.trim().toLocaleLowerCase("pt-BR"))).slice(0, 60);
+  const indicationReady = !differentReceiver || (canIndicate && purchaseOrder?.status === "confirmed"
+    && expense?.purchaseExpenseRole === "goods" && /^\d{44}$/.test(invoiceAccessKey)
+    && pixIndicationConfirmed && pixReason.trim().length >= 10 && pixEvidence.trim().length >= 10);
   const hasLinkedRequest = expense?.paymentRequestId != null;
   const pixNetMismatch = expense?.netPayableValue != null
     && Math.round(expense.netPayableValue * 100) !== Math.round(expense.totalValue * 100);
@@ -141,6 +177,61 @@ export function PayExpenseDialog({
   const canRequestLegacyPix = Boolean(expense?.generatedReceiptId && expense.beneficiaryReference
     && permissions.financial?.paymentRequests?.create);
   const hasManualAdjustment = interest > 0.009 || fine > 0.009 || totalPaid > 0.009;
+  useEffect(() => {
+    setPixEntityId("");
+    setPixEntitySearch("");
+    setPixIndicationConfirmed(false);
+    setPixReason("");
+    setPixEvidence("");
+    setPixError(null);
+  }, [expense?.id]);
+  useEffect(() => {
+    setPurchaseOrder(null);
+    setOrderError(null);
+    if (!open) purchaseOrderCacheRef.current = null;
+    if (!open || !purchaseGoods || !differentReceiver || !expense?.purchaseOrderId) {
+      setOrdersLoading(false);
+      return;
+    }
+    if (purchaseOrderCacheRef.current?.id === expense.purchaseOrderId) {
+      setPurchaseOrder(purchaseOrderCacheRef.current.order);
+      setOrdersLoading(false);
+      return;
+    }
+    if (!canReadPurchase) {
+      setOrdersLoading(false);
+      setOrderError("Sem permissão para consultar a NF da compra.");
+      return;
+    }
+    if (!firebaseUser) {
+      setOrdersLoading(false);
+      setOrderError("Sessão indisponível. Entre novamente para consultar a NF.");
+      return;
+    }
+    const controller = new AbortController();
+    setOrdersLoading(true);
+    void (async () => {
+      try {
+        const response = await fetch(`/api/purchasing/orders/${encodeURIComponent(expense.purchaseOrderId!)}`, {
+          headers: { Authorization: `Bearer ${await firebaseUser.getIdToken()}` }, signal: controller.signal,
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload || payload.id !== expense.purchaseOrderId) {
+          throw new Error(response.status === 403 ? "Sem permissão para consultar a NF da compra."
+            : "Não foi possível carregar o pedido vinculado. Abra o pedido de compra para conferir a NF.");
+        }
+        if (!controller.signal.aborted) {
+          purchaseOrderCacheRef.current = { id: expense.purchaseOrderId!, order: payload as PurchaseOrder };
+          setPurchaseOrder(payload as PurchaseOrder);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) setOrderError(error instanceof Error ? error.message : "Não foi possível consultar a NF da compra.");
+      } finally {
+        if (!controller.signal.aborted) setOrdersLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [open, purchaseGoods, differentReceiver, expense?.purchaseOrderId, canReadPurchase, firebaseUser]);
   const provisionConsultation = useMemo(
     () => expense ? consultExpenseProvision(expense, expensesData || []) : { status: "not_applicable" as const },
     [expense, expensesData],
@@ -275,14 +366,24 @@ export function PayExpenseDialog({
   }
 
   async function requestSupplierPix() {
-    if (!expense || !supplierPixInput || !firebaseUser || !canPreparePix || hasManualAdjustment) return;
+    if (!expense || !supplierPixInput || !firebaseUser || !canPreparePix || hasManualAdjustment || !indicationReady) return;
+    if (purchaseGoods && selectedEntityId !== expense.supplierId && (!selectedEntity || !validBrazilianTaxId(selectedDocument))) {
+      setPixError("Selecione uma pessoa ou empresa cadastrada para receber o Pix.");
+      return;
+    }
     setPixError(null);
     setIsSaving(true);
     try {
       const response = await fetch(`/api/financial/expenses/${encodeURIComponent(expense.id)}/supplier-pix`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${await firebaseUser.getIdToken()}` },
-        body: JSON.stringify(supplierPixInput),
+        body: JSON.stringify({
+          ...supplierPixInput,
+          supplierEntityId: selectedEntityId,
+          ...(differentReceiver ? { purchaseBeneficiaryIndication: {
+            confirmed: true, invoiceAccessKey, reason: pixReason.trim(), evidence: pixEvidence.trim(),
+          } } : {}),
+        }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "Não foi possível preparar a solicitação Pix.");
@@ -291,6 +392,28 @@ export function PayExpenseDialog({
       onSuccess?.();
     } catch (error) {
       setPixError(error instanceof Error ? error.message : "Não foi possível preparar a solicitação Pix.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function syncPurchaseExpense() {
+    if (!expense?.purchaseOrderId || !firebaseUser || !canSyncPurchase || !needsPurchaseSync) return;
+    setPixError(null);
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/purchasing/orders/${encodeURIComponent(expense.purchaseOrderId)}/sync-expense`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await firebaseUser.getIdToken()}` },
+        body: JSON.stringify({}),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "Não foi possível sincronizar a despesa da compra.");
+      toast({ title: "Despesa sincronizada", description: "Abra novamente a despesa atualizada para preparar o Pix da mercadoria." });
+      onOpenChange(false);
+      onSuccess?.();
+    } catch (error) {
+      setPixError(error instanceof Error ? error.message : "Não foi possível sincronizar a despesa da compra.");
     } finally {
       setIsSaving(false);
     }
@@ -664,21 +787,81 @@ export function PayExpenseDialog({
                 </div>
               </div>
             </div>
-            </div>
 
-            {(supplierPixInput && canPreparePix) || pixError || hasLinkedRequest || ((canPreparePix || canRequestLegacyPix) && pixNetMismatch) || (canRequestLegacyPix && hasManualAdjustment) ? <div className="border-t border-ds-border-footer px-4 py-2 text-xs text-muted-foreground">
+            {purchaseGoods && canPreparePix && (supplierPixInput || needsPurchaseSync) ? (
+              <section className="space-y-3 border-t border-ds-border-footer px-4 py-3 text-sm" aria-label="Favorecido do Pix da compra">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="font-medium">Fornecedor da nota/compra</p>
+                    <p className="text-muted-foreground">{supplierEntity?.name || expense.supplier || "Cadastro do fornecedor indisponível"}</p>
+                    <p className="text-xs text-muted-foreground">{maskBrazilianDocument(supplierDocument)} · vinculado à despesa</p>
+                  </div>
+                  <div>
+                    <label className="font-medium" htmlFor="purchase-pix-receiver">Quem recebe o Pix</label>
+                    {entitiesLoading ? <p role="status" className="text-muted-foreground">Carregando cadastros…</p> : !canReadEntities ? (
+                      <p className="text-ds-danger">Sem acesso aos cadastros. Solicite permissão para escolher outro recebedor.</p>
+                    ) : (
+                      <>
+                        <Input aria-label="Buscar pessoa ou empresa cadastrada" placeholder="Buscar pessoa ou empresa" value={pixEntitySearch}
+                          onChange={event => setPixEntitySearch(event.target.value)} className="mt-1" />
+                        <select id="purchase-pix-receiver" value={selectedEntityId}
+                          onChange={event => { setPixEntityId(event.target.value); setPixIndicationConfirmed(false); setPixError(null); }}
+                          className="mt-2 w-full rounded-ds-btn border border-ds-border bg-ds-surface px-3 py-2 text-sm text-ds-ink dark:text-foreground">
+                          {expense.supplierId && !candidateEntities.some(entity => entity.id === expense.supplierId) ? (
+                            <option value={expense.supplierId}>Mesmo fornecedor da nota/compra</option>
+                          ) : null}
+                          {selectedEntity && !candidateEntities.some(entity => entity.id === selectedEntity.id) ? (
+                            <option value={selectedEntity.id}>{selectedEntity.name} · {maskBrazilianDocument(selectedEntity.document)}</option>
+                          ) : null}
+                          {candidateEntities.filter(entity => entity.id === expense.supplierId
+                            || normalizeBrazilianDocument(entity.document) !== supplierDocument).map(entity => (
+                            <option key={entity.id} value={entity.id}>{entity.name} · {maskBrazilianDocument(entity.document)}</option>
+                          ))}
+                        </select>
+                        {candidateEntities.length === 0 ? <p className="mt-1 text-xs text-muted-foreground">Nenhum cadastro encontrado. Cadastre ou revise a pessoa/empresa antes do Pix.</p> : null}
+                      </>
+                    )}
+                  </div>
+                </div>
+                {differentReceiver ? (
+                  <div className="space-y-2 rounded-ds-btn border border-ds-border bg-ds-surface p-3">
+                    {!canIndicate ? <p role="alert" className="text-ds-danger">Sem permissão para confirmar um recebedor diferente. É necessária edição de cadastro e criação de despesa.</p> : null}
+                    {ordersLoading ? <p role="status">Carregando nota da compra…</p> : orderError ? <p role="alert" className="text-ds-danger">{orderError}</p> : !purchaseOrder || purchaseOrder.status !== "confirmed" || !/^\d{44}$/.test(invoiceAccessKey) ? (
+                      <p role="alert" className="text-ds-danger">A indicação exige compra confirmada e NF com chave de acesso. Confira o pedido antes de preparar o Pix.</p>
+                    ) : <p className="text-xs text-muted-foreground">NF {purchaseOrder.invoiceNumber || purchaseOrder.fiscal?.number || "—"} · chave final {invoiceAccessKey.slice(-8)} · mercadoria {formatCurrency(expense.totalValue)}</p>}
+                    <label className="block text-xs font-medium" htmlFor="purchase-pix-reason">Motivo da indicação</label>
+                    <Textarea id="purchase-pix-reason" value={pixReason} maxLength={500} disabled={!canIndicate}
+                      onChange={event => setPixReason(event.target.value)} placeholder="Descreva por que outra pessoa/empresa recebe o valor da mercadoria" />
+                    <label className="block text-xs font-medium" htmlFor="purchase-pix-evidence">Evidência da NF</label>
+                    <Textarea id="purchase-pix-evidence" value={pixEvidence} maxLength={500} disabled={!canIndicate}
+                      onChange={event => setPixEvidence(event.target.value)} placeholder="Indique a referência fiscal concreta que sustenta a indicação" />
+                    <label className="flex items-start gap-2 text-xs">
+                      <input type="checkbox" className="mt-0.5" checked={pixIndicationConfirmed} disabled={!canIndicate}
+                        onChange={event => setPixIndicationConfirmed(event.target.checked)} />
+                      Confirmo expressamente que o recebedor cadastrado acima foi indicado para este Pix da mercadoria; conferi a NF, o valor, o motivo e a evidência.
+                    </label>
+                    <p className="text-xs text-muted-foreground">O frete separado tem despesa e pagamento próprios.</p>
+                  </div>
+                ) : null}
+                {needsPurchaseSync ? <p className="text-xs text-muted-foreground">Esta despesa antiga ainda precisa dos dados canônicos da compra. Sincronize o pedido pelo fluxo de Compras; não altere o documento fiscal da despesa manualmente.</p> : null}
+              </section>
+            ) : null}
+            {(supplierPixInput && canPreparePix) || needsPurchaseSync || pixError || hasLinkedRequest || ((canPreparePix || canRequestLegacyPix) && pixNetMismatch) || (canRequestLegacyPix && hasManualAdjustment) ? <div className="border-t border-ds-border-footer px-4 py-2 text-xs text-muted-foreground">
               {pixError ? <p role="alert" className="text-ds-danger">{pixError}</p> : null}
               {hasLinkedRequest ? <p>Esta despesa tem uma solicitação bancária vinculada. A baixa manual fica bloqueada enquanto o vínculo constar aqui. Consulte o pedido e a conciliação no <Link className="underline" href={FINANCIAL_ROUTES.paymentRequests}>painel de autorizações</Link>.</p> : null}
               {(canPreparePix || canRequestLegacyPix) && pixNetMismatch ? <p>Pix indisponível: o valor líquido {formatCurrency(expense.netPayableValue!)} difere do total {formatCurrency(expense.totalValue)} da despesa. Revise o desconto antes de solicitar o valor integral.</p> : null}
               {canRequestLegacyPix && hasManualAdjustment ? <p>Limpe juros, multa e valores de baixa manual antes de solicitar o Pix do recibo.</p> : null}
               {supplierPixInput && canPreparePix ? <p>O Pix solicita exatamente {formatCurrency(expense.totalValue)} da despesa salva, sem juros, multa ou rateio manual. A data acima vale apenas para a baixa manual. {hasManualAdjustment ? "Limpe os valores manuais para solicitar Pix." : ""} <Link className="underline" href={FINANCIAL_ROUTES.paymentRequests}>Ver autorizações</Link></p> : null}
             </div> : null}
+            </div>
             <DialogFooter className="border-t border-ds-border-footer bg-ds-input px-4 py-3 sm:justify-between">
               <Button type="button" variant="ds-ghost" size="md" onClick={() => onOpenChange(false)}>
                 Cancelar
               </Button>
               <div className="flex flex-wrap gap-2">
-                {supplierPixInput && canPreparePix ? <Button type="button" variant="ds-secondary" size="md" disabled={isSaving || hasManualAdjustment} onClick={() => void requestSupplierPix()}>{isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Solicitar Pix de {formatCurrency(expense.totalValue)}</Button> : null}
+                {needsPurchaseSync && canSyncPurchase ? <Button type="button" variant="ds-secondary" size="md" disabled={isSaving} onClick={() => void syncPurchaseExpense()}>{isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Sincronizar despesa da compra</Button> : null}
+                {needsPurchaseSync && !canSyncPurchase ? <p className="text-xs text-ds-danger">Sem permissão para sincronizar a compra.</p> : null}
+                {supplierPixInput && canPreparePix ? <Button type="button" variant="ds-secondary" size="md" disabled={isSaving || hasManualAdjustment || !indicationReady || entitiesLoading || (purchaseGoods && selectedEntityId !== expense.supplierId && !selectedEntity)} onClick={() => void requestSupplierPix()}>{isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Solicitar Pix de {formatCurrency(expense.totalValue)}</Button> : null}
                 {canRequestLegacyPix ? <Button type="button" variant="ds-secondary" size="md" disabled={isSaving || hasLinkedRequest || pixNetMismatch || hasManualAdjustment} onClick={() => void requestInterPayment()}>{isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Solicitar Pix via Banco Inter</Button> : null}
                 <Button type="submit" variant="primary-modal" size="md" disabled={isSaving || isOver || totalPaid <= 0 || !!expense.generatedReceiptId || hasLinkedRequest || (!isDefaultAdmin && !permissions.financial?.expenses?.pay)} title={hasLinkedRequest ? 'Há uma solicitação bancária vinculada a esta despesa.' : expense.generatedReceiptId ? 'Recibos gerados pelo Coala são baixados somente após confirmação bancária.' : undefined}>
                   {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

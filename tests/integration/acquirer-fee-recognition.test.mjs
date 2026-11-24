@@ -81,7 +81,7 @@ test("venda100/taxa3/97 antes D+30: transação concorrente única, não paga ne
  assert.equal(expense.status,"provisioned"); assert.equal(expense.totalValue,3); assert.equal(expense.paidAt,null); assert.equal(expense.competenceMonth,"2026-10"); assert.equal(expense.sourceSettlement.phase,"receivable"); assert.equal(expenseCashForecastAmount(expense),0);
  await assert.rejects(registerReportedPayment(expenseRef.id,{ idempotencyKey:"no-bank-payment" },{ uid:actor.decoded.uid }),code("EXPENSE_SETTLED_AT_SOURCE"));
  await assert.rejects(queueMatchedBankPayment({ batch:db.batch(), expenseId:expenseRef.id, expense, bankTransactionId:"none", principalAmount:3,cashAmount:3,paidAt:Timestamp.now(),actor:{ uid:actor.decoded.uid } }),code("EXPENSE_SETTLED_AT_SOURCE"));
- await assert.rejects(createPaymentRequest({sourceType:"purchase_order",sourceId:"no-bank",expenseId:expenseRef.id,beneficiaryReference:{sourceType:"supplier",sourceId:"none"},amount:3,description:"forged payable"},{uid:actor.decoded.uid}),code("EXPENSE_SETTLED_AT_SOURCE"));
+ await assert.rejects(createPaymentRequest({sourceType:"purchase_order",sourceId:"no-bank",expenseId:expenseRef.id,beneficiaryReference:{sourceType:"supplier",sourceId:"none"},amount:3,description:"forged payable"},{uid:actor.decoded.uid}),/exigem despesa financeira vinculada/);
  assert.throws(()=>assertExpenseBoletoTarget({...expense,workspaceId:WORKSPACE_ID},{},WORKSPACE_ID),code("EXPENSE_SETTLED_AT_SOURCE"));
  const requestRef=own(db.collection("bankPaymentRequests").doc("recognition-forged-request"));
  await requestRef.set({sourceType:"purchase_order",sourceId:"none",expenseId:expenseRef.id,status:"awaiting_financial_authorization",paymentRail:"pix"});
