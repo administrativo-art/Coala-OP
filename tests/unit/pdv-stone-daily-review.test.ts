@@ -222,11 +222,28 @@ test("item cancellation without proof that it preceded payment remains a status 
   assert.equal(result.cases[0].reviewStatus, "attention_required");
 });
 
-test("Stone payment events do not duplicate captured revenue", () => {
+test("Stone settlements are retained as evidence without duplicating sales or creating an issue", () => {
   const payment = sale().replace("<Captures>1</Captures><Payments>0", "<Captures>0</Captures><Payments>1");
   const result = review([coupon()], file(sale(), payment));
   assert.equal(result.stoneSales.length, 1);
-  assert.equal(result.issues[0].reason, "non_capture_event");
+  assert.deepEqual(result.issues, []);
+  assert.equal(result.stoneEvents.length, 2);
+  assert.equal(result.stoneEvents[1].sourceSection, "FinancialTransactionsAccounts");
+  assert.equal(result.stoneEvents[1].events.Payments, 1);
+});
+
+test("ambiguous non-capture events remain issues", () => {
+  const payment = sale("other").replace("<Captures>1</Captures><Payments>0", "<Captures>0</Captures><Payments>1");
+  const scenarios = [
+    file(sale(), payment.replace("<Payments>1", "<Payments>0")),
+    file(sale(), payment.replace("<Captures>0", "<Captures>1")),
+    file(sale() + payment),
+  ];
+  for (const xml of scenarios) {
+    const result = review([coupon()], xml);
+    assert.equal(result.stoneSales.length, 1);
+    assert.deepEqual(result.issues.map(issue => issue.reason), ["non_capture_event"]);
+  }
 });
 
 test("Stone cancellation in either section blocks the original capture and preserves an issue", () => {
@@ -237,7 +254,8 @@ test("Stone cancellation in either section blocks the original capture and prese
     ["ChargebackRefunds", "chargeback_refund_event"],
   ] as const;
   for (const [event, reason] of adverseEvents) {
-    const cancelled = sale().replace("<Captures>1", "<Captures>0").replace(`<${event}>0`, `<${event}>1`);
+    const cancelled = sale().replace("<Captures>1</Captures><Payments>0", "<Captures>0</Captures><Payments>1")
+      .replace(`<${event}>0`, `<${event}>1`);
     const result = review([coupon()], file(sale(), cancelled));
     assert.equal(result.stoneSales.length, 0);
     assert.equal(result.issues.length, 1);
@@ -392,4 +410,72 @@ test("a dense maximum-sized day reconciles as one complete daily set without dro
   assert.equal(result[0].reviewStatus, "auto_checked");
   assert.equal(result[0].pdvFactIds.length, 500);
   assert.equal(result[0].stoneSaleIds.length, 500);
+});
+
+test("reconciles a net card capture after discounts on active and cancelled items", () => {
+  const items = [
+    { ValorTotal: "12.00" },
+    { ValorTotal: "6.00", ValorDesconto: "1.50" },
+    { ValorTotal: "9.00", ValorDesconto: "1.50" },
+    { ValorTotal: "6.00", ValorDesconto: "1.00", IsCancelado: true, DtCancelamento: "2026-09-20T10:21:00" },
+  ];
+  const adjusted = coupon({
+    dtrecebimento: "2026-09-20T10:23:01",
+    valortotal: "24.00",
+    formaPgtos: [{ nome: "CARTAO CREDITO", valortotal: "24.00", detalhes: [{ nsu: "000123", subadquirente: "STONE" }] }],
+    iscancelado: true,
+    Itens: items,
+  });
+  const stone = file(sale("000123", "24.00", "2"));
+  const result = review([adjusted], stone);
+  assert.equal(result.cases[0].reviewStatus, "auto_checked");
+  assert.deepEqual(result.pdvFacts[0].adjustment, {
+    type: "item_cancellation", originalAmountCents: 2900, cancelledAmountCents: 500,
+    itemDiscountCents: 400, finalAmountCents: 2400,
+    lastCancellationAt: "2026-09-20T10:21:00", finalizedAt: "2026-09-20T10:23:01",
+    finalizedAfterCancellation: true,
+  });
+  for (const malformed of ["", "-1.50", "1.501", "7.00", null]) {
+    const invalid = review([{ ...adjusted, Itens: [{ ...items[1], ValorDesconto: malformed }, items[0], ...items.slice(2)] }], stone);
+    assert.equal(invalid.cases[0].kind, "status_mismatch");
+    assert.equal(invalid.pdvFacts[0].adjustment, undefined);
+  }
+  const afterCapture = items.map(item => item.IsCancelado
+    ? { ...item, DtCancelamento: "2026-09-20T10:22:36" } : item);
+  const overlap = review([{ ...adjusted, Itens: afterCapture }], stone);
+  assert.equal(overlap.pdvFacts[0].adjustment?.finalizedAfterCancellation, true);
+  assert.equal(overlap.cases[0].kind, "status_mismatch");
+});
+
+test("preserves the exact credit-voucher match and refuses weak, ambiguous and adverse evidence", () => {
+  const credit = coupon({
+    formaPgtos: [{ nome: "CARTAO CREDITO", valortotal: "6.00", detalhes: [{ nsu: "000123", subadquirente: "STONE" }] }],
+  });
+  const voucher = sale("000123", "6.00", "5");
+  const result = review([credit], file(voucher));
+  assert.equal(result.pdvFacts[0].channel, "credit_card");
+  assert.equal(result.pdvFacts[0].status, "pending");
+  assert.equal(result.stoneSales[0].channel, "voucher");
+  assert.equal(result.cases[0].channel, "voucher");
+  assert.equal(result.cases[0].reviewStatus, "auto_checked");
+  assert.deepEqual(result.cases[0].paymentMethodDifference, { pdv: "credit_card", stone: "voucher" });
+  assert.deepEqual(result.issues, []);
+  assert.equal(review([credit], file(sale("000123", "7.00", "5"))).cases[0].kind, "amount_mismatch");
+  assert.ok(review([credit], file(sale("other-id", "6.00", "5"))).cases.every(row => row.reviewStatus === "attention_required"));
+  assert.equal(review([credit, { ...credit, codcupom: "0002" }], file(voucher)).cases[0].kind, "ambiguous");
+  assert.equal(review([{ ...credit, IsEstornado: true }], file(voucher)).cases[0].kind, "status_mismatch");
+  const reversal = voucher.replace("<Cancellations>0", "<Cancellations>1").replace("<Captures>1", "<Captures>0");
+  const adverse = review([credit], file(voucher, reversal));
+  assert.ok(adverse.issues.some(issue => issue.reason === "cancellation_event"));
+  assert.equal(adverse.cases[0].reviewStatus, "attention_required");
+  const suspended = voucher.replace("</Transaction>",
+    "<Installments><Installment><InstallmentNumber>1</InstallmentNumber><GrossAmount>6.00</GrossAmount><NetAmount>6.00</NetAmount><SuspendedByChargeback>true</SuspendedByChargeback></Installment></Installments></Transaction>");
+  const suspendedReview = review([credit], file(suspended));
+  assert.ok(suspendedReview.issues.some(issue => issue.reason === "chargeback_event"));
+  assert.equal(suspendedReview.cases[0].reviewStatus, "attention_required");
+  const foreignUnit = match({
+    pdvFacts: result.pdvFacts,
+    stoneSales: [{ ...result.stoneSales[0], kioskId: "another-unit" }],
+  });
+  assert.ok(foreignUnit.every(row => row.reviewStatus === "attention_required"));
 });

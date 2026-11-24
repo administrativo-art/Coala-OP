@@ -19,15 +19,43 @@ test("company aggregate never turns an unavailable unit into zero and does not n
   assert.equal(aggregateDreRevenue([first, second]).cashShortageCents, 1_000);
   assert.equal(aggregateDreRevenue([first, second]).cashSurplusCents, 300);
   assert.equal(aggregateDreRevenue([first, select([])]).revenueCents, null);
+  assert.equal(aggregateDreRevenue([first, select([])]).cashShortageCents, 1_000);
+  assert.equal(aggregateDreRevenue([first, select([])]).cashDifferenceCoverage, "incomplete");
   assert.equal(aggregateDreRevenue([]).revenueCents, null);
+  assert.equal(aggregateDreRevenue([select([])]).cashShortageCents, null);
   // Expense withdrawal already categorized once; do not subtract it from sales too.
   assert.equal(first.revenueCents! - 1_000 - first.cashShortageCents! + first.cashSurplusCents!, 8_000);
+});
+
+test("partial cash source shows only covered days, keeps revenue intact and marks the result provisional", () => {
+  const partial: DreClosureUnitMonthSummary = { ...base, id: "partial", closureCount: 2,
+    expectedTotalCents: 0, differenceTotalCents: 0,
+    ...summarizeCashClosureDre([
+      { date: "2026-09-29", pdvSales: { version: 1, amountCents: 7_000 },
+        dreSelectedCashDifferences: { version: 1, shortageCents: 250, surplusCents: 0 },
+        operatorCount: 1, finalizedOperatorCount: 1, drePdvFallbackOperatorCount: 0 },
+      { date: "2026-09-30", pdvSales: { version: 1, amountCents: 3_000 },
+        dreSelectedCashDifferences: { version: 1, shortageCents: null, surplusCents: null },
+        operatorCount: 1, finalizedOperatorCount: 0, drePdvFallbackOperatorCount: 1 },
+    ]) };
+  const value = select([partial]);
+  assert.equal(value.revenueCents, 10_000);
+  assert.equal(value.cashShortageCents, 250);
+  assert.equal(value.cashSurplusCents, 0);
+  assert.equal(value.cashDifferenceCoverage, "incomplete");
+  assert.equal(value.cashDifferenceProvisional, true);
+  assert.equal(value.cashDifferenceCoveredDays, 1);
+  assert.equal(value.cashDifferenceTotalDays, 30);
+  assert.equal(aggregateDreRevenue([value, select([])]).cashShortageCents, 250);
+  assert.equal(aggregateDreRevenue([value, select([])]).cashDifferenceCoveredDays, 1);
+  assert.equal(aggregateDreRevenue([value, select([])]).cashDifferenceTotalDays, 60);
 });
 const sales: DreSalesUnitMonthSummary = { ...base, revenue: 999, cmv: 20, dates: ["2026-09-30"], hasUndatedReports: false };
 function summary(): DreClosureUnitMonthSummary {
   return { ...base, id: "month", closureCount: 1, expectedTotalCents: 9_000, differenceTotalCents: -1_000,
     ...summarizeCashClosureDre([{ date: "2026-09-30", pdvSales: { version: 1, amountCents: 10_000 },
-      finalizedCashDifferences: { version: 1, shortageCents: 1_000, surplusCents: 0 }, operatorCount: 2, finalizedOperatorCount: 1 }]) };
+      dreSelectedCashDifferences: { version: 1, shortageCents: 1_000, surplusCents: 0 },
+      drePdvFallbackOperatorCount: 1, operatorCount: 2, finalizedOperatorCount: 1 }]) };
 }
 function select(closureSummaries = [summary()], salesSummaries = [sales]) {
   return selectDreRevenue({ ...base, closureSummaries, salesSummaries });
@@ -40,6 +68,7 @@ test("selects one integral source, separate shortage, and warns about open opera
   assert.equal(value.cashSurplusCents, 0);
   assert.equal(value.revenueCoverage, "complete");
   assert.equal(value.pendingOperatorCount, 1);
+  assert.equal(value.cashDifferenceProvisional, true);
   assert.ok(value.issues.includes("operators_pending_finalization"));
   assert.ok(!value.issues.includes("sales_reports_not_integral_payment_source"));
   assert.deepEqual(value.coveredDates, ["2026-09-30"]);
@@ -47,7 +76,7 @@ test("selects one integral source, separate shortage, and warns about open opera
 
 test("missing/legacy/unknown version summaries never use adjusted expected plus differences or item revenue", () => {
   const legacy = summary(); delete legacy.dreVersion;
-  for (const summaries of [[], [legacy], [{ ...summary(), dreVersion: 99 as 1 }]]) {
+  for (const summaries of [[], [legacy], [{ ...summary(), dreVersion: 99 as 2 }]]) {
     const value = select(summaries);
     assert.equal(value.revenueCents, null);
     assert.equal(value.cashShortageCents, null);
@@ -80,7 +109,7 @@ test("known zero is available, but missing cash coverage and resync stale preven
   const value = select([stale]);
   assert.equal(value.revenueCents, 10_000);
   assert.equal(value.cashShortageCents, null);
-  assert.equal(value.cashDifferenceCoverage, "incomplete");
+  assert.equal(value.cashDifferenceCoverage, "unavailable");
   assert.ok(value.issues.includes("pdv_changed_after_approval"));
 });
 

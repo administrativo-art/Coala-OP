@@ -77,3 +77,45 @@ test("webhook arquiva, projeta o processo e a publicação guarda a origem patri
   assert.match(workflow, /sourceCustodyTransferId: generated\.get\("sourceCustodyTransferId"\)/);
   assert.match(workflow, /autoPublishDocument\(archivedDocumentId, "signed"\)/);
 });
+
+
+test("termo longo pagina sem sobrepor a área das assinaturas e preserva as cláusulas", async () => {
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const longInput = { ...input,
+    condition: "Condição detalhada com marcas de uso. ".repeat(25).trim(),
+    accessories: Array.from({ length: 30 }, (_, index) => `Acessório ${index}: ${"descrição detalhada ".repeat(6)}`),
+  };
+  const document = await getDocument({ data: new Uint8Array(await renderAssetCustodyTermPdf(longInput)) }).promise;
+  assert.ok(document.numPages > 1);
+  const pages: string[] = [];
+  for (let number = 1; number <= document.numPages; number++) {
+    const content = await (await document.getPage(number)).getTextContent();
+    const items = content.items.filter((item) => "str" in item);
+    pages.push(items.map((item) => item.str).join(" "));
+    for (const item of items) {
+      if (!item.str.trim() || item.str.startsWith("Assinaturas eletrônicas:")) continue;
+      assert.ok(item.transform[5] >= 140, `texto fora da área útil na página ${number}: ${item.str}`);
+    }
+  }
+  const text = pages.join(" ");
+  assert.match(text, /Acessório 29/);
+  assert.match(text, /apagá-lo remotamente/);
+  assert.match(text, /sem autorizar desconto automático/);
+});
+
+
+test("palavras sem espaços nos campos do patrimônio respeitam as margens laterais", async () => {
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const document = await getDocument({ data: new Uint8Array(await renderAssetCustodyTermPdf({ ...input,
+    asset: { ...input.asset, code: "W".repeat(240), name: "M".repeat(240) },
+    condition: "W".repeat(1000),
+  })) }).promise;
+  for (let number = 1; number <= document.numPages; number++) {
+    const content = await (await document.getPage(number)).getTextContent();
+    for (const item of content.items) {
+      if (!("str" in item) || !item.str.trim()) continue;
+      assert.ok(item.transform[4] >= 51, `texto ultrapassou margem esquerda: ${item.str}`);
+      assert.ok(item.transform[4] + item.width <= 544, `texto ultrapassou margem direita: ${item.str}`);
+    }
+  }
+});

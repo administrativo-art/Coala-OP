@@ -1,5 +1,7 @@
 # Plano — Localização contínua em celular empresarial
 
+Decisão da controladora em 24/11/2026: acompanhamento durante a jornada somente em aparelhos fornecidos pela empresa, cadastrados e autorizados; aparelhos pessoais excluídos. Retenção operacional de até cinco anos confirmada separadamente do ponto fiscal. O termo LGPD v6 registra essas decisões, mas sua publicação não ativa a coleta. Permanecem pré-requisitos: controle técnico do aparelho empresarial na autorização temporária, revisão de necessidade/base, descarte e ensaio físico. Trechos históricos que admitam aparelho pessoal descrevem o estado anterior e não autorizam essa modalidade.
+
 **Estado:** reaberto para implementação e piloto técnico
 **Decisão inicial:** 30/10/2026
 **Retomada:** 30/10/2026, por decisão expressa do programador
@@ -96,7 +98,7 @@ O rastreamento contínuo somente inicia quando todas as condições forem verdad
 - permissão de localização e localização do Android disponíveis;
 - lease curta e válida emitida pelo servidor.
 
-O vínculo empresarial não participa dessa decisão. Sem vínculo, o rastreio por jornada funciona normalmente no aparelho em que a pessoa estiver autenticada. Se outra pessoa entrar no mesmo aparelho, passam a valer exclusivamente a jornada e a política dessa nova pessoa. Logout ou troca de usuário encerram a coleta da sessão anterior.
+A implementação anterior não exigia vínculo empresarial. Essa regra foi superada em 24/11/2026: antes da ativação, o servidor deverá exigir aparelho fornecido pela empresa e vínculo empresarial válido; sem ele, nenhuma coleta de acompanhamento será autorizada. Se outra pessoa entrar no mesmo aparelho, passam a valer exclusivamente a jornada e a política dessa nova pessoa. Logout ou troca de usuário encerram a coleta da sessão anterior.
 
 ### 5.3. Janela de coleta
 
@@ -196,7 +198,7 @@ Não haverá vínculo obrigatório entre rastreamento e patrimônio `PAT-000008`
 3. O aplicativo oferece `Vincular este aparelho empresarial`.
 4. Uma solicitação com identidade da instalação, atestação e dados técnicos mínimos chega ao Coala One.
 5. Um administrador autorizado aprova, rejeita, suspende ou substitui o aparelho.
-6. O servidor relaciona usuário, instalação e status empresarial e registra ator/data. A lease de rastreio é emitida separadamente quando a jornada da pessoa autenticada exigir, com ou sem classificação empresarial.
+6. O servidor relaciona usuário, instalação e status empresarial e registra ator/data. A implementação anterior emitia a lease sem exigir classificação empresarial. Essa regra foi superada em 24/11/2026: a emissão deverá exigir vínculo empresarial válido antes da ativação da coleta.
 
 Login sozinho nunca classifica um telefone como empresarial. Limpar dados, reinstalar ou restaurar o aparelho elimina a chave privada local; o vínculo anterior fica sem comunicação/revogado e uma nova identidade precisa ser aprovada. Managed configuration e atestação podem reduzir trabalho futuro, mas não devem reativar silenciosamente uma chave nova.
 
@@ -286,7 +288,7 @@ O botão Google geral não pode criar automaticamente uma conta de colaborador. 
 
 - turno `none`: zero acesso à localização durante toda a jornada;
 - turno pontual: tentativa somente nas batidas;
-- turno contínuo em aparelho pessoal ou empresarial: coleta apenas entre início/retorno e intervalo/fim;
+- turno contínuo em aparelho pessoal: nenhuma coleta de acompanhamento; em aparelho empresarial autorizado: coleta apenas entre início/retorno e intervalo/fim;
 - troca de usuário no mesmo aparelho aplica somente a política da nova pessoa e jamais reaproveita a autorização operacional da sessão anterior;
 - aprovação empresarial, isoladamente, não inicia nem prolonga rastreio;
 - encerramento offline, revogação, logout e troca de usuário param o serviço;

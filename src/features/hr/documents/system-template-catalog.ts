@@ -17,7 +17,7 @@ import {
 } from "@/features/hr/documents/document-form-schema";
 
 export type SystemDocumentTemplateKind = "system_pdf" | "reference_docx";
-export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx" | "rep_p_receipt" | "rep_p_pilot_receipt" | "time_mirror" | "asset_custody_term" | "asset_maintenance_order" | "editor_html";
+export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx" | "rep_p_receipt" | "rep_p_pilot_receipt" | "time_mirror" | "asset_custody_term" | "asset_maintenance_order" | "editor_html" | "dre_report";
 export type SystemDocumentGenerationMode = "direct" | "contextual" | "reference";
 
 export type SystemDocumentTemplate = {
@@ -34,7 +34,7 @@ export type SystemDocumentTemplate = {
   renderer: SystemDocumentTemplateRenderer;
   /** Define onde o documento nasce; modelos contextuais não aparecem no gerador avulso. */
   generationMode: SystemDocumentGenerationMode;
-  sourceModule?: "documents" | "uniforms" | "admission" | "termination" | "time_recording" | "assets";
+  sourceModule?: "documents" | "uniforms" | "admission" | "termination" | "time_recording" | "assets" | "financial";
   sourceModulePath?: string;
   variables: string[];
   fieldMapping?: TemplateFieldMapping;
@@ -182,7 +182,7 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     category: "Admissão",
     description: "Versão 6 com localização no ponto e durante a jornada, aparelhos empresariais, metas e prêmios, aplicativos e IA, sem consentimento genérico.",
     sourcePath: `${ADMISSION_BASE}/03-termo-lgpd-v6.docx`,
-    contentHash: "09658d1c5dea398dcf76100fe30c9ac1b540b9ba4253021686a95f5b4549ec0d",
+    contentHash: "163eeb3601b5a8c632ef83e34a28dee1451483a2b91052aeced944b63b6c8e53",
     version: 6,
     variables: [
       "employee.cpf",
@@ -577,6 +577,15 @@ const editorTemplates: SystemDocumentTemplate[] = [{
   updatedAt: "2026-11-05T00:00:00.000Z",
 }];
 
+const financialReportTemplates: SystemDocumentTemplate[] = [{
+  id: "system-financial-dre-report", name: "Relatório de DRE mensal e de 12 meses", category: "Financeiro e recibos",
+  description: "Relatório contextual transitório com CMV por movimentação de estoque, unidades autorizadas, situação das fontes e comparação de competências. Não é publicado ou armazenado pelo sistema.",
+  status: "published", version: 1, templateKind: "system_pdf", renderer: "dre_report", generationMode: "contextual",
+  sourceModule: "financial", sourceModulePath: "src/features/financial/dre/report-pdf.ts", variables: [],
+  letterheadVersion: "coala-letterhead-v2", signatureScope: "none", retentionPolicyId: "manual_review",
+  sourceFormat: "pdf", isSystem: true, previewUrl: "/api/documents/templates/system-financial-dre-report/preview", updatedAt: "2026-11-17T00:00:00.000Z",
+}];
+
 export const SYSTEM_DOCUMENT_TEMPLATES: readonly SystemDocumentTemplate[] = [
   ...baseTemplates,
   ...uniformTemplates,
@@ -584,6 +593,7 @@ export const SYSTEM_DOCUMENT_TEMPLATES: readonly SystemDocumentTemplate[] = [
   ...timeRecordingTemplates,
   ...assetTemplates,
   ...editorTemplates,
+  ...financialReportTemplates,
 ];
 
 export function systemDocumentTemplateById(id: string) {

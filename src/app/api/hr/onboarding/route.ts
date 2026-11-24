@@ -4,6 +4,10 @@ import { randomUUID } from 'crypto';
 import { FieldPath, type Query } from 'firebase-admin/firestore';
 
 import { assertFormalizationAccess, serializeHrValue } from '@/features/hr/lib/server-access';
+import { AppError } from '@/lib/observability/app-error';
+import { defineSecurityEnforcer } from '@/lib/security/enforcer';
+import { defineSecurityContract } from '@/lib/security/route-contract';
+import { secureRoute } from '@/lib/security/secure-route.server';
 import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
@@ -58,6 +62,57 @@ const ONBOARDING_OVERVIEW_LIMITS = {
 } as const;
 const ONBOARDING_PAGE_LIMIT = 40;
 type OnboardingScope = keyof typeof ONBOARDING_OVERVIEW_LIMITS;
+
+type StaticRouteContext = { params: Promise<Record<string, never>> };
+type FormalizationAccess = Awaited<ReturnType<typeof assertFormalizationAccess>>;
+type OnboardingWorkspace = { workspaceId: string };
+
+function onboardingContract(method: 'GET' | 'POST') {
+  return defineSecurityContract({
+    schemaVersion: 1,
+    id: method === 'GET' ? 'hr.onboarding.list' : 'hr.onboarding.create',
+    version: 1,
+    surface: { method, path: '/api/hr/onboarding' },
+    exposure: 'authenticated',
+    identity: { kind: 'active-user' },
+    authorization: { kind: 'custom', strategy: method === 'GET' ? 'hr-formalization-view' : 'hr-formalization-onboarding-manage' },
+    resourceScope: { kind: 'workspace' },
+    input: { kind: 'none' },
+    effects: method === 'GET' ? { mode: 'read', audit: 'none' } : { mode: 'external', audit: 'none' },
+    errorExposure: 'sanitized',
+  });
+}
+
+/**
+ * Autentica pelo mesmo caminho da formalização (requireUser + permissão de formalização) e
+ * restringe o resultado ao workspace do ator. Falha de autenticação ou permissão responde 403,
+ * como a rota legada; o corpo do POST continua validado campo a campo no handler.
+ */
+function onboardingEnforcer(method: 'GET' | 'POST') {
+  const action = method === 'GET' ? 'view' as const : 'onboarding.manage' as const;
+  const strategy = method === 'GET' ? 'hr-formalization-view' : 'hr-formalization-onboarding-manage';
+  return defineSecurityEnforcer<NextRequest, StaticRouteContext, unknown, FormalizationAccess, undefined, OnboardingWorkspace>({
+    id: `${strategy}-v1`,
+    guarantees: ['authenticated-user', 'active-user', `authorization:${strategy}`, 'workspace-scoped'],
+    async enforce({ request }) {
+      const actor = await assertFormalizationAccess(request, action).catch((cause) => {
+        throw new AppError({
+          code: method === 'GET' ? 'HR_ONBOARDING_VIEW_FORBIDDEN' : 'HR_ONBOARDING_CREATE_FORBIDDEN',
+          kind: 'AUTHORIZATION',
+          safeMessage: method === 'GET' ? 'Sem permissão para acessar onboarding.' : 'Sem permissão para iniciar onboarding.',
+          cause,
+        });
+      });
+      if (!actor.workspaceId) {
+        throw new AppError({ code: 'HR_ONBOARDING_WORKSPACE_MISSING', kind: 'AUTHORIZATION' });
+      }
+      return { actor, input: undefined, resource: { workspaceId: actor.workspaceId } };
+    },
+  });
+}
+
+const getContract = onboardingContract('GET');
+const postContract = onboardingContract('POST');
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -256,9 +311,8 @@ async function createPjOnboarding(params: {
   }, { status: 201 });
 }
 
-export async function GET(request: NextRequest) {
-  const access = await assertFormalizationAccess(request, 'view').catch(() => null);
-  if (!access) return jsonError('Sem permissão para acessar onboarding.', 403);
+export const GET = secureRoute({ contract: getContract, enforcer: onboardingEnforcer('GET') }, async ({ request, security }) => {
+  const access = security.actor;
 
   const collection = hrDbAdmin.collection('onboardingProcesses');
   const scopedQuery = (scope: OnboardingScope) => {
@@ -339,11 +393,10 @@ export async function GET(request: NextRequest) {
     }, access)),
     pageInfo,
   });
-}
+});
 
-export async function POST(request: NextRequest) {
-  const access = await assertFormalizationAccess(request, 'onboarding.manage').catch(() => null);
-  if (!access) return jsonError('Sem permissão para iniciar onboarding.', 403);
+export const POST = secureRoute({ contract: postContract, enforcer: onboardingEnforcer('POST') }, async ({ request, security }) => {
+  const access = security.actor;
 
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== 'object') return jsonError('Payload inválido.');
@@ -643,4 +696,4 @@ export async function POST(request: NextRequest) {
       ...((serializeHrValue(saved.data()) as Record<string, unknown>) ?? {}),
     },
   }, { status: 201 });
-}
+});

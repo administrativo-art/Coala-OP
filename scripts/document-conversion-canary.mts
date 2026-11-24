@@ -36,7 +36,7 @@ type AnchorDefinition = {
 const ANCHORS: Record<string, AnchorDefinition[]> = {
   "system-admission-employment-probation-contract": [
     { page: 1, phrase: "CONTRATO DE TRABALHO A TÍTULO DE EXPERIÊNCIA" },
-    { page: 3, phrase: "E por estarem de pleno acordo" },
+    { page: 4, phrase: "E, por estarem de pleno acordo" },
   ],
   "system-admission-hours-bank-agreement": [
     { page: 1, phrase: "ACORDO INDIVIDUAL DE BANCO DE HORAS" },

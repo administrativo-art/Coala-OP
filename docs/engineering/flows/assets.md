@@ -1,5 +1,7 @@
 # Patrimônio: cadastro, movimentação e histórico
 
+24/11/2026: termo de posse v2 inclui cláusula condicional para aparelho empresarial com Coala Go; a emissão não ativa gestão remota nem acompanhamento. O renderer pagina descrições e acessórios extensos, preservando a área das assinaturas.
+
 **Base conferida:** incremento local `asset-lifecycle-2026-10-30`, sobre `413d2f49`. Rastreamento estático; sem homologação integrada nem migração em banco real.
 
 ## Nota fiscal recebida por Cobranças — 03/11/2026

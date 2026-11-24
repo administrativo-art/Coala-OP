@@ -26,3 +26,10 @@ test('alternância de visualização não usa ToggleGroupItem de largura fixa (o
   const offenders = tsxFiles('src').filter((file) => /<ToggleGroupItem\b[^>]*className="[^"]*\bw-(?:6|7|8|9)\b/.test(readFileSync(file, 'utf8')));
   assert.deepEqual(offenders, [], 'Use o Segmented (docs/design/selecao-e-filtros.md).');
 });
+
+test('select compacto mantém o espaço da seta mesmo com px-* da tela', () => {
+  const source = readFileSync('src/components/ui/select.tsx', 'utf8');
+  const classNameAt = source.indexOf('      className,\n');
+  const flushPaddingAt = source.indexOf('flushIcon && "overflow-hidden pr-11"');
+  assert.ok(classNameAt > 0 && flushPaddingAt > classNameAt, 'pr-11 da seta colada precisa vir depois do className no cn().');
+});

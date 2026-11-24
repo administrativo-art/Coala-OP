@@ -6,6 +6,7 @@ import type {
   CashClosureStatus,
 } from "./types";
 import { isCents, linePdvSalesSource, pdvSalesCents, sumCashDifferences, sumPdvSales } from "./dre-contract";
+import { financeExpectedCentsForLine } from "./supply-classification";
 
 function documentIdPart(value: string) {
   return value.trim().replaceAll("/", "%2F");
@@ -31,9 +32,15 @@ export function emptyCashClosureDepositState(): CashClosureDepositState {
 }
 
 function aggregateOperatorLines(lines: CashClosureLine[]) {
+  const pdvCashDifferences = sumCashDifferences(lines.filter(line => line.channel === "cash").map(line => {
+    const difference = line.reportedDifferenceCents;
+    return { version: 1 as const,
+      shortageCents: isCents(difference) ? Math.max(0, -difference) : null,
+      surplusCents: isCents(difference) ? Math.max(0, difference) : null };
+  }));
   const cashDifferences = sumCashDifferences(lines.filter(line => line.channel === "cash").map(line => {
     const difference = isCents(line.countedCents) && isCents(line.expectedCents)
-      ? line.countedCents - line.expectedCents : null;
+      ? line.countedCents - financeExpectedCentsForLine(line) : null;
     return { version: 1 as const,
       shortageCents: difference === null ? null : Math.max(0, -difference),
       surplusCents: difference === null ? null : Math.max(0, difference) };
@@ -70,6 +77,7 @@ function aggregateOperatorLines(lines: CashClosureLine[]) {
 
   return {
     pdvSales: sumPdvSales(lines.map(linePdvSalesSource)),
+    pdvCashDifferences,
     cashDifferences,
     expectedTotalCents,
     reportedTotalCents,
@@ -207,8 +215,13 @@ export function withCashClosureOperatorAggregate(
   now = closure.updatedAt,
 ): CashClosure {
   if (operators.length === 0) {
+    const knownEmpty = closure.operatorCount === 0 && pdvSalesCents(closure.pdvSales) !== null;
+    const approvedLegacy = closure.status === "approved";
     return {
       ...closure,
+      dreSelectedCashDifferences: knownEmpty ? sumCashDifferences([])
+        : approvedLegacy ? closure.finalizedCashDifferences ?? null : null,
+      drePdvFallbackOperatorCount: knownEmpty || approvedLegacy ? 0 : null,
       finalizedCashDifferences: closure.finalizedCashDifferences
         ?? (closure.operatorCount === 0 && pdvSalesCents(closure.pdvSales) !== null
           ? sumCashDifferences([])
@@ -226,6 +239,9 @@ export function withCashClosureOperatorAggregate(
   return {
     ...closure,
     finalizedCashDifferences: sumCashDifferences(approved.map(operator => operator.cashDifferences)),
+    dreSelectedCashDifferences: sumCashDifferences(operators.map(operator =>
+      operator.status === "approved" ? operator.cashDifferences : operator.pdvCashDifferences)),
+    drePdvFallbackOperatorCount: operators.length - approved.length,
     status,
     operatorCount: operators.length,
     finalizedOperatorCount: approved.length,

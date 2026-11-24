@@ -1,3 +1,4 @@
+import { WORKSPACE_ID } from '@/lib/workspace';
 import { create } from 'zustand';
 import { auth, db } from '@/lib/firebase';
 import {
@@ -392,7 +393,7 @@ export const useDPStore = create<DPStoreState>((set, get) => ({
       }
       transaction.set(
         scheduleRef,
-        stripUndefinedForCreate({ ...data, shiftCount: 0, journeyValidationVersion: 0, publicationStatus: 'draft', publicationVersion: 0, createdAt: serverTimestamp() }) as Record<string, unknown>,
+        stripUndefinedForCreate({ ...data, workspaceId: WORKSPACE_ID, shiftCount: 0, journeyValidationVersion: 0, publicationStatus: 'draft', publicationVersion: 0, createdAt: serverTimestamp() }) as Record<string, unknown>,
       );
     });
     set((current) => ({

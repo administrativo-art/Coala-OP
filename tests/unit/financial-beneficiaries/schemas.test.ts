@@ -27,8 +27,9 @@ test("perfil Pix exige destino ou preservação explícita do destino existente"
   assert.equal(supplierPaymentProfileInputSchema.safeParse({ ...base, pixKey: "14.276.603/0001-25" }).success, true);
 });
 
-test("cadastro de pessoa ou empresa exige somente a chave Pix", () => {
-  assert.equal(entityPixProfileInputSchema.safeParse({ pixKey: "financeiro@empresa.com" }).success, true);
+test("cadastro de pessoa ou empresa exige tipo explícito para chave Pix não vazia", () => {
+  assert.equal(entityPixProfileInputSchema.safeParse({ pixKey: "financeiro@empresa.com", pixKeyType: "email" }).success, true);
+  assert.equal(entityPixProfileInputSchema.safeParse({ pixKey: "financeiro@empresa.com" }).success, false);
   assert.equal(entityPixProfileInputSchema.safeParse({ pixKey: "" }).success, true);
   assert.equal(entityPixProfileInputSchema.safeParse({ pixKey: "x".repeat(181) }).success, false);
 });

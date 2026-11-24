@@ -74,10 +74,12 @@ test("SaleFee na origem também impede apropriar MDR separadamente", () => {
   assert.equal(collectFeeEvidence(request, "coala", parse("2026-10-01", true), [original], noPix).batches.length, 0);
 });
 
-test("fronteira estrita e UI separam preview, comparar vendas e confirmação", () => {
+test("fronteira estrita da prévia diária (o painel manual saiu da tela em 2026-11-15)", () => {
   assert.equal(feeActionSchema.safeParse({ action: "preview", request, amountCents: 99 }).success, false);
-  const ui = readFileSync(new URL("../../src/features/financial/acquirer-fees/fees-panel.tsx", import.meta.url), "utf8");
-  assert.match(ui, /Consultar prévia — sem gravar/); assert.match(ui, /confirmedNoManualExpense/);
-  assert.match(ui, /Consultar registros anteriores/); assert.match(ui, /action: "cancel"/);
-  assert.doesNotMatch(ui, /setInterval|onSnapshot/);
+  const page = readFileSync(new URL("../../src/features/financial/receipts-reconciliation/receipts-page.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(page, /AcquirerFeesPanel/);
+  // A despesa do mês continua na aba Taxas, agora na visão "Contabilização" do painel de taxas.
+  const panel = readFileSync(new URL("../../src/features/financial/receipts-reconciliation/fee-review-panel.tsx", import.meta.url), "utf8");
+  assert.match(page, /StoneFeeReviewPanel/);
+  assert.match(panel, /StoneFeeMonthExpensePanel/);
 });

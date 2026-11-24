@@ -52,6 +52,9 @@ test('LGPD vigente: geração, PDF, pacote, troca de versão e histórico em emu
   const refs = [onboarding, longOnboarding, invalidOnboarding, templateRef, stateRef];
   const generated = new Set();
   const fixture = {
+    source: 'manual', applicationId: null, jobOpeningId: null, employmentRelationshipType: 'clt',
+    jobRoleId: 'synthetic-role', functionId: 'synthetic-function', employerUnitId: 'synthetic-unit',
+    integrationV2: { snapshot: { schemaVersion: 'coala-integration-v1' } },
     candidateName: 'Pessoa Fictícia de Homologação',
     publicFormAnswers: { cpf: '52998224725' },
     employerUnitName: 'EMPREGADORA FICTÍCIA PARA ENSAIO LTDA',

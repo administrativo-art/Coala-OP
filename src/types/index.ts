@@ -867,6 +867,8 @@ export type PermissionSet = {
     beneficiaries: { view: boolean; viewMaskedPaymentData: boolean; managePaymentData: boolean; };
     paymentRequests: { view: boolean; create: boolean; authorize: boolean; submit: boolean; refresh: boolean; viewProof: boolean; };
     cashClosures: { view: boolean; edit: boolean; approve: boolean; adjustExpected: boolean; reopen: boolean; resync: boolean; };
+    /** Fechamento financeiro mensal da empresa. Perfis salvos antes deste campo não o têm: ausência equivale a negado. */
+    monthClosings?: { view: boolean; close: boolean; reopen: boolean; };
     cashDeposits: { view: boolean; issue: boolean; cancel: boolean; adjust: boolean; };
     interIntegration: { manage: boolean; };
     settings: { view: boolean; manageAccountPlans: boolean; manageResultCenters: boolean; manageBankAccounts: boolean; manageImportAliases: boolean; manageExpenseDescriptions: boolean; manageBudgets: boolean; };
@@ -2689,6 +2691,9 @@ export type PurchaseOrder = {
   archivedLinkedExpenseId?: string;
   financialArchiveRunId?: string;
   financialExpenseArchivedAt?: string;
+  financialSupersededByOrderId?: string;
+  financialSupersededAt?: string;
+  financialSupersededReason?: string;
   createdAt: string;
   createdBy: string; // userId
   confirmedAt?: string;
@@ -3140,6 +3145,7 @@ export const defaultGuestPermissions: PermissionSet = {
       beneficiaries: { view: false, viewMaskedPaymentData: false, managePaymentData: false },
       paymentRequests: { view: false, create: false, authorize: false, submit: false, refresh: false, viewProof: false },
       cashClosures: { view: false, edit: false, approve: false, adjustExpected: false, reopen: false, resync: false },
+      monthClosings: { view: false, close: false, reopen: false },
       cashDeposits: { view: false, issue: false, cancel: false, adjust: false },
       interIntegration: { manage: false },
       settings: { view: false, manageAccountPlans: false, manageResultCenters: false, manageBankAccounts: false, manageImportAliases: false, manageExpenseDescriptions: false, manageBudgets: false },
@@ -3256,6 +3262,7 @@ export const defaultAdminPermissions: PermissionSet = {
       beneficiaries: { view: true, viewMaskedPaymentData: true, managePaymentData: true },
       paymentRequests: { view: true, create: true, authorize: true, submit: true, refresh: true, viewProof: true },
       cashClosures: { view: true, edit: true, approve: true, adjustExpected: true, reopen: true, resync: true },
+      monthClosings: { view: true, close: true, reopen: true },
       cashDeposits: { view: true, issue: true, cancel: true, adjust: true },
       interIntegration: { manage: true },
       settings: { view: true, manageAccountPlans: true, manageResultCenters: true, manageBankAccounts: true, manageImportAliases: true, manageExpenseDescriptions: true, manageBudgets: true },
@@ -4122,6 +4129,8 @@ export type DPSchedule = {
   };
   coverageDemands?: DPCoverageDemands; // YYYY-MM-DD → intervalos mínimos para unidades sob demanda
   draftCoverageDemands?: DPCoverageDemands;
+  closedDates?: string[];
+  draftClosedDates?: string[];
   createdAt: Timestamp;
 };
 
@@ -4138,7 +4147,16 @@ export type DPScheduleRestRecord = {
   }>;
 };
 
+export type DPManualShiftDay =
+  | { mode: 'fixed'; expectedBreakMinutes: number }
+  | { mode: 'flexible'; expectedWorkMinutes: number; expectedBreakMinutes: number };
+
 export type DPShift = {
+  manualDay?: DPManualShiftDay | null;
+  manualDayId?: string | null;
+  manualOrder?: number | null;
+  manualBreak?: { start: string; end: string } | null;
+  travelFromPreviousMinutes?: number | null;
   id: string;
   scheduleId: string;
   unitId: string;
@@ -4156,6 +4174,7 @@ export type DPShift = {
   originUnitId?: string;
   exceptionReason?: string;
   countsTowardGoals?: boolean;
+  dayOffDraft?: boolean;
   dayOffSource?: 'predicted' | 'manual';
   dayOffConfirmedAt?: Timestamp;
   dayOffConfirmedBy?: string;

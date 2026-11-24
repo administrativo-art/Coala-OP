@@ -28,7 +28,7 @@ import {
 } from "../../src/features/hr/documents/system-template-catalog";
 
 test("catálogo reúne base institucional, uniformes, kit admissional e comprovante de ponto", () => {
-  assert.equal(SYSTEM_DOCUMENT_TEMPLATES.length, 23);
+  assert.equal(SYSTEM_DOCUMENT_TEMPLATES.length, 24);
   assert.deepEqual(
     [...new Set(SYSTEM_DOCUMENT_TEMPLATES.map((template) => template.category))].sort(),
     ["Admissão", "Base institucional", "Benefícios", "Contratos", "Controle de ponto", "Documentos", "Financeiro e recibos", "Patrimônio", "Uniformes"].sort(),
@@ -377,6 +377,17 @@ test("LGPD vigente remove vigência fixa e mantém índice do encerramento alinh
   assert.ok(summaryParagraph);
   assert.match(summaryParagraph, /<w:jc w:val="left"\/>/);
   assert.equal(summaryParagraph.includes('w:val="both"'), false);
+});
+
+test("termo LGPD v6 limita acompanhamento a aparelhos empresariais", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { default: PizZip } = await import("pizzip");
+  const source = SYSTEM_DOCUMENT_TEMPLATES.find((item) => item.id === "system-admission-lgpd-awareness-term")!;
+  const zip = new PizZip(await readFile(source.sourcePath!));
+  const xml = zip.file("word/document.xml")!.asText();
+  const text = xml.replace(/<[^>]+>/g, "");
+  assert.match(text, /O acompanhamento não será realizado em aparelhos pessoais/);
+  assert.match(text, /cadastrado e autorizado como aparelho empresarial/);
 });
 
 test("fontes admissionais preservam os hashes catalogados", async () => {

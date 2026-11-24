@@ -41,9 +41,13 @@ export const FINANCIAL_ROUTES = {
   cardStatements: "/dashboard/financial/reconciliation/card-statements",
   salesReconciliation: "/dashboard/financial/sales-reconciliation",
   stoneReceipts: "/dashboard/financial/stone-receipts",
+  cashDeposits: "/dashboard/financial/cash-deposits",
+  cashClosures: "/dashboard/financial/cash-closures",
   stoneAnticipations: "/dashboard/financial/stone-anticipations",
   settings: "/dashboard/financial/settings",
   paymentRequests: "/dashboard/financial/expenses/authorizations",
+  monthClosing: "/dashboard/financial/month-closing",
+  monthClosingExpenses: "/dashboard/financial/month-closing/expenses",
 } as const;
 
 // Marco operacional definido para a série contábil. Competências anteriores

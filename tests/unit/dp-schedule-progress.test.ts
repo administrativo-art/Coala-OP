@@ -75,4 +75,7 @@ test('fixed-hours units count calendar days covered by their linked shifts', () 
   ];
 
   assert.equal(countExpectedDPUnitDays({ unit, year: 2026, month: 9, shiftDefinitions }), 30);
+  assert.equal(countExpectedDPUnitDays({
+    unit, year: 2026, month: 9, shiftDefinitions, closedDates: ['2026-09-07', '2026-10-01'],
+  }), 29);
 });

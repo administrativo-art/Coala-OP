@@ -7,6 +7,7 @@ import { reviewDailySales } from "./daily-review";
 import { reviewDate } from "./validation";
 import { suggestSalesReconciliationCases } from "./matching";
 import type { DailySalesScope } from "./daily-review";
+import { checkSalesPixRefunds, type ReadPixRefundChecks } from "./pix-refund-review";
 import type { PixSourceResult } from "./pix-source";
 
 export const salesReviewRequestSchema = z.object({
@@ -42,6 +43,7 @@ export async function queryDailySales(raw: unknown, context: { isDefaultAdmin: b
   resolveBinding: (request: SalesReviewRequest, workspaceId: string) => Promise<SalesReviewBinding>;
   readPdv: (input: { filialId: string; referenceDate: string }) => Promise<unknown>;
   readStone: (input: { stoneCode: string; referenceDate: string }) => Promise<string>;
+  readPixRefundChecks?: ReadPixRefundChecks;
   readPix?: (scope: DailySalesScope) => Promise<PixSourceResult>;
   now?: () => Date; signal?: AbortSignal;
 }) {
@@ -52,7 +54,8 @@ export async function queryDailySales(raw: unknown, context: { isDefaultAdmin: b
   }
   const request = parsed.data;
   const now = dependencies.now ?? (() => new Date());
-  if (request.referenceDate > latestPublishedDate(now())) {
+  const publishedThrough = latestPublishedDate(now());
+  if (request.referenceDate > publishedThrough) {
     throw new AppError({ code: "SALES_REVIEW_NOT_PUBLISHED", kind: "VALIDATION",
       safeMessage: "Escolha uma data já publicada pela Stone: o arquivo é disponibilizado após as 05h do dia seguinte." });
   }
@@ -87,6 +90,12 @@ export async function queryDailySales(raw: unknown, context: { isDefaultAdmin: b
       ? "Pix: arquivo completo para o documento e dia; a comparação foi isolada pelo StoneCode identificado em cada registro."
       : `Pix: cobertura parcial; ${pix.excludedCount} registro(s) sem evidência suficiente. Pagamentos do PDV sem par continuam como não comparados.`);
   }
+  if (dependencies.readPixRefundChecks) {
+    result.cases = await checkSalesPixRefunds(result, dependencies.readPixRefundChecks, {
+      through: publishedThrough,
+      saleSourceHash: pix.sourceHash ?? null,
+    });
+  }
   const after = validateBinding(await dependencies.resolveBinding(request, context.workspace_id), request, context.workspace_id);
   if (JSON.stringify(after) !== JSON.stringify(binding)) {
     throw new AppError({ code: "SALES_REVIEW_BINDING_CHANGED", kind: "CONFLICT",
@@ -94,7 +103,8 @@ export async function queryDailySales(raw: unknown, context: { isDefaultAdmin: b
   }
   dependencies.signal?.throwIfAborted();
   return { ...result, pix: { status: pix.status, coverage: pix.coverage,
-    excludedCount: pix.excludedCount, fileId: pix.fileId }, mappingId: binding.mapping.id, accountId: binding.mapping.accountId,
+    excludedCount: pix.excludedCount, fileId: pix.fileId,
+    ...(pix.sourceHash && result.cases.some(row => row.pixRefundCheck) ? { sourceHash: pix.sourceHash } : {}), }, mappingId: binding.mapping.id, accountId: binding.mapping.accountId,
     pdvFilialId: binding.pdvFilialId, collectedAt: now().toISOString(),
     limitations: [...result.limitations, "A filial PDV segue o cadastro atual da unidade. Esta consulta não comprova o histórico de mudanças dessa associação."],
   };

@@ -1,8 +1,8 @@
-import { endOfMonth, format, startOfMonth, subMonths } from "date-fns";
+import { endOfMonth, format, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 import { toDate } from "@/features/financial/lib/utils";
-import { financialCompetenceMonthSchema } from "./expense-accounting-contract";
+import { financialCompetenceMonthSchema, financialExpenseCompetenceMonth } from "./expense-accounting-contract";
 import { expenseAwaitingConfirmation } from "./expense-display-state";
 import { financialDateFromIso } from "./financial-dates";
 
@@ -60,9 +60,9 @@ export function buildExpenseLifecycleData(
 
   expenses.forEach((expense) => {
     if (["draft", "cancelled", "reconciled"].includes(expense.status)) return;
-    const competence = toDate(expense.competenceDate) || toDate(expense.dueDate);
-    if (!competence) return;
-    const point = points.get(format(startOfMonth(competence), "yyyy-MM"));
+    const due = toDate(expense.dueDate);
+    const month = financialExpenseCompetenceMonth(expense) ?? (due ? format(due, "yyyy-MM") : null);
+    const point = month ? points.get(month) : undefined;
     if (!point) return;
 
     const value = Number(expense.totalValue) || 0;

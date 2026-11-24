@@ -37,6 +37,19 @@ export function canRetryDefinitivelyRejectedPayment(input: PaymentSubmissionRetr
     && paymentSubmissionAttemptCount(input) === 1;
 }
 
+/** The bank explicitly allows removing its optional beneficiary field for this rejection. */
+export function omitRejectedBeneficiaryDocument(input: PaymentSubmissionRetrySnapshot & {
+  sourceType?: string | null;
+  paymentRail?: string | null;
+}) {
+  if (!canRetryDefinitivelyRejectedPayment(input)
+    || input.sourceType !== "financial_inbox" || input.paymentRail !== "barcode") return false;
+  const details = String(input.lastError?.details ?? "").normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return details.includes("cpf/cnpj do beneficiario incorreto")
+    && details.includes("remova o atributo enviado");
+}
+
 export function canCreateCorrectedPaymentRequest(input: PaymentSubmissionRetrySnapshot & {
   sourceType?: string | null;
   paymentRail?: string | null;

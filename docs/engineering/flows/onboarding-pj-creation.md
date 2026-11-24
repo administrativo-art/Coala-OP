@@ -10,7 +10,7 @@ A tela [`hr/recruitment/integration/page.tsx`](../../../src/app/dashboard/hr/rec
 
 ## Percurso observado
 
-1. [`POST`](../../../src/app/api/hr/onboarding/route.ts) chama `assertFormalizationAccess(request, 'onboarding.manage')`, retorna 403 se não houver acesso e seleciona `createPjOnboarding` para vínculo `pj`.
+1. [`POST`](../../../src/app/api/hr/onboarding/route.ts) passa pelo `secureRoute` (contrato `hr.onboarding.create`), cujo enforcer chama `assertFormalizationAccess(request, 'onboarding.manage')` e retorna 403 se não houver acesso, e seleciona `createPjOnboarding` para vínculo `pj`.
 2. `createPjOnboarding` valida CNPJ, nome e e-mail da prestadora, unidade contratante, data de início, prazo, valor mensal positivo, dia de pagamento de 1 a 31 e ao menos uma frente com entregável. Consulta `dbAdmin.collection('dp_units')` e rejeita unidade arquivada ou sem CNPJ válido. Busca outro `onboardingProcesses` ativo para o mesmo CNPJ e retorna 409 se encontrar. [Fonte](../../../src/app/api/hr/onboarding/route.ts).
 3. A rota cria um ID/token público, a versão inicial do template de integração e o `pjWorkflow`, depois grava em `hrDbAdmin.collection('onboardingProcesses')` status `collecting_documents`, estágio `documents`, vínculo `pj`, dados da unidade, documento e configuração inicial. A construção do estado PJ está em [`onboarding-pj/core.ts`](../../../src/features/hr/onboarding-pj/core.ts).
 4. Após gravar, chama [`logAction`](../../../src/lib/log-action.ts) com `onboarding_pj_created` e [`sendTrackedIntegrationCommunication`](../../../src/lib/email/integration-communications.ts) para comunicar o link público à prestadora. A resposta 201 devolve o processo salvo. [Fonte](../../../src/app/api/hr/onboarding/route.ts).

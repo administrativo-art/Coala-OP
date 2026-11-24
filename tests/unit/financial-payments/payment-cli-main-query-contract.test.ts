@@ -7,6 +7,8 @@ test("buscas principais ficam em coleções e campos exatos", () => {
   const entity = mainPaymentLookupQuery("entity-document", "02.911.413/0001-53");
   assert.equal(entity.from[0].collectionId, "entities");
   assert.match(JSON.stringify(entity), /02\.911\.413\/0001-53/);
+  assert.match(JSON.stringify(mainPaymentLookupQuery("entity-document", "529.982.247-25")), /529\.982\.247-25/);
+  assert.throws(() => mainPaymentLookupQuery("entity-document", "11111111111"));
   assert.equal(mainPaymentLookupQuery("purchase-supplier", "supplier_1").from[0].collectionId, "purchase_orders");
   assert.match(JSON.stringify(mainPaymentLookupQuery("entity-name", "NATUCOPOS")), /fantasyName/);
   assert.match(JSON.stringify(mainPaymentLookupQuery("purchase-supplier-name", "NATUCOPOS")), /supplierName/);

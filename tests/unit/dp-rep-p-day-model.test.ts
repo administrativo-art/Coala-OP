@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { buildDayView, buildMonthView, plannedBreakMinutesOf, workedMinutes, type DayShift } from '../../src/features/dp/rep-p/day-model';
+import { buildDayView, buildMonthView, currentManualSegment, plannedBreakMinutesOf, workedMinutes, type DayShift } from '../../src/features/dp/rep-p/day-model';
 import { adjustmentStateOf, incidentFact } from '../../src/features/dp/rep-p/day-list';
 
 const shift: DayShift = { type: 'work', startTime: '10:00', endTime: '16:15', shiftName: 'Manhã', unitName: 'Quiosque', breakType: 'fixed',
@@ -155,4 +155,20 @@ describe('Leitura do dia no Registro de ponto', () => {
     assert.equal(adjustmentStateOf(empty, '2026-10-19', false, 'disabled'), 'hidden');
     assert.equal(adjustmentStateOf(empty, '2026-10-19', false, 'official'), 'available');
   });
+});
+
+
+it('mostra a sequência híbrida e avança para Y após a saída em X', () => {
+  const date = '2026-10-16';
+  const x: DayShift = { ...shift, unitId: 'x', manualOrder: 0, manualMode: 'flexible',
+    manualWorkMinutes: 240, startTime: null, endTime: null, breakType: 'none' };
+  const y: DayShift = { ...shift, unitId: 'y', manualOrder: 1, manualMode: 'fixed',
+    startTime: '13:00', endTime: '17:00', breakType: 'none' };
+  const exit = { ...mark(date, '12:30', 2), executionUnitId: 'x',
+    classification: { purpose: 'journey_end' as const, source: 'declared', status: 'confirmed' } };
+  const day = buildDayView({ date, today: date, shift: y, shifts: [y, x], absences: [], markings: [exit] });
+  assert.deepEqual(day.manualSegments, [x, y]);
+  assert.equal(day.plannedWorkMinutes, 480);
+  assert.equal(currentManualSegment(day.manualSegments ?? [], day.markings), y);
+  assert.equal(day.incidents.includes('other_unit'), false);
 });

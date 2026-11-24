@@ -16,7 +16,7 @@ Painel escuro com kicker, título, subtítulo, ações, busca, **chips de indica
 
 ## Cabeçalho das demais listas (`PageHero`)
 
-[`PageHero`](../../src/components/patterns/page-hero.tsx) é o mesmo painel escuro **sem a faixa fina**, para as telas de lista fora do Instagram: kicker (área), título `h1`, subtítulo, ações à direita (a principal em `primary-page`, a secundária em `on-dark-secondary`), chips e, nos filhos, a busca. O título **mora dentro do painel**; não há título solto acima nem botão de voltar (a navegação é a barra lateral). [`HeroChip`](../../src/components/patterns/hero-chip.tsx) é compartilhado com o `PulseHero`. Em uso: Avarias, Uniformes, Pedidos de compra e Colaboradores; as demais telas migram a cada redesenho.
+[`PageHero`](../../src/components/patterns/page-hero.tsx) é o mesmo painel escuro **sem a faixa fina**, para as telas de lista fora do Instagram: kicker (área), título `h1`, subtítulo, ações à direita (a principal em `primary-page`, a secundária em `on-dark-secondary`), chips e, nos filhos, a busca. O título **mora dentro do painel**. O caminho da página fica na faixa preta global. Quando a tela precisar de retorno, use o [botão com destino explícito](botoes.md#voltar-para-um-destino) junto ao conteúdo. [`HeroChip`](../../src/components/patterns/hero-chip.tsx) é compartilhado com o `PulseHero`. Em uso: Avarias, Uniformes, Pedidos de compra e Colaboradores; as demais telas migram a cada redesenho.
 
 ## Painel lateral compacto
 

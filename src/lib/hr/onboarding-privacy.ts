@@ -1,5 +1,5 @@
 export const ONBOARDING_PRIVACY_NOTICE_VERSION = "1.1";
-export const ONBOARDING_PRIVACY_NOTICE_EFFECTIVE_AT = "2026-11-02";
+export const ONBOARDING_PRIVACY_NOTICE_EFFECTIVE_AT = "2026-11-24";
 // Cada versão tem cópia própria em privacy_notice_versions; a 1.0 continua preservada em formalization_1_0.
 export const ONBOARDING_PRIVACY_NOTICE_SNAPSHOT_ID = "formalization_1_1";
 
@@ -18,7 +18,7 @@ export const ONBOARDING_PRIVACY_NOTICE_SUMMARY = [
 export const ONBOARDING_PRIVACY_NOTICE_TEXT = `AVISO DE PRIVACIDADE DA FORMALIZAÇÃO DE CANDIDATOS
 
 Versão 1.1
-Data de vigência: 02/11/2026
+Data de vigência: 24/11/2026
 
 1. Identificação da empresa responsável
 

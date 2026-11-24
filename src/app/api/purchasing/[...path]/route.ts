@@ -5,6 +5,10 @@ import { addMonths } from 'date-fns';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { financialDbAdmin } from '@/lib/firebase-financial-admin';
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
+import { AppError } from '@/lib/observability';
+import { defineSecurityContract } from '@/lib/security/route-contract';
+import { createStandardSecurityEnforcer } from '@/lib/security/enforcer';
+import { secureRoute } from '@/lib/security/secure-route.server';
 import { canAccessUnit } from '@/lib/unit-access';
 import { PURCHASING_COLLECTIONS } from '@/lib/purchasing-constants';
 import {
@@ -38,6 +42,8 @@ import {
 } from '@/lib/purchase-financial-expenses';
 import { computeReceiptFinancialUpdate } from '@/lib/purchase-receipt-financials';
 import { financialExpenseAccountingFields } from '@/features/financial/lib/expense-accounting-contract';
+import { normalizeBrazilianDocument, validBrazilianTaxId } from '@/features/financial/beneficiaries/normalization';
+import { commitVersionedPurchaseOrderBatch } from '@/lib/purchasing-order-version.server';
 import { isValidFinancialDateIso } from '@/features/financial/lib/financial-dates';
 import {
   cancelPurchaseSchema,
@@ -68,12 +74,47 @@ const WORKSPACE_ID = process.env.NEXT_PUBLIC_WORKSPACE_ID ?? process.env.WORKSPA
 const MAX_ORDER_ITEMS_PER_OPERATION = 100;
 const MAX_LINKED_RECORDS_PER_ORDER = 4;
 const MAX_EXPENSES_PER_ORDER = 20;
+const MAX_SIMILAR_EXPENSE_SCAN = 100;
+class SimilarExpenseScanLimitError extends Error {}
 // Operações de confirmação/retrocesso são manuais e sem polling. Cada execução
 // lê no máximo 101 itens, 5 recebimentos, 5 financeiros e 21 despesas para
 // detectar truncamento antes de qualquer transição de estado.
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
+}
+
+function comparableSupplier(value: unknown): string {
+  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+async function findSimilarPurchaseExpenses(orderId: string, supplierName: string, totalValue: number) {
+  const supplier = comparableSupplier(supplierName);
+  if (supplier.length < 5 || !Number.isFinite(totalValue) || totalValue <= 0) return [];
+  const amount = Math.round(totalValue * 100) / 100;
+  const snapshot = await financialDbAdmin.collection('expenses')
+    .where('totalValue', '>=', amount - 0.005)
+    .where('totalValue', '<=', amount + 0.005)
+    .limit(MAX_SIMILAR_EXPENSE_SCAN + 1).get();
+  if (snapshot.size > MAX_SIMILAR_EXPENSE_SCAN) {
+    throw new SimilarExpenseScanLimitError();
+  }
+  return snapshot.docs.filter((doc) => {
+    const expense = doc.data();
+    const otherSupplier = comparableSupplier(expense.supplier);
+    return expense.purchaseOrderId !== orderId
+      && expense.status !== 'cancelled'
+      && expense.originModule === 'purchasing'
+      && otherSupplier.length >= 5
+      && (otherSupplier.includes(supplier) || supplier.includes(otherSupplier));
+  }).map((doc) => ({
+    id: doc.id,
+    purchaseOrderId: String(doc.data().purchaseOrderId ?? ''),
+    supplier: String(doc.data().supplier ?? ''),
+    amount: Number(doc.data().totalValue ?? 0),
+    status: String(doc.data().status ?? ''),
+  })).sort((left, right) => left.id.localeCompare(right.id));
 }
 
 class PurchaseOrderNotFoundError extends Error {}
@@ -100,14 +141,6 @@ async function validateAccountPlanForPosting(accountPlanId: unknown): Promise<st
     .get();
   if (!children.empty) return 'Selecione uma conta específica do plano de contas, não um grupo.';
   return null;
-}
-
-async function getUserContext(request: NextRequest) {
-  try {
-    return await requireUser(request);
-  } catch {
-    return null;
-  }
 }
 
 function isAllowed(
@@ -158,10 +191,6 @@ function canPostPath(context: ServerUserContext, path: string[]) {
     return isAllowed(context, canReceivePurchase);
   }
   return null;
-}
-
-function permissionError() {
-  return jsonError('Sem permissão para esta operação de compras.', 403);
 }
 
 function docData(doc: FirebaseFirestore.DocumentSnapshot) {
@@ -515,12 +544,27 @@ async function lookupBarcode(rawBarcode: string | null) {
 }
 
 async function internalSyncExpense(orderId: string, orderData: any, uid: string) {
-  if (orderData.archivedLinkedExpenseId || orderData.financialExpenseArchivedAt) {
+  if (orderData.archivedLinkedExpenseId || orderData.financialExpenseArchivedAt || orderData.financialSupersededByOrderId) {
     return null;
   }
 
   const supplierSnap = orderData.supplierId ? await dbAdmin.collection('entities').doc(orderData.supplierId).get() : null;
   const supplier = supplierSnap?.data() as Record<string, any> | undefined;
+  const supplierTaxId = normalizeBrazilianDocument(supplier?.document);
+  if (!supplier || !validBrazilianTaxId(supplierTaxId)
+    || ((orderData.fiscal?.issuerCnpj || orderData.fiscal?.supplierDocument)
+      && normalizeBrazilianDocument(orderData.fiscal.issuerCnpj ?? orderData.fiscal.supplierDocument) !== supplierTaxId)) {
+    throw new Error('O fornecedor da compra precisa de documento fiscal válido e compatível com a nota.');
+  }
+  const unitId = String(orderData.destinationKioskId ?? '').trim();
+  if (!unitId) throw new Error('A compra precisa de unidade operacional para sincronizar a despesa.');
+  const freightEntityId = String(orderData.freightSupplierId ?? '').trim();
+  const freightEntity = freightEntityId ? await dbAdmin.collection('entities').doc(freightEntityId).get() : null;
+  const freightTaxId = freightEntity ? normalizeBrazilianDocument(freightEntity.get('document')) : '';
+  if (freightEntityId && (!freightEntity?.exists || !validBrazilianTaxId(freightTaxId)
+    || freightEntity.get('status') === 'inactive')) {
+    throw new Error('O prestador do frete precisa ter cadastro fiscal ativo e válido.');
+  }
 
   const totalValue = Number(orderData.totalEstimated ?? 0);
   const goodsSupplierName = supplier?.fantasyName || supplier?.name || orderData.supplierName || orderData.supplierId || orderId;
@@ -567,6 +611,9 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
 
   const sharedPayload = {
     workspaceId: WORKSPACE_ID,
+    supplierId: orderData.supplierId,
+    unitId,
+    billingIdentity: { supplierTaxId },
     paymentAccountId: orderData.paymentAccountId ?? null,
     paymentAccountName: orderData.paymentAccountName ?? null,
     paymentMethodId: orderData.paymentMethodId ?? null,
@@ -584,6 +631,8 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     originModule: 'purchasing',
     originStatus: 'pending_audit',
     purchaseOrderId: orderId,
+    purchaseInvoiceAccessKey: orderData.invoiceAccessKey ?? null,
+    purchaseInvoiceNumber: orderData.invoiceNumber ?? orderData.fiscal?.number ?? null,
     purchaseOrderTotalValue: totalValue,
     purchaseGoodsAmount: Math.max(totalValue - Number(orderData.deliveryFee ?? 0) - Number(orderData.serviceFee ?? 0), 0),
     purchaseFreightAmount: Number(orderData.deliveryFee ?? 0),
@@ -618,6 +667,10 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
       } : {}),
       description: component.description,
       supplier: component.supplier,
+      supplierId: component.role === 'freight' ? freightEntityId || null : orderData.supplierId,
+      billingIdentity: component.role === 'freight'
+        ? (freightTaxId ? { supplierTaxId: freightTaxId } : null)
+        : { supplierTaxId },
       accountPlan: component.accountPlanId,
       accountId: component.accountPlanId,
       accountPlanId: component.accountPlanId,
@@ -670,8 +723,18 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     const existingServiceFee = existingExpenses.find((document) => document.id === linkedServiceFeeId)
       ?? existingExpenses.find((document) => document.data().purchaseExpenseRole === 'service_fee');
 
+    const goodsLocked = Boolean(existingGoods && purchaseExpenseHasSettlementEvidence(existingGoods.data()));
+    if (goodsLocked && existingGoods) {
+      const current = existingGoods.data();
+      if (Math.round(Number(current.totalValue) * 100) !== Math.round(primaryComponent.totalValue * 100)
+        || current.supplierId !== orderData.supplierId || current.unitId !== unitId
+        || normalizeBrazilianDocument(current.billingIdentity?.supplierTaxId) !== supplierTaxId
+        || current.purchaseExpenseRole !== primaryComponent.role) {
+        throw new Error('A mercadoria vinculada ao pagamento mudou; não é seguro sincronizar o frete.');
+      }
+    }
     for (const existingExpense of [existingGoods, existingFreight, existingServiceFee]) {
-      if (!existingExpense) continue;
+      if (!existingExpense || (goodsLocked && existingExpense.id === existingGoods?.id)) continue;
       assertPurchaseExpenseCanSync(existingExpense.data());
     }
 
@@ -682,7 +745,7 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     const serviceFeeRef = existingServiceFee?.ref
       ?? financialDbAdmin.collection('expenses').doc(`purchase_service_fee_${orderId}`);
 
-    transaction.set(goodsRef, {
+    if (!goodsLocked) transaction.set(goodsRef, {
       ...componentPayload(primaryComponent, freightComponent ? freightRef.id : serviceFeeComponent ? serviceFeeRef.id : null, goodsRef.id),
       ...(existingGoods ? {} : { createdAt: now, createdBy: uid }),
     }, { merge: true });
@@ -743,12 +806,8 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
   return syncedExpenses.goodsExpenseId;
 }
 
-export async function GET(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const path = (await context.params).path ?? [];
+async function handleGet(request: NextRequest, userContext: ServerUserContext, path: string[]) {
   const [resource, id, child, childId] = path;
-  const userContext = await getUserContext(request);
-  if (!userContext) return jsonError('Não autorizado.', 401);
-  if (!isAllowed(userContext, canViewPurchasing)) return permissionError();
 
   if (resource === 'barcode' && id === 'lookup') {
     return lookupBarcode(request.nextUrl.searchParams.get('barcode'));
@@ -816,13 +875,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
   return NextResponse.json(docData(doc));
 }
 
-export async function POST(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const path = (await context.params).path ?? [];
+async function handlePost(request: NextRequest, userContext: ServerUserContext, path: string[]) {
   const [resource, id, child] = path;
-  const userContext = await getUserContext(request);
-  if (!userContext) return jsonError('Não autorizado.', 401);
-  const canPost = canPostPath(userContext, path);
-  if (canPost === false) return permissionError();
   const decoded = userContext.decoded;
   const body = await request.json().catch(() => ({}));
   const now = new Date().toISOString();
@@ -951,6 +1005,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     }
     const ref = dbAdmin.collection('purchase_orders').doc();
     const items = Array.isArray(body.items) ? body.items : [];
+    if (items.length > MAX_ORDER_ITEMS_PER_OPERATION) {
+      return jsonError('O pedido excede o limite seguro de itens.', 409);
+    }
     const itemsTotal = items.reduce((sum: number, item: any) => sum + purchaseLineNetTotal(item), 0);
     const deliveryFee = Number(body.deliveryFee ?? 0);
     const serviceFee = Number(body.serviceFee ?? 0);
@@ -982,6 +1039,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       ...(destinationKioskId ? { destinationKioskId } : {}),
       supplierId: body.supplierId || '',
       supplierName: supplierName || '',
+      externalOrderNumber: typeof body.externalOrderNumber === 'string' ? body.externalOrderNumber.trim() : null,
       status: 'created',
       receiptMode: body.receiptMode || 'future_delivery',
       estimatedReceiptDate,
@@ -1020,10 +1078,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       updatedAt: now,
       createdBy: decoded.uid,
     };
-    await ref.set(orderData);
+    const batch = dbAdmin.batch();
+    batch.create(ref, orderData);
 
     if (items.length > 0) {
-      const batch = dbAdmin.batch();
       for (const item of items) {
         const itemRef = ref.collection('items').doc();
         const q = Number(item.quantityOrdered || 0);
@@ -1063,25 +1121,26 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           notes: item.notes ?? null,
         });
       }
-      await batch.commit();
     }
+    await batch.commit();
     return NextResponse.json({ id: ref.id }, { status: 201 });
   }
 
   if (resource === 'orders' && id && child === 'confirm') {
     const orderRef = dbAdmin.collection('purchase_orders').doc(id);
-    const [orderSnap, itemsSnap, existingReceiptsSnap, existingFinancialsSnap] = await Promise.all([
-      orderRef.get(),
+    const orderSnap = await orderRef.get();
+    if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
+    const [itemsSnap, existingReceiptsSnap, existingFinancialsSnap] = await Promise.all([
       orderRef.collection('items').limit(MAX_ORDER_ITEMS_PER_OPERATION + 1).get(),
       dbAdmin.collection('purchase_receipts').where('purchaseOrderId', '==', id).limit(MAX_LINKED_RECORDS_PER_ORDER + 1).get(),
       dbAdmin.collection('purchase_financials').where('purchaseOrderId', '==', id).limit(MAX_LINKED_RECORDS_PER_ORDER + 1).get(),
     ]);
-    if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
     if (itemsSnap.size > MAX_ORDER_ITEMS_PER_OPERATION
       || existingReceiptsSnap.size > MAX_LINKED_RECORDS_PER_ORDER
       || existingFinancialsSnap.size > MAX_LINKED_RECORDS_PER_ORDER) {
       return jsonError('O pedido excede o limite seguro para confirmação automática.', 409);
     }
+    if (itemsSnap.empty) return jsonError('Inclua ao menos um item antes de confirmar o pedido.', 409);
     const order = orderSnap.data()!;
     if (order.status !== 'created') {
       return jsonError('Apenas pedidos em revisão podem ser confirmados.', 409);
@@ -1150,15 +1209,46 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       return jsonError('Remova a taxa de serviço dos itens para evitar cobrança duplicada.');
     }
 
-    batch.update(orderRef, { 
+    let similarExpenses;
+    try {
+      similarExpenses = await findSimilarPurchaseExpenses(id, String(order.supplierName ?? ''), totalEstimated);
+    } catch (error) {
+      if (error instanceof SimilarExpenseScanLimitError) {
+        return jsonError('Há muitas despesas do mesmo valor para verificar. Solicite revisão financeira antes de confirmar.', 409);
+      }
+      throw error;
+    }
+    const approval = body.similarExpenseApproval;
+    if (similarExpenses.length > 0) {
+      const expectedIds = similarExpenses.map((item) => item.id);
+      const approvedIds = Array.isArray(approval?.candidateIds)
+        ? approval.candidateIds.filter((value: unknown): value is string => typeof value === 'string').sort()
+        : [];
+      const reason = typeof approval?.reason === 'string' ? approval.reason.trim() : '';
+      if (JSON.stringify(expectedIds) !== JSON.stringify(approvedIds) || reason.length < 10) {
+        return NextResponse.json({
+          code: 'SIMILAR_EXPENSE_APPROVAL_REQUIRED',
+          error: 'Há despesas semelhantes. Confira os registros e informe o motivo para confirmar esta nova obrigação.',
+          candidates: similarExpenses,
+        }, { status: 409 });
+      }
+    }
+
+    const confirmationUpdate = {
       status: 'confirmed', 
       totalEstimated,
       confirmedAt: now,
       confirmedBy: decoded.uid,
+      ...(similarExpenses.length > 0 ? { similarExpenseApproval: {
+        candidateIds: similarExpenses.map((item) => item.id),
+        reason: approval.reason.trim(),
+        approvedBy: decoded.uid,
+        approvedAt: now,
+      } } : {}),
       financialReversalStatus: FieldValue.delete(),
       financialReversalError: FieldValue.delete(),
       updatedAt: now,
-    });
+    };
 
     const reusableReceiptDoc = existingReceiptsSnap.docs
       .filter((document) => document.data().status === 'cancelled' && document.data().revertedAt)
@@ -1290,7 +1380,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       updatedAt: now,
     }, { merge: true });
 
-    await batch.commit();
+    if (!await commitVersionedPurchaseOrderBatch(batch, orderRef, orderSnap, confirmationUpdate)) {
+      return jsonError('O pedido mudou durante a confirmação. Confira os itens e tente novamente.', 409);
+    }
 
     // Sync financial expense
     await internalSyncExpense(id, { ...order, totalEstimated }, decoded.uid).catch(e => console.error('Sync expense error:', e));
@@ -1334,7 +1426,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         if (!orderSnap.exists) throw new PurchaseOrderNotFoundError();
 
         const order = orderSnap.data() as Record<string, any>;
-        if (order.archivedLinkedExpenseId || order.financialExpenseArchivedAt) {
+        if (order.archivedLinkedExpenseId || order.financialExpenseArchivedAt || order.financialSupersededByOrderId) {
           throw new PurchaseStageReversionBlockedError(
             'O vínculo financeiro deste pedido já foi arquivado e não pode ser retrocedido por este fluxo.',
           );
@@ -2537,6 +2629,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
 
     const order = orderSnap.data() as Record<string, any>;
+    if (order.financialSupersededByOrderId) {
+      return jsonError(`A obrigação financeira deste pedido foi substituída pelo pedido ${order.financialSupersededByOrderId}.`, 409);
+    }
     if (order.archivedLinkedExpenseId || order.financialExpenseArchivedAt) {
       return jsonError('A despesa anterior deste pedido foi arquivada na virada financeira de 01/08/2026.', 409);
     }
@@ -2547,18 +2642,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
   return jsonError('Operação POST não implementada para este caminho.', 404);
 }
 
-export async function PATCH(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const path = (await context.params).path ?? [];
+async function handlePatch(request: NextRequest, userContext: ServerUserContext, path: string[]) {
   const [resource, id, child, childId] = path;
-  const userContext = await getUserContext(request);
-  if (!userContext) return jsonError('Não autorizado.', 401);
-  const canPatch =
-    resource === 'quotations'
-      ? isAllowed(userContext, canCreateQuotation)
-      : resource === 'orders'
-        ? isAllowed(userContext, canCreatePurchase)
-        : null;
-  if (canPatch === false) return permissionError();
   const body = await request.json().catch(() => ({}));
   const now = new Date().toISOString();
 
@@ -2603,13 +2688,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
   if (resource === 'orders' && id && child === 'items' && childId) {
     const orderRef = dbAdmin.collection('purchase_orders').doc(id);
     const itemRef = orderRef.collection('items').doc(childId);
-    const [orderSnap, itemSnap, itemsSnap] = await Promise.all([
-      orderRef.get(),
+    const orderSnap = await orderRef.get();
+    if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
+    const [itemSnap, itemsSnap] = await Promise.all([
       itemRef.get(),
       orderRef.collection('items').get(),
     ]);
-    if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
     if (!itemSnap.exists) return jsonError('Item do pedido não encontrado.', 404);
+    if (orderSnap.get('status') !== 'created') return jsonError('Itens de compra confirmada não podem ser editados.', 409);
 
     const currentOrder = orderSnap.data()!;
     const currentItem = itemSnap.data() ?? {};
@@ -2669,8 +2755,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
       ...treatmentFields,
       notes: nextItem.notes ?? null,
     });
-    batch.update(orderRef, { totalEstimated: nextTotalEstimated, updatedAt: now });
-    await batch.commit();
+    if (!await commitVersionedPurchaseOrderBatch(batch, orderRef, orderSnap,
+      { totalEstimated: nextTotalEstimated, updatedAt: now })) {
+      return jsonError('O pedido mudou durante a edição do item. Confira os itens e tente novamente.', 409);
+    }
 
     const financialSnap = await dbAdmin
       .collection('purchase_financials')
@@ -2704,6 +2792,69 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
     const currentOrder = orderSnap.data()!;
 
     const { items, ...rest } = body;
+    if (['status', 'confirmedAt', 'confirmedBy', 'linkedExpenseId'].some((field) => Object.prototype.hasOwnProperty.call(rest, field))) {
+      return jsonError('Confirmação e vínculo financeiro da compra só podem ser alterados pelo fluxo próprio.', 409);
+    }
+    if (currentOrder.status === 'confirmed' && (Array.isArray(items) || [
+      'supplierId', 'destinationKioskId', 'workspaceId',
+      'totalEstimated', 'deliveryFee', 'serviceFee', 'freightPaymentMode', 'serviceFeePaymentMode',
+      'freightSupplierName', 'paymentMethod', 'paymentCondition',
+      'paymentDueDate', 'installmentsCount', 'installmentDueDates', 'purchaseDate',
+      'linkedFreightExpenseId', 'linkedServiceFeeExpenseId',
+    ].some((field) => Object.prototype.hasOwnProperty.call(rest, field)))) {
+      return jsonError('Dados fiscais e financeiros de compra confirmada não podem ser alterados pela edição geral.', 409);
+    }
+    if (currentOrder.status === 'confirmed' && Object.prototype.hasOwnProperty.call(rest, 'freightSupplierId')) {
+      const freightSupplierId = String(rest.freightSupplierId ?? '').trim();
+      const freightExpenseId = String(currentOrder.linkedFreightExpenseId ?? '').trim();
+      if (!freightSupplierId || currentOrder.freightSupplierId || currentOrder.freightPaymentMode !== 'separate'
+        || !freightExpenseId || !String(currentOrder.freightSupplierName ?? '').trim()) {
+        return jsonError('O prestador só pode ser vinculado ao frete separado ainda pendente.', 409);
+      }
+      const [freightSupplier, freightExpense] = await Promise.all([
+        dbAdmin.collection('entities').doc(freightSupplierId).get(),
+        financialDbAdmin.collection('expenses').doc(freightExpenseId).get(),
+      ]);
+      if (!freightSupplier.exists || freightSupplier.get('status') === 'inactive'
+        || !validBrazilianTaxId(normalizeBrazilianDocument(freightSupplier.get('document')))
+        || !freightExpense.exists || freightExpense.get('purchaseOrderId') !== id
+        || freightExpense.get('purchaseExpenseRole') !== 'freight'
+        || freightExpense.get('status') !== 'pending' || freightExpense.get('paymentRequestId')
+        || freightExpense.get('paidAt') || freightExpense.get('linkedBankTransactionId')) {
+        return jsonError('O cadastro ou a despesa de frete não permite completar o vínculo.', 409);
+      }
+      rest.freightSupplierId = freightSupplierId;
+    }
+    if (currentOrder.status === 'confirmed' && ['invoiceAccessKey', 'invoiceNumber', 'fiscal']
+      .some((field) => Object.prototype.hasOwnProperty.call(rest, field))) {
+      const fiscal = rest.fiscal;
+      const key = String(rest.invoiceAccessKey ?? '');
+      const supplierSnap = await dbAdmin.collection('entities').doc(String(currentOrder.supplierId ?? '')).get();
+      const supplierTaxId = normalizeBrazilianDocument(supplierSnap.get('document'));
+      const goodsCents = Math.round(Number(currentOrder.totalEstimated) * 100)
+        - (currentOrder.freightPaymentMode === 'separate' ? Math.round(Number(currentOrder.deliveryFee ?? 0) * 100) : 0)
+        - (currentOrder.serviceFeePaymentMode === 'separate' ? Math.round(Number(currentOrder.serviceFee ?? 0) * 100) : 0);
+      if (currentOrder.invoiceAccessKey || currentOrder.fiscal?.issuerCnpj || currentOrder.fiscal?.supplierDocument
+        || currentOrder.invoiceNumber || !/^\d{44}$/.test(key) || !validBrazilianTaxId(supplierTaxId)
+        || key.slice(6, 20) !== supplierTaxId || !fiscal || typeof fiscal !== 'object'
+        || normalizeBrazilianDocument(fiscal.issuerCnpj ?? fiscal.supplierDocument) !== supplierTaxId
+        || Number(fiscal.totalCents) !== goodsCents || !String(rest.invoiceNumber ?? '').trim()
+        || !String(fiscal.series ?? '').trim() || !String(fiscal.protocol ?? fiscal.authorizationProtocol ?? '').trim()) {
+        return jsonError('A primeira NF da compra deve corresponder ao fornecedor e ao valor da mercadoria.', 409);
+      }
+      const linkedExpenseId = String(currentOrder.linkedExpenseId ?? '');
+      if (linkedExpenseId) {
+        const expense = await financialDbAdmin.collection('expenses').doc(linkedExpenseId).get();
+        const requestId = String(expense.get('paymentRequestId') ?? '');
+        if (requestId) {
+          const request = await financialDbAdmin.collection('bankPaymentRequests').doc(requestId).get();
+          if (!request.exists || ['awaiting_financial_authorization', 'ready_to_submit', 'submitting', 'failed']
+            .includes(String(request.get('status') ?? ''))) {
+            return jsonError('Há Pix em preparo ou envio; revise a solicitação antes de vincular nova NF.', 409);
+          }
+        }
+      }
+    }
     if (Object.prototype.hasOwnProperty.call(rest, 'destinationKioskId')) {
       const destinationKioskId = typeof rest.destinationKioskId === 'string'
         ? rest.destinationKioskId.trim()
@@ -2839,8 +2990,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
       rest.freightSupplierName = null;
     }
 
-    batch.update(orderRef, { ...rest, updatedAt: now });
-    await batch.commit();
+    if (!await commitVersionedPurchaseOrderBatch(batch, orderRef, orderSnap, { ...rest, updatedAt: now })) {
+      return jsonError('O pedido mudou durante a edição. Confira os dados e tente novamente.', 409);
+    }
 
     const nextTotalEstimated = Number(rest.totalEstimated ?? currentOrder.totalEstimated ?? 0);
     const nextDeliveryFee = normalizedDeliveryFee;
@@ -2900,14 +3052,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
   return jsonError('Operação PATCH não implementada para este caminho.', 404);
 }
 
-export async function DELETE(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const path = (await context.params).path ?? [];
+async function handleDelete(path: string[]) {
   const [resource, id, child, childId] = path;
-  const userContext = await getUserContext(request);
-  if (!userContext) return jsonError('Não autorizado.', 401);
-  if (resource === 'quotations' && !isAllowed(userContext, canCreateQuotation)) {
-    return permissionError();
-  }
 
   if (resource === 'quotations' && id && child === 'items' && childId) {
     await dbAdmin.collection('quotations').doc(id).collection('items').doc(childId).delete();
@@ -2916,3 +3062,65 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 
   return jsonError('Operação DELETE não implementada para este caminho.', 404);
 }
+
+
+type PurchasingContext = { params: Promise<{ path?: string[] }> };
+
+function purchasingContract(method: "GET" | "POST" | "PATCH" | "DELETE") {
+  return defineSecurityContract({
+    schemaVersion: 1,
+    id: `purchasing.dispatch.${method.toLowerCase()}`,
+    version: 1,
+    surface: { method, path: "/api/purchasing/[...path]" },
+    exposure: "authenticated",
+    identity: { kind: "active-user" },
+    authorization: { kind: "custom", strategy: "purchasing-method-permission" },
+    resourceScope: { kind: "none" },
+    input: { kind: "none" },
+    effects: { mode: method === "GET" ? "read" : method === "DELETE" ? "delete" : "write", audit: "none" },
+    errorExposure: "sanitized",
+  });
+}
+
+function purchasingEnforcer(contract: ReturnType<typeof purchasingContract>) {
+  return createStandardSecurityEnforcer<NextRequest, PurchasingContext, unknown, ServerUserContext, undefined, undefined>(
+    contract,
+    {
+      async authenticate({ request }) {
+        return requireUser(request).catch((cause) => {
+          throw new AppError({ code: "PURCHASING_AUTH_REQUIRED", kind: "AUTHENTICATION", cause });
+        });
+      },
+      async authorize({ actor, routeContext }) {
+        const path = (await routeContext.params).path ?? [];
+        const [resource] = path;
+        const method = contract.surface.method;
+        const allowed = method === "GET" ? isAllowed(actor, canViewPurchasing)
+          : method === "POST" ? canPostPath(actor, path)
+          : resource === "quotations" ? isAllowed(actor, canCreateQuotation)
+          : method === "PATCH" && resource === "orders" ? isAllowed(actor, canCreatePurchase)
+          : null;
+        if (allowed === false) {
+          throw new AppError({
+            code: "PURCHASING_ACCESS_FORBIDDEN", kind: "AUTHORIZATION",
+            safeMessage: "Sem permissão para esta operação de compras.",
+          });
+        }
+      },
+    },
+  );
+}
+
+const getContract = purchasingContract("GET");
+const postContract = purchasingContract("POST");
+const patchContract = purchasingContract("PATCH");
+const deleteContract = purchasingContract("DELETE");
+
+export const GET = secureRoute({ contract: getContract, enforcer: purchasingEnforcer(getContract) }, async ({ request, routeContext, security }) =>
+  handleGet(request, security.actor, (await routeContext.params).path ?? []));
+export const POST = secureRoute({ contract: postContract, enforcer: purchasingEnforcer(postContract) }, async ({ request, routeContext, security }) =>
+  handlePost(request, security.actor, (await routeContext.params).path ?? []));
+export const PATCH = secureRoute({ contract: patchContract, enforcer: purchasingEnforcer(patchContract) }, async ({ request, routeContext, security }) =>
+  handlePatch(request, security.actor, (await routeContext.params).path ?? []));
+export const DELETE = secureRoute({ contract: deleteContract, enforcer: purchasingEnforcer(deleteContract) }, async ({ routeContext }) =>
+  handleDelete((await routeContext.params).path ?? []));

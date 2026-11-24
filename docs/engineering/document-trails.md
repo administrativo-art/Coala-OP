@@ -61,3 +61,10 @@ Geração guiada persiste partes cadastradas em `partyKeys` com papel participan
 2026-11-03 — Passe residual: referências de participante escolhidas no gerador recebem autorização no servidor por namespace RH/UID antes de dados detalhados e Storage; seletor usa a mesma regra. Guarda patrimonial atual e referências legadas/históricas são descobertas em fontes distintas, sem copiar o PDF. Paginação do inventário usa cache privada/TTL e não revela posição negada. Callback assinado congelado permanece preservado. Ver [pessoa/escopo](document-person-traceability.md).
 
 2026-11-03 — Fronteira nativa de admissão: intake manual natural persiste UUID de pessoa embutida antes da conta; geração/assinatura usam hr.onboardingPersons. Checkpoint UID/operação/User/RH precede promoção e permite retomada após falha. PJ preserva contexto empresarial sem titular humano inventado. Lookup/censo readonly não alocam UUID nem atribuem placeholders a candidatos; ver [contrato e limites](document-person-traceability.md).
+
+## DRE mensal e12meses
+
+TelaDRE→DreExportMenu→POST `/api/financial/dre/export`→fontes oficiais autorizadas→núcleo `metrics.ts`→PDFtimbrado `report-pdf.ts` / Excel `report-xlsx.ts`→download transitório. Catálogo `system-financial-dre-report` v1, prévia fictícia. Sem Storage, publicação, assinatura, webhook ou nova instância no acervo. Não gera histórico de pessoa. [Contrato e limites](flows/dre.md#relatórios-mensal-e-de-12-meses--17112026).
+
+
+O contracheque recebido pelo usuário permanece em employeeDocuments/PAYSLIP e não cria modelo gerado. A conferência de eventos lê o mesmo PDF por hash, registra entrega/revisão e integra o bloqueio antes do pacote espelho+contracheque; pacote, tentativa e hrSignatureRequests preservam a prova. O fluxo canônico de geração/assinatura/publicação continua descrito em [Registro REP-P](flows/dp-time-recording.md).

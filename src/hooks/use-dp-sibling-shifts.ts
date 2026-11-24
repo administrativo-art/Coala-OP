@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import type { DPShift } from '@/types';
-import { fetchScheduleShifts, subscribeToDPScheduleShiftChanges } from '@/features/dp/schedules/client';
+import { fetchDraftScheduleShifts, fetchScheduleShifts, subscribeToDPScheduleShiftChanges } from '@/features/dp/schedules/client';
 
 /**
  * Loads shifts from multiple sibling schedules (same month/year, different unit)
  * and returns them merged. Used to show ghost badges in the per-unit schedule editor.
  */
-export function useDPSiblingShifts(scheduleIds: string[]): {
+export function useDPSiblingShifts(scheduleIds: string[], editable = false): {
   shifts: DPShift[];
   loading: boolean;
 } {
@@ -29,20 +29,31 @@ export function useDPSiblingShifts(scheduleIds: string[]): {
     }
 
     let cancelled = false;
+    let request = 0;
     const load = () => {
+      const current = ++request;
+      const isCurrent = () => !cancelled && current === request;
       void Promise.resolve()
         .then(() => {
-          if (!cancelled) setLoading(true);
-          return Promise.all(activeIds.map(fetchScheduleShifts));
+          if (isCurrent()) setLoading(true);
+          return Promise.allSettled(activeIds.map(async (id) => {
+            if (!editable) return fetchScheduleShifts(id);
+            try {
+              return (await fetchDraftScheduleShifts(id)).shifts;
+            } catch {
+              return fetchScheduleShifts(id);
+            }
+          }));
         })
-        .then((results) => { if (!cancelled) setShifts(results.flat()); })
-        .catch(() => { if (!cancelled) setShifts([]); })
-        .finally(() => { if (!cancelled) setLoading(false); });
+        .then((results) => {
+          if (isCurrent()) setShifts(results.flatMap((result) => result.status === 'fulfilled' ? result.value : []));
+        })
+        .finally(() => { if (isCurrent()) setLoading(false); });
     };
     load();
     const unsubscribe = subscribeToDPScheduleShiftChanges(activeIds, load);
     return () => { cancelled = true; unsubscribe(); };
-  }, [idsKey]);
+  }, [editable, idsKey]);
 
   return { shifts, loading };
 }

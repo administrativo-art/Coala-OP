@@ -28,7 +28,7 @@ Aviso contextual distinto proposto:
 
 > Este turno prevê trabalho entre unidades. Quando o acompanhamento estiver autorizado e configurado, o aplicativo poderá registrar amostras de localização durante o trabalho, com indicador visível, pausa no intervalo e opção de encerrar. As atualizações dependem do tempo, deslocamento e disponibilidade do aparelho. A localização serve à conferência humana e não altera automaticamente seu ponto ou pagamento. Para solicitar documentos ou atendimento, procure o RH.
 
-**Aparelho.** O acompanhamento ocorre no aparelho em que a pessoa estiver autenticada no Coala Go, empresarial ou pessoal; o vínculo empresarial não é requisito da coleta. Enquanto ativo, há notificação permanente. Saída da conta ou troca de usuário encerra a coleta daquela pessoa, e a outra pessoa passa a seguir somente a própria jornada e política. Em aparelho pessoal, a coleta se limita ao período do turno configurado; o RH não pode pedir ao colaborador que mantenha o aplicativo aberto fora da jornada nem tratar a recusa de usar o próprio aparelho como falta disciplinar sem decisão específica da controladora.
+**Aparelho.** Decisão da controladora em 24/11/2026: acompanhamento da jornada somente em aparelhos fornecidos pela empresa, cadastrados e autorizados como empresariais; aparelhos pessoais ficam excluídos. O termo v6 reflete esse limite. O serviço atual ainda não exige vínculo empresarial na emissão da autorização temporária: a coleta permanece desligada (`DP_JOURNEY_LOCATION_ENABLED=false`) até implementar e verificar essa restrição e realizar o ensaio físico. Enquanto ativa, a coleta deverá exibir notificação permanente e encerrar na saída da conta ou troca de usuário.
 
 **Dados do aparelho.** O serviço usa somente posição, precisão, velocidade e deslocamento informados pelo sistema de localização. Sensores de movimento e orientação, bateria e rede não são usados hoje; o uso desses sinais, previsto como possibilidade no [plano](../../planos/plano-monitoramento-continuo-celular-empresarial.md), exige nova versão do termo antes de entrar no aplicativo, e eles nunca podem gerar conclusão disciplinar, de saúde ou biométrica. A conversão em endereço aproximado usa serviço de geocodificação com cota e cache; não geocodificar cada amostra.
 
@@ -52,7 +52,7 @@ O painel não envia posições a mapas externos. Atribuições de permissão dev
 
 ## Guarda e encerramento
 
-O termo v6 e o código preveem 1.825 dias para as evidências; esse prazo é uma proposta operacional que precisa de justificativa por modalidade e não decorre automaticamente da obrigação de manter o registro de ponto. A consulta comum não retorna evidência vencida, mesmo enquanto a exclusão automática estiver pendente. A trilha de acesso tem expiração de 1.825 dias. Índices e TTL precisam ser publicados e conferidos no destino.
+O termo v6 e o código preveem 1.825 dias para as evidências; a controladora confirmou em 24/11/2026 a retenção de até cinco anos, separada dos registros fiscais de ponto. A justificativa de necessidade e a revisão jurídica por modalidade continuam exigidas antes da coleta e não decorre automaticamente da obrigação de manter o registro de ponto. A consulta comum não retorna evidência vencida, mesmo enquanto a exclusão automática estiver pendente. A trilha de acesso tem expiração de 1.825 dias. Índices e TTL precisam ser publicados e conferidos no destino.
 
 Antes da coleta real, aprovar o procedimento de eliminação, cópias de segurança, eventual suspensão por litígio e descarte após essa suspensão. A presença de `legalHold` no contrato não comprova que todo o procedimento de custódia e eliminação foi implementado. Nenhuma retenção adicional pode ser aplicada informalmente pelo RH.
 
@@ -63,9 +63,9 @@ Antes da coleta real, aprovar o procedimento de eliminação, cópias de seguran
 | Finalidade, necessidade e base legal da captura pontual | Controladora com revisão jurídica | Pendente |
 | Necessidade e base próprias do acompanhamento entre unidades | Controladora com revisão jurídica | Pendente |
 | Frequência efetiva, limites e janela durante trabalho | Controladora após ensaio físico | Pendente |
-| Justificativa para cinco anos de coordenadas e alternativa de prazo menor | Controladora e responsável de privacidade | Pendente |
+| Prazo de guarda das coordenadas | Controladora e responsável de privacidade | Até cinco anos confirmado em 24/11/2026; justificativa de necessidade, descarte e revisão jurídica antes da coleta |
 | RIPD, fornecedores, eliminação, custódia e risco residual | Controladora e responsável de privacidade | Pendente |
-| Uso do acompanhamento em aparelho pessoal e tratamento da recusa | Controladora com revisão jurídica | Pendente |
+| Aparelhos admitidos para acompanhamento | Controladora | Decidido em 24/11/2026: somente aparelhos da empresa; restrição técnica e ensaio ainda pendentes |
 | Frequência informada no termo v6 × frequência configurada | Controladora após ensaio físico | Pendente |
 | Ações remotas da gestão de dispositivos (bloqueio, apagamento) e quem as executa | Controladora | Pendente |
 | Entrega do aviso e comunicação aos atuais colaboradores | RH após aprovação dos textos | Pendente |

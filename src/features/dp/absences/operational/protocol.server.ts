@@ -15,7 +15,7 @@ import { absenceCivilDateSchema } from '../requests/schemas';
 import { createResponsibilityTaskNotifications, resolveGapAlertRecipients,
   resolveOperationalResponsibility, responsibilityScopeKey } from '@/features/dp/responsibility-coverage/service.server';
 import { operationalDayRefs, operationalGuardRequested, operationalReadinessRef, operationalReadinessValid,
-  type OccupancySlice, shiftOccupancySlices } from './occupancy-guard.server';
+  type OccupancySlice, scheduledShiftOccupancySlices } from './occupancy-guard.server';
 
 const intents = hrDbAdmin.collection('dp_absenceOperationalIntents');
 const requests = hrDbAdmin.collection('dp_absenceRequests');
@@ -170,9 +170,8 @@ export async function prepareOperationalAbsence(intent: OperationalIntent) {
     })), ...revisionShifts]) {
       if (shift.type === 'day_off') continue;
       if (shift.type !== 'work') throw fail('ABSENCE_OPERATIONAL_SHIFT_INVALID');
-      shiftOccupancySlices({ beneficiaryUid: intent.beneficiaryUid,
-        date: String(shift.date ?? ''), startTime: shift.startTime as string,
-        endTime: shift.endTime as string, addsOccupancy: false });
+      scheduledShiftOccupancySlices({ beneficiaryUid: intent.beneficiaryUid,
+        date: String(shift.date ?? ''), shift, addsOccupancy: false });
     }
     const refs = intent.segments.map((segment) => ({ segment,
       ...operationalDayRefs(intent.workspaceId, intent.beneficiaryUid, segment.date) }));
@@ -304,9 +303,8 @@ export async function activateOperationalAbsence(intent: OperationalIntent) {
     const displaced = intent.blocksSchedule ? candidates.filter((shift) => {
       if (shift.data.type === 'day_off') return false;
       if (shift.data.type !== 'work') throw fail('ABSENCE_OPERATIONAL_SHIFT_INVALID');
-      const segments = shiftOccupancySlices({ beneficiaryUid: intent.beneficiaryUid,
-        date: String(shift.data.date ?? ''), startTime: shift.data.startTime as string,
-        endTime: shift.data.endTime as string, addsOccupancy: false });
+      const segments = scheduledShiftOccupancySlices({ beneficiaryUid: intent.beneficiaryUid,
+        date: String(shift.data.date ?? ''), shift: shift.data, addsOccupancy: false });
       return segments.some((segment) => intent.segments.some((absence) => segment.date === absence.date
         && overlap(segment, absence)));
     }) : [];

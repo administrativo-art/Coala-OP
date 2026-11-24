@@ -1,4 +1,6 @@
-export type ReconciliationSalesChannel = "pix" | "debit_card" | "credit_card";
+import type { UnlinkedResolution } from "./unlinked-resolution";
+import type { PixRefundCheck } from "@/lib/integrations/stone/pix-refunds";
+export type ReconciliationSalesChannel = "pix" | "debit_card" | "credit_card" | "voucher";
 
 export type ReconciliationSaleStatus =
   | "approved"
@@ -22,6 +24,7 @@ export type PdvSaleAdjustment = {
   type: "item_cancellation";
   originalAmountCents: number;
   cancelledAmountCents: number;
+  itemDiscountCents?: number;
   finalAmountCents: number;
   lastCancellationAt: string | null;
   finalizedAt: string;
@@ -79,5 +82,8 @@ export type SuggestedSalesReconciliationCase = {
   kind: SalesReconciliationCaseKind;
   matchBasis: SalesReconciliationMatchBasis;
   confidence: "high" | "medium" | "none";
-  reviewStatus: "auto_checked" | "attention_required";
+  paymentMethodDifference?: { pdv: "credit_card"; stone: "voucher" };
+  pixRefundCheck?: PixRefundCheck;
+  reviewStatus: "auto_checked" | "attention_required" | "resolved_without_link";
+  unlinkedResolution?: UnlinkedResolution;
 };

@@ -220,6 +220,26 @@ private fun shareFile(context: Context, file: File, mimeType: String, title: Str
 }
 
 /** Digital clock with seconds (Portaria 671, Anexo IX), from the official reading plus the phone's elapsed time. */
+@Composable private fun ManualJourneySegments(state: TimeState) {
+    val date = state.today.toString()
+    val segments = TimeRules.manualSegments(state.shifts, date)
+    if (segments.isEmpty()) return
+    val current = TimeRules.currentManualSegment(segments, state.markings, date)
+    CardBlock {
+        Text("Jornada em trechos", style = MaterialTheme.typography.titleMedium)
+        segments.forEach { segment ->
+            val timing = if (segment.manualMode == "flexible") {
+                val load = "${segment.manualWorkMinutes ?: 0} min"
+                if (segment.startTime != null && segment.endTime != null)
+                    "Flexível · $load · Janela ${segment.startTime}–${segment.endTime}" else "Flexível · $load"
+            } else "Fixo · Entrada ${segment.startTime} · Saída ${segment.endTime}"
+            val prefix = if (segment == current) "Trecho atual ou próximo · " else ""
+            Text("$prefix${segment.unitName ?: "Unidade"} · $timing",
+                style = if (segment == current) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
 @Composable private fun OfficialClockCard(state: TimeState, online: Boolean) {
     val zone = TimeRules.unitZone(state.options, state.unitId)
     // Monotonic clock plus the official offset: changing the phone's hour does not move the time shown.
@@ -305,7 +325,9 @@ private fun breakColors(level: BreakLevel) = when (level) {
     val units = state.options?.executionUnits.orEmpty()
     val pilotMode = state.options?.mode == "pilot"
     val today = state.today.toString()
-    val todayShift = state.shifts.firstOrNull { it.date == today }
+    val manualSegments = TimeRules.manualSegments(state.shifts, today)
+    val todayShift = if (manualSegments.isNotEmpty()) TimeRules.currentManualSegment(manualSegments, state.markings, today)
+        else state.shifts.firstOrNull { it.date == today }
     val todayMarkings = state.markings.filter { it.workDate == today }
     val (suggestedPurpose, suggestionReliable) = daySuggestion(state)
     val todayPunches = TimeRules.day(today, state.markings, state.treatments)
@@ -393,6 +415,7 @@ private fun breakColors(level: BreakLevel) = when (level) {
     }) {
         if (section == "today") {
             OfficialClockCard(state, online)
+            ManualJourneySegments(state)
             ScheduledUnitNotice(state.options, todayShift, state.unitId)
             if (todayShift?.executionUnitPolicy == "free" && todayShift.locationTrackingPolicy == "workday") {
                 CardBlock {
@@ -807,12 +830,41 @@ private fun purposeColor(purpose: String?) = when (purpose) {
     }
 }
 
+@Composable private fun DayCorrectionsList(state: TimeState, busy: Boolean, vm: TimeViewModel) {
+    state.dayCorrections.forEach { item ->
+        var response by rememberSaveable(item.id, item.version) { mutableStateOf("") }
+        var adjustmentId by rememberSaveable(item.id, item.version) { mutableStateOf("") }
+        Column(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Conferência de " + java.time.LocalDate.parse(item.workDate).format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")), color = Tokens.ink)
+            Text(item.reason, color = Tokens.ink)
+            Text(when (item.status) {
+                "requested" -> "Aguardando sua resposta"
+                "responded" -> "Aguardando decisão do RH"
+                else -> "Conferência concluída"
+            }, color = Tokens.ink)
+            item.response?.let { Text(it, color = Tokens.ink) }
+            if (item.status == "requested") {
+                Text("Se precisar corrigir horários, envie primeiro o pedido de ajuste e selecione-o abaixo.", color = Tokens.ink)
+                TextButton({ adjustmentId = "" }, enabled = !busy) { Text(if (adjustmentId.isEmpty()) "✓ Somente justificativa" else "Somente justificativa") }
+                state.adjustments.filter { it.workDate == item.workDate && it.scope != "pilot" }.forEach { adjustment ->
+                    TextButton({ adjustmentId = adjustment.id }, enabled = !busy) {
+                        Text((if (adjustmentId == adjustment.id) "✓ " else "") + "Vincular ajuste " + adjustment.status + " · " + adjustment.id.takeLast(8))
+                    }
+                }
+                OutlinedTextField(response, { response = it.take(1000) }, label = { Text("Resposta ao RH") }, enabled = !busy, modifier = Modifier.fillMaxWidth())
+                Button({ vm.respondToDayCorrection(item, response, adjustmentId.ifEmpty { null }) }, enabled = !busy && response.trim().length >= 10) { Text("Enviar resposta") }
+            }
+        }
+    }
+}
+
 @Composable private fun AdjustmentHistoryTab(state: TimeState, busy: Boolean, vm: TimeViewModel, onDay: (String) -> Unit) {
     AuxiliaryMonthPicker(state, busy, vm)
     if (!state.monthDataAvailable) {
         EmptyState("Ajustes ainda não consultados", "Puxe para atualizar quando a consulta estiver disponível.")
         return
     }
+    DayCorrectionsList(state, busy, vm)
     var filter by rememberSaveable { mutableStateOf("all") }
     if (state.adjustments.isEmpty() && !busy) EmptyState("Nenhum ajuste neste mês", "Os pedidos enviados aparecem aqui com a decisão do gestor ou do DP.")
     if (state.adjustments.isNotEmpty()) {
@@ -1396,8 +1448,13 @@ private fun swapShift(value: ShiftSwapShift) = "${fullDate(value.date)} · ${val
 private fun daySuggestion(state: TimeState): Pair<String, Boolean> {
     val today = state.today.toString()
     val markings = state.markings.filter { it.workDate == today }
-    val shift = state.shifts.firstOrNull { it.date == today }
-    return TimeRules.suggestedPurpose(markings, shift) to
+    val segments = TimeRules.manualSegments(state.shifts, today)
+    val current = TimeRules.currentManualSegment(segments, markings, today)
+    val shift = current ?: state.shifts.firstOrNull { it.date == today }
+    val purpose = if (current?.breakType == "none" &&
+        markings.maxByOrNull { TimeRules.markingInstant(it.markedAt)?.toEpochMilli() ?: 0L }?.classification?.purpose == "journey_start")
+        "journey_end" else TimeRules.suggestedPurpose(markings, shift)
+    return purpose to
         (state.dayLoad == DayLoad.READ && markings.all { it.classification?.purpose != null })
 }
 
@@ -1461,6 +1518,7 @@ internal class PunchSubmitter(val capturing: State<Boolean>, val submit: (online
         mutableStateOf(if (suggestionReliable) suggestedPurpose else null)
     }
     val lockedPurpose = pending?.purpose
+    ManualJourneySegments(state)
     if (pilotMode) Text("ENSAIO · SEM VALIDADE REP-P", color = Tokens.warning, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = .8.sp))
     val (heading, time, origin) = when {
         // A replay resends the first attempt: its time is shown as such, the server keeps the official one.
@@ -1573,7 +1631,9 @@ internal class PunchSubmitter(val capturing: State<Boolean>, val submit: (online
     val busy = feedback.busy || submitter.capturing.value
     val units = state.options?.executionUnits.orEmpty()
     val today = state.today.toString()
-    val todayShift = state.shifts.firstOrNull { it.date == today }
+    val manualSegments = TimeRules.manualSegments(state.shifts, today)
+    val todayShift = if (manualSegments.isNotEmpty()) TimeRules.currentManualSegment(manualSegments, state.markings, today)
+        else state.shifts.firstOrNull { it.date == today }
     if (choosingUnit) PickerSheet("Unidade da batida", units.map { it.id to it.name }, state.unitId.orEmpty(), { vm.unit(it) }) { choosingUnit = false }
     fun close() { vm.dismissLast(); vm.dismissOffline(); onDismiss() }
     ModalBottomSheet(onDismissRequest = { if (!busy) close() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = Tokens.surface) {

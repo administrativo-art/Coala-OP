@@ -9,14 +9,14 @@ const unavailable = (status: PixSourceResult["status"], fileId: string | null): 
   status, coverage: null, facts: [], excludedCount: 0, fileId,
 });
 
-export async function readPixSalesSource(scope: DailySalesScope): Promise<PixSourceResult> {
+export async function readPixSalesSource(scope: DailySalesScope, transaction?: FirebaseFirestore.Transaction): Promise<PixSourceResult> {
   const document = process.env.STONE_CONCILIATION_DOCUMENT?.replace(/\D/g, "") ?? "";
   if (!/^(?:\d{11}|\d{14})$/.test(document)) return unavailable("not_configured", null);
   const fileId = stonePixFileId(document, scope.referenceDate);
   const ref = financialDbAdmin.collection(STONE_PIX_FILE_COLLECTION).doc(fileId);
   const requestRef = financialDbAdmin.collection(STONE_PIX_REQUEST_COLLECTION).doc(fileId);
   // Read-only transaction provides a common snapshot across metadata and rows.
-  return financialDbAdmin.runTransaction(async transaction => {
+  const read = async (transaction: FirebaseFirestore.Transaction): Promise<PixSourceResult> => {
     const [head, request] = await Promise.all([transaction.get(ref), transaction.get(requestRef)]);
     if (!head.exists) {
       const requestStatus = request.get("status");
@@ -32,5 +32,6 @@ export async function readPixSalesSource(scope: DailySalesScope): Promise<PixSou
     }
     const rows = await transaction.get(ref.collection("transactions").limit(501));
     return reviewPixSnapshot({ head: data, rows: rows.docs.map(row => row.data()), document, fileId, scope });
-  }, { readOnly: true });
+  };
+  return transaction ? read(transaction) : financialDbAdmin.runTransaction(read, { readOnly: true });
 }

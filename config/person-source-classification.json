@@ -1,29 +1,136 @@
 {
   "schemaVersion": 1,
-  "nonPersonalCollections": [],
+  "nonPersonalCollections": [
+    "accounts",
+    "dailySalesRefundWatches",
+    "dp_units",
+    "feeAutoPendingMonths",
+    "financialAcquirerFeeBatches",
+    "kiosks",
+    "pixRefundReviewDates",
+    "profiles",
+    "resultCenters",
+    "stonePixRefundBackfills",
+    "stonePixRefundMonths",
+    "stoneReceiptMonthSnapshots",
+    "providerPortalLoginAttempts"
+  ],
   "approvedLegacyGaps": [
+    "purchase-order-person-suppliers-gap",
+    "purchase-order-confirmers-gap",
     "audit-targets",
     "editor-content-versions",
-    "financial-expense-payment-records"
+    "financial-expense-payment-records",
+    "stone-pix-file-owner-identity-gap",
+    "stone-portfolio-raw-xml-identity-gap",
+    "financial-cash-counting-session-openers",
+    "financial-inter-charge-creators",
+    "financial-card-statement-creators",
+    "financial-card-obligation-creators",
+    "schedule-draft-edit-subjects"
   ],
   "dynamicCollectionReaders": [
     {
       "file": "src/features/privacy/person-inventory.server.ts",
       "function": "collectPersonSource",
       "call": "db.collection(source.collection)",
-      "functionSha256": "dc358a2c7dc14670962230101db117310a335c4fa91550af8f44da4c9ae95bc6"
+      "functionSha256": "984ce322e2201a9c77e2f7182e4aab7b3a5d790c45cab6f16546134d1774b314"
     },
     {
       "file": "src/features/privacy/person-inventory.server.ts",
       "function": "collectPersonSource",
       "call": "db.collection(\"employees\").doc(value).collection(source.collection)",
-      "functionSha256": "dc358a2c7dc14670962230101db117310a335c4fa91550af8f44da4c9ae95bc6"
+      "functionSha256": "984ce322e2201a9c77e2f7182e4aab7b3a5d790c45cab6f16546134d1774b314"
     },
     {
       "file": "src/features/privacy/person-inventory.server.ts",
       "function": "collectPersonSource",
       "call": "db.collectionGroup(source.collection)",
-      "functionSha256": "dc358a2c7dc14670962230101db117310a335c4fa91550af8f44da4c9ae95bc6"
+      "functionSha256": "984ce322e2201a9c77e2f7182e4aab7b3a5d790c45cab6f16546134d1774b314"
+    },
+    {
+      "file": "src/features/dp/time-adjustments/day-corrections.server.ts",
+      "function": "closureReference",
+      "call": "db.collection(CLOSURES)",
+      "functionSha256": "7e7050c2b871f223ac4469219e74ac480e6accca5cd097d3daaacb6f71b1045d"
+    },
+    {
+      "file": "src/features/service-portal/closure-server.ts",
+      "function": "closureRecords",
+      "call": "db.collection(CLOSURE_COLLECTION)",
+      "functionSha256": "5f1ac6ed4267648bb19052c24947b19e105ebe03e7d3ac5bf86153a2923ac375"
+    },
+    {
+      "file": "src/features/service-portal/closure-server.ts",
+      "function": "closureVersions",
+      "call": "ref.collection(VERSION_COLLECTION)",
+      "functionSha256": "0795b07362724f5f07ccdac6a48507ef257294a19eacf9d75720db392e88056a"
+    },
+    {
+      "file": "src/features/service-portal/closure-server.ts",
+      "function": "closurePeople",
+      "call": "ref.collection(PEOPLE_COLLECTION)",
+      "functionSha256": "407f0c7b78a49279c38f3a132dffddf52ae179a365b99a958177bf09400b8561"
+    },
+    {
+      "file": "src/features/service-portal/closure-server.ts",
+      "function": "closureMirrors",
+      "call": "ref.collection(MIRROR_COLLECTION)",
+      "functionSha256": "46d9016a00fe91508bbaac806030f543a0b2c151c711f45737fcb0892e38b500"
+    },
+    {
+      "file": "src/features/service-portal/closure-server.ts",
+      "function": "closureBanks",
+      "call": "ref.collection(BANK_COLLECTION)",
+      "functionSha256": "b16855d1769b331e0b5cee3b4ff693fa32a4ed4d1a0c71cd34d0b6286c105801"
+    },
+    {
+      "file": "src/features/service-portal/closure-server.ts",
+      "function": "closureMovements",
+      "call": "ref.collection(MOVEMENT_COLLECTION)",
+      "functionSha256": "43bc70fc86b604252c8ddf99be1d25ddc1aea885bfeee2de6536855424fbb457"
+    },
+    {
+      "file": "src/features/service-portal/closure-server.ts",
+      "function": "closurePackages",
+      "call": "ref.collection(PACKAGE_COLLECTION)",
+      "functionSha256": "6e58cddea2f0f5e785d425b38136c77c2e7e5e1599466261f954dc74845b709f"
+    },
+    {
+      "file": "src/features/dp/time-adjustments/payslip-reconciliation.server.ts",
+      "function": "reconciliationClosures",
+      "call": "db.collection(LEGACY_CLOSURES)",
+      "functionSha256": "90501cced09ea25447091b480c67b2449f1801ad960e725fb4655b4b852b84c1"
+    },
+    {
+      "file": "src/features/dp/time-adjustments/payslip-reconciliation.server.ts",
+      "function": "reconciliationPeople",
+      "call": "ref.collection(LEGACY_PEOPLE)",
+      "functionSha256": "7d71d8b1d9af1266a200b140191473c719a3c2309d55c0309bcb1567815c9035"
+    },
+    {
+      "file": "src/features/dp/time-adjustments/payslip-reconciliation.server.ts",
+      "function": "reconciliationPackages",
+      "call": "ref.collection(LEGACY_PACKAGES)",
+      "functionSha256": "a1f2ff92e15ee1b53a4193c1e5a48261633eeee84241022261148507a46a5db7"
+    },
+    {
+      "file": "src/features/dp/time-adjustments/closing-package.server.ts",
+      "function": "closingPackages",
+      "call": "ref.collection(CLOSING_PACKAGES)",
+      "functionSha256": "25fd21488a05575ac562b3141012670c79355916ed04f25e421ddc3081432ab8"
+    },
+    {
+      "file": "src/features/dp/time-adjustments/payroll-finance.server.ts",
+      "function": "financeClosures",
+      "call": "db.collection(FINANCE_CLOSURES)",
+      "functionSha256": "fc2b97bb737829364ff89397e6a18c4af222cb7209ea9be8b47595f2692d3a3a"
+    },
+    {
+      "file": "src/features/dp/time-adjustments/payroll-finance.server.ts",
+      "function": "financePeople",
+      "call": "ref.collection(FINANCE_PEOPLE)",
+      "functionSha256": "ae22b024af2a5960fe270412aea360a606bb445421319a2347281a4799b3843e"
     }
   ]
 }

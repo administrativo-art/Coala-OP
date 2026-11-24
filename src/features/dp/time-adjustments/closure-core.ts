@@ -3,6 +3,7 @@
  * cada pessoa traz, um a um e ligados ao dia, os pedidos de ajuste, as ausências e as trocas de turno que tocam
  * o mês, inclusive recusados e cancelados. Puro: o serviço lê, este módulo monta, carimba e compara versões.
  */
+import type { RosterReason } from './closure-roster';
 import { createHash } from 'node:crypto';
 
 export type ClosureAdjustment = {
@@ -28,9 +29,9 @@ export type ClosureShiftSwap = {
   acts: Array<{ action: 'submitted' | 'accepted' | 'rejected' | 'cancelled' | 'marked_stale'; at: string; actorUid: string; actorName: string; declaration: string }>;
 };
 export type ClosurePerson = {
-  uid: string; name: string | null; adjustments: ClosureAdjustment[]; absences: ClosureAbsence[]; shiftSwaps: ClosureShiftSwap[];
+  uid: string; name: string | null; rosterReason?: RosterReason; adjustments: ClosureAdjustment[]; absences: ClosureAbsence[]; shiftSwaps: ClosureShiftSwap[];
 };
-export type ClosureRosterPerson = { uid: string; name: string | null };
+export type ClosureRosterPerson = Pick<ClosurePerson, 'uid' | 'name' | 'rosterReason'>;
 export type ClosureChanges = { added: string[]; changed: string[]; removed: string[] };
 
 /** Versões fechadas antes da inclusão da troca de turno continuam legíveis sem migração destrutiva. */
@@ -108,13 +109,14 @@ export function buildDeclaration(adjustments: Array<ClosureAdjustment & { employ
  * ausência no mês. Pessoas com ocorrência continuam incluídas ainda que tenham saído da equipe antes do fechamento.
  */
 export function includeClosureRoster(people: ClosurePerson[], roster: ClosureRosterPerson[]): ClosurePerson[] {
-  const merged = new Map(people.map((person) => [person.uid, { ...person, adjustments: [...person.adjustments], absences: [...person.absences], shiftSwaps: [...person.shiftSwaps] }]));
+  const merged = new Map<string, ClosurePerson>(people.map((person) => [person.uid, { ...person, rosterReason: 'occurrence', adjustments: [...person.adjustments], absences: [...person.absences], shiftSwaps: [...person.shiftSwaps] }]));
   for (const subject of roster) {
     const current = merged.get(subject.uid);
     if (current) {
+      if (subject.rosterReason) current.rosterReason = subject.rosterReason;
       if (!current.name && subject.name) current.name = subject.name;
     } else {
-      merged.set(subject.uid, { uid: subject.uid, name: subject.name, adjustments: [], absences: [], shiftSwaps: [] });
+      merged.set(subject.uid, { ...subject, adjustments: [], absences: [], shiftSwaps: [] });
     }
   }
   return [...merged.values()].sort((left, right) => (left.name ?? '').localeCompare(right.name ?? '', 'pt-BR') || left.uid.localeCompare(right.uid));

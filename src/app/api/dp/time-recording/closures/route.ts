@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { assertClosureAccess, closeCompetence, readCompetenceClosure } from '@/features/dp/time-adjustments/closure.server';
-import { closureCloseSchema, closureQuerySchema, type ClosureCloseInput } from '@/features/dp/time-adjustments/schemas';
-import { generateBankClosedCompetence } from '@/features/dp/time-bank/service.server';
+import { assertClosureAccess, closeCompetence, justifyClosureAlert, previewClosureAlerts, readCompetenceClosure } from '@/features/dp/time-adjustments/closure.server';
+import { closureSubmitSchema, closureQuerySchema, type ClosureAlertReviewInput, type ClosureCloseInput } from '@/features/dp/time-adjustments/schemas';
+import { generateBankClosedCompetence, readPayrollReadiness } from '@/features/dp/time-bank/service.server';
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
 import { AppError } from '@/lib/observability/app-error';
 import { defineSecurityEnforcer } from '@/lib/security/enforcer';
@@ -23,7 +23,7 @@ const getContract = defineSecurityContract({
   input: { kind: 'schema', schema: 'dp.time-closure.query', unknownFields: 'reject' },
   effects: { mode: 'read', audit: 'none' }, errorExposure: 'sanitized',
 });
-const getEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, { competence: string }, Resource>({
+const getEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, { competence: string; alerts?: '1'; payroll?: '1' }, Resource>({
   id: 'dp-time-closure-read-v1',
   guarantees: ['authenticated-user', 'active-user', 'permission-checked', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
   async enforce({ request }) {
@@ -42,22 +42,23 @@ const postContract = defineSecurityContract({
   input: { kind: 'schema', schema: 'dp.time-closure.close', unknownFields: 'reject' },
   effects: { mode: 'write', audit: 'server-authoritative' }, errorExposure: 'sanitized',
 });
-const postEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, ClosureCloseInput, Resource>({
+const postEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, ClosureCloseInput | ClosureAlertReviewInput, Resource>({
   id: 'dp-time-closure-close-v1',
   guarantees: ['authenticated-user', 'active-user', 'permission-checked', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
   async enforce({ request }) {
     const actor = await requireUser(request).catch((cause) => rethrowServerAuthenticationFailure(cause));
     assertClosureAccess(actor, 'close');
     if ([...request.nextUrl.searchParams.keys()].length) throw new AppError({ code: 'PTRP_CLOSURE_QUERY_INVALID', kind: 'VALIDATION' });
-    const parsed = closureCloseSchema.safeParse(await request.json().catch(() => null));
+    const parsed = closureSubmitSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) throw new AppError({ code: 'PTRP_CLOSURE_INPUT_INVALID', kind: 'VALIDATION', safeMessage: parsed.error.issues[0]?.message ?? 'Fechamento inválido.' });
     return { actor, input: parsed.data, resource: { workspaceId: actor.workspace_id } };
   },
 });
 
 export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer }, async ({ security }) =>
-  NextResponse.json(await readCompetenceClosure(security.actor, security.input.competence), { headers: { 'Cache-Control': 'private, no-store' } }));
+  NextResponse.json(security.input.payroll ? await readPayrollReadiness(security.actor, security.input.competence) : security.input.alerts ? await previewClosureAlerts(security.actor, security.input.competence) : await readCompetenceClosure(security.actor, security.input.competence), { headers: { 'Cache-Control': 'private, no-store' } }));
 export const POST = secureRoute({ contract: postContract, enforcer: postEnforcer }, async ({ security }) => {
+  if ('action' in security.input) return NextResponse.json(await justifyClosureAlert(security.actor, security.input), { headers: { 'Cache-Control': 'private, no-store' } });
   const closure = await closeCompetence(security.actor, security.input);
   const timeBank = await generateBankClosedCompetence(security.actor, closure.competence, closure.version);
   return NextResponse.json({ closure, timeBank }, { status: 201, headers: { 'Cache-Control': 'private, no-store' } });
