@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { PaymentCliError } from "./payment-cli-transport";
+import { validBrazilianTaxId } from "../../src/features/financial/beneficiaries/normalization";
 
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,170}$/);
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
@@ -69,10 +70,10 @@ export const purchaseFiscalSchema = z.object({
 }).strict();
 
 export const supplierEntitySchema = z.object({
-  type: z.literal("pessoa_juridica"),
+  type: z.enum(["pessoa_fisica", "pessoa_juridica"]),
   name: z.string().trim().min(2).max(200),
-  fantasyName: z.string().trim().min(2).max(200),
-  document: z.string().transform((value) => value.replace(/\D/g, "")).pipe(z.string().regex(/^\d{14}$/)),
+  fantasyName: z.string().trim().min(2).max(200).optional(),
+  document: z.string().transform((value) => value.replace(/\D/g, "")).refine(validBrazilianTaxId, "CPF/CNPJ inválido."),
   address: z.object({
     street: z.string().trim().min(2).max(200),
     number: z.string().trim().min(1).max(30),
@@ -81,9 +82,14 @@ export const supplierEntitySchema = z.object({
     city: z.string().trim().min(2).max(120),
     state: z.string().trim().regex(/^[A-Z]{2}$/),
     zipCode: z.string().transform((value) => value.replace(/\D/g, "")).pipe(z.string().regex(/^\d{8}$/)),
-  }).strict(),
+  }).strict().optional(),
   notes: z.string().trim().min(1).max(500).optional(),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if ((value.type === "pessoa_fisica" ? value.document.length !== 11 : value.document.length !== 14)
+    || (value.type === "pessoa_juridica" && (!value.fantasyName || !value.address))) {
+    context.addIssue({ code: "custom", path: ["document"], message: "Tipo, documento, nome fantasia ou endereço incompatível." });
+  }
+});
 
 export type PurchaseRegistration = z.infer<typeof purchaseRegistrationSchema>;
 export type PurchaseFiscal = z.infer<typeof purchaseFiscalSchema>;

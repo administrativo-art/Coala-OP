@@ -2,13 +2,12 @@ import { dbAdmin } from "@/lib/firebase-admin";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import { AppError } from "@/lib/observability";
-import { normalizeBrazilianDocument, maskPaymentDestination } from "../beneficiaries/normalization";
-import { decryptPaymentDestination, encryptPaymentDestination } from "../beneficiaries/security.server";
+import { normalizeBrazilianDocument } from "../beneficiaries/normalization";
+import { decryptPaymentDestination } from "../beneficiaries/security.server";
 import { supplierNamesAreCompatible } from "../inbox/confirmed-document";
 import { reconcileExpenseProvisionOnServer } from "../expense-provision-reconciliation.server";
 import { financialExpenseCompetenceMonth } from "../lib/expense-accounting-contract";
 import { assertExpenseAllowsNewPayment } from "../lib/source-settlement";
-import type { SupplierPaymentProfile } from "../beneficiaries/types";
 import type { PaymentActor } from "./types";
 
 export type SupplierPixConfirmation = {
@@ -29,6 +28,8 @@ export async function confirmSupplierPixSource(
   workspace: string,
   actor: PaymentActor,
   confirmation: SupplierPixConfirmation,
+  assertUnitAccess?: (expense: FirebaseFirestore.DocumentData | undefined) => void,
+  onAfterSourceRead?: () => Promise<void>,
 ) {
   const document = confirmation.beneficiaryDocument;
   if (!CnpjValidator.validate(document).valid) supplierPixConflict("O CNPJ informado é inválido.");
@@ -41,8 +42,13 @@ export async function confirmSupplierPixSource(
     expenses.doc(expenseId).get(), entityRef.get(), requests.doc(confirmation.previousPaidRequestId).get(), profileRef.get(),
   ]);
   const data = expense.data();
+  assertUnitAccess?.(data);
+  await onAfterSourceRead?.();
   const entityData = entity.data();
   const actualId = data?.provisionType === "forecast" ? `supplier_pix_actual_${expenseId}` : expenseId;
+  if (actualId !== expenseId && data?.status === "reconciled") {
+    assertUnitAccess?.((await expenses.doc(actualId).get()).data());
+  }
   if (!data || !entityData || entityData.status === "inactive" || entityData.type !== "pessoa_juridica"
     || !supplierNamesAreCompatible(data.supplier, entityData.name)
     || (data.supplierId && data.supplierId !== entityId)
@@ -84,64 +90,25 @@ export async function confirmSupplierPixSource(
     supplierPixConflict("A despesa ou previsão já tem pagamento ou outra ordem bancária.");
   }
 
-  const registeredDocument = normalizeBrazilianDocument(entityData.document || entityData.cnpj);
+  const registeredDocument = normalizeBrazilianDocument(entityData.document);
   const expenseDocument = normalizeBrazilianDocument(data.billingIdentity?.supplierTaxId);
-  if ((registeredDocument && registeredDocument !== document) || (expenseDocument && expenseDocument !== document)) {
+  if (registeredDocument !== document) {
+    supplierPixConflict("Cadastre o CNPJ confirmado na entidade antes de preparar o Pix.");
+  }
+  if (expenseDocument && expenseDocument !== document) {
     supplierPixConflict("O CNPJ informado diverge do cadastro ou da despesa.");
   }
 
-  const now = new Date().toISOString();
   const checkProfile = (value: FirebaseFirestore.DocumentSnapshot) => {
-    if (value.exists && (value.get("active") !== true || value.get("paymentMethod") !== "pix_key"
+    if (!value.exists) supplierPixConflict("Configure e valide o perfil Pix documental do fornecedor antes de preparar.");
+    if (value.get("active") !== true || value.get("paymentMethod") !== "pix_key"
       || value.get("pixKeyType") !== "cnpj" || !value.get("validatedAt")
       || normalizeBrazilianDocument(value.get("holderDocument")) !== document
-      || normalizeBrazilianDocument(decryptPaymentDestination(String(value.get("encryptedPaymentData") ?? "")).pixKey) !== document)) {
+      || normalizeBrazilianDocument(decryptPaymentDestination(String(value.get("encryptedPaymentData") ?? "")).pixKey) !== document) {
       supplierPixConflict("O fornecedor já tem um perfil Pix diferente ou desativado. Confira o cadastro.");
     }
   };
   checkProfile(profile);
-
-  if (!registeredDocument || !entityData.document) {
-    await dbAdmin.runTransaction(async (transaction) => {
-      const [currentSnapshot, sameDocument, sameNormalizedDocument, sameCnpj] = await Promise.all([
-        transaction.get(entityRef),
-        transaction.get(dbAdmin.collection("entities").where("document", "==", document).limit(2)),
-        transaction.get(dbAdmin.collection("entities").where("documentNormalized", "==", document).limit(2)),
-        transaction.get(dbAdmin.collection("entities").where("cnpj", "==", document).limit(2)),
-      ]);
-      const current = currentSnapshot.data();
-      if ([sameDocument, sameNormalizedDocument, sameCnpj].some((matches) => matches.docs.some((match) => match.id !== entityId))) {
-        supplierPixConflict("O CNPJ está vinculado a outro cadastro.");
-      }
-      if (!current || current.name !== entityData.name || current.status === "inactive"
-        || normalizeBrazilianDocument(current.document || current.cnpj) !== registeredDocument) {
-        supplierPixConflict("O cadastro do fornecedor mudou após a conferência.");
-      }
-      transaction.update(entityRef, { document, documentNormalized: document, updatedAt: now, updatedBy: actor.uid });
-      transaction.create(entityRef.collection("events").doc(), {
-        type: "SUPPLIER_PIX_DOCUMENT_CONFIRMED", at: now, actorId: actor.uid, previousPaidRequestId: previous.id,
-      });
-    });
-  }
-
-  if (!profile.exists) {
-    await financialDbAdmin.runTransaction(async (transaction) => {
-      const current = await transaction.get(profileRef);
-      checkProfile(current);
-      if (current.exists) return;
-      const entry: SupplierPaymentProfile = {
-        entityId, active: true, paymentMethod: "pix_key", pixKeyType: "cnpj",
-        encryptedPaymentData: encryptPaymentDestination({ pixKey: document }),
-        maskedPaymentDestination: maskPaymentDestination(document), holderName: String(entityData.name),
-        holderDocument: document, validatedAt: now, validatedBy: actor.uid,
-        createdAt: now, createdBy: actor.uid, updatedAt: now, updatedBy: actor.uid,
-      };
-      transaction.create(profileRef, entry);
-      transaction.create(profileRef.collection("events").doc(), {
-        type: "SUPPLIER_PIX_PROFILE_CONFIRMED", at: now, actorId: actor.uid, previousPaidRequestId: previous.id,
-      });
-    });
-  }
 
   if (actualId !== expenseId) {
     const series = String(data.provisionSeriesKey ?? "");
@@ -153,8 +120,10 @@ export async function confirmSupplierPixSource(
       if (data.replacedByExpenseId !== actualId) supplierPixConflict("A previsão foi conciliada com outra despesa.");
       return actualId;
     }
+    const now = new Date().toISOString();
     const result = await reconcileExpenseProvisionOnServer(actualId, actor, {
       requiredProvisionId: expenseId,
+      assertRequiredProvisionAccess: assertUnitAccess,
       identity: { provisionSeriesKey: series, provisionCompetence: confirmation.competenceMonth, provisionType: "actual" },
       createIfMissing: {
         workspaceId: workspace, description: data.description, supplier: data.supplier, supplierId: entityId,

@@ -42,6 +42,11 @@ export const supplierPaymentProfileInputSchema = z
 
 export const entityPixProfileInputSchema = z.object({
   pixKey: z.string().trim().max(180),
+  pixKeyType: z.enum(["cpf", "cnpj", "email", "phone", "random"]).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.pixKey && !value.pixKeyType) {
+    context.addIssue({ code: "custom", path: ["pixKeyType"], message: "Informe o tipo da chave Pix." });
+  }
 });
 
 export const asoClinicConfigInputSchema = z.object({

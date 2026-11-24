@@ -10,6 +10,7 @@ import { defineSecurityContract } from "@/lib/security/route-contract";
 import { secureRoute } from "@/lib/security/secure-route.server";
 import { financialCompetenceMonthSchema } from "@/features/financial/lib/expense-accounting-contract";
 import { WORKSPACE_ID } from "@/lib/workspace";
+import { canAccessUnit } from "@/lib/unit-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,6 +68,9 @@ const enforcer = defineSecurityEnforcer<NextRequest, Context, unknown, ServerUse
       && Boolean(expense.get("unitId"));
     if (actor.workspace_id !== WORKSPACE_ID || (expense.get("workspaceId") !== actor.workspace_id && !legacyForecast)) {
       throw new AppError({ code: "EXPENSE_SUPPLIER_PIX_SCOPE", kind: "AUTHORIZATION" });
+    }
+    if (!canAccessUnit(actor.userDoc, String(expense.get("unitId") ?? ""), { isDefaultAdmin: actor.isDefaultAdmin })) {
+      throw new AppError({ code: "EXPENSE_SUPPLIER_PIX_UNIT_SCOPE", kind: "AUTHORIZATION" });
     }
     return { actor, input: input.data, resource: { expenseId: expenseId.data } };
   },
