@@ -74,8 +74,12 @@ export type AdjustmentDecisionInput = z.infer<typeof adjustmentDecisionSchema>;
 export type AdjustmentMonthInput = z.infer<typeof adjustmentMonthSchema>;
 
 const competence = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Competência inválida.');
-export const closureQuerySchema = z.object({ competence }).strict();
+export const closureQuerySchema = z.object({ competence, alerts: z.literal('1').optional(), payroll: z.literal('1').optional() }).strict();
 export const closureCloseSchema = z.object({ competence, expectedVersion: z.number().int().min(0) }).strict();
+export const closureAlertReviewSchema = z.object({ action: z.literal('justifyAlert'), competence, expectedVersion: z.number().int().min(0),
+  employeeUid: id, fingerprint: z.string().regex(/^[a-f0-9]{64}$/), reason }).strict();
+export const closureSubmitSchema = z.union([closureCloseSchema, closureAlertReviewSchema]);
+export type ClosureAlertReviewInput = z.infer<typeof closureAlertReviewSchema>;
 export const closureRouteSchema = z.object({ competence }).strict();
 export const closureActionSchema = z.object({ action: z.literal('reopen'), expectedVersion: z.number().int().positive(),
   reason: z.string().trim().min(10, 'O motivo precisa ter ao menos 10 caracteres.').max(1000) }).strict();

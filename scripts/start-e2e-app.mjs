@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
+import { copyPdfjsAssets } from "./copy-pdfjs-assets.mjs";
 import { assertFirestoreEmulatorSafety } from "../tests/helpers/firestore-emulator-safety.mjs";
 
 const projectId = process.env.FIREBASE_PROJECT_ID ?? "";
@@ -23,6 +24,8 @@ if (!existsSync(nextExecutable)) {
 
 const port = process.env.E2E_PORT ?? "3100";
 if (!/^\d{4,5}$/.test(port) || Number(port) > 65535) throw new Error("E2E_PORT inválida.");
+
+copyPdfjsAssets();
 
 const child = spawn(nextExecutable, ["dev", "--hostname", "127.0.0.1", "--port", port], {
   cwd: process.cwd(),

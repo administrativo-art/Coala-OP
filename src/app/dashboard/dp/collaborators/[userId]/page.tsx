@@ -975,10 +975,8 @@ function EmployeeFamilySalaryPanel({
       const records = childRecordsFromDrafts(drafts);
       const nextSummary = buildFamilySalarySummary(summary, records);
       const under14Count = countChildrenUnder14(records);
-      const eligibleCount = nextSummary.eligibleDependentsCount ?? 0;
       await callOnFieldUpdate({ employee_id: employeeId, field_key: "employee.children", value: records });
       await callOnFieldUpdate({ employee_id: employeeId, field_key: "employee.children_under_14", value: childCountLabel(under14Count) });
-      await callOnFieldUpdate({ employee_id: employeeId, field_key: "employee.has_family_salary", value: eligibleCount > 0 });
       await callOnFieldUpdate({ employee_id: employeeId, field_key: SYSTEM_FIELD_KEYS.familySalarySummary, value: nextSummary });
       setEditing(false);
       onProfileChanged();
@@ -3222,7 +3220,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                   Editar dados
                 </button>
               ) : null}
-              <HeaderIconLink href={`/dashboard/dp/collaborators/${user.id}/documents`} label="Documentos" icon={<FileText className="h-[18px] w-[18px]" />} />
+              <HeaderIconLink href={`/dashboard/documents/collaborators?employee=${encodeURIComponent(user.id)}`} label="Documentos" icon={<FileText className="h-[18px] w-[18px]" />} />
               {canReadTimeRecording ? (
                 <>
                   <HeaderIconLink href={timeRecordingHref} label="Registro de ponto" icon={<Clock className="h-[18px] w-[18px]" />} />

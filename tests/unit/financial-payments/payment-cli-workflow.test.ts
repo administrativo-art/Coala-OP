@@ -70,8 +70,16 @@ test("dispatcher usa sessão temporária sem consultar o Chaves", () => {
   const source = `
     import assert from 'node:assert/strict';
     import childProcess from 'node:child_process';
+    import {syncBuiltinESMExports} from 'node:module';
     import {pathToFileURL} from 'node:url';
-    childProcess.spawnSync = () => { throw new Error('CHAVES_NAO_DEVE_SER_ACESSADO'); };
+    // Só o stty (ocultar a digitação da senha) pode ser executado; o Chaves nunca.
+    const sttyCalls = [];
+    childProcess.spawnSync = (bin, args) => {
+      if (bin === 'stty') { sttyCalls.push(args.join(' ')); return {status: 0}; }
+      throw new Error('CHAVES_NAO_DEVE_SER_ACESSADO');
+    };
+    syncBuiltinESMExports();
+    process.on('exit', () => assert.deepEqual(sttyCalls, ['-echo', 'echo']));
     Object.defineProperty(process.stdin, 'isTTY', {configurable: true, value: true});
     Object.defineProperty(process.stdin, 'setRawMode', {configurable: true, value: () => process.stdin});
     Object.defineProperty(process.stdin, 'resume', {configurable: true, value: () => process.stdin});

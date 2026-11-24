@@ -50,12 +50,12 @@ function providerName(row: Record<string, unknown>, keys: string[]) {
   return typeof raw === "string" ? raw.trim().toUpperCase() : "";
 }
 
-function stoneAdverseIssueReasons(row: { events: Record<string, number>; canceledAmount: string | null }) {
+function stoneAdverseIssueReasons(row: ReturnType<typeof parseStoneAgendaXml>["transactions"][number]) {
   const reasons: StoneAdverseIssueReason[] = [];
   if (row.events.Cancellations > 0
     || (row.canceledAmount !== null && exactSalesCents(row.canceledAmount) !== 0)) reasons.push("cancellation_event");
   if (row.events.CancellationCharges > 0) reasons.push("cancellation_charge_event");
-  if (row.events.Chargebacks > 0) reasons.push("chargeback_event");
+  if (row.events.Chargebacks > 0 || row.installments.some(item => item.suspendedByChargeback)) reasons.push("chargeback_event");
   if (row.events.ChargebackRefunds > 0) reasons.push("chargeback_refund_event");
   return reasons;
 }
@@ -76,7 +76,7 @@ function pdvPaymentIdentifiers(payment: Record<string, unknown>, channel: Reconc
     providerName(detail, ["adquirente", "Adquirente"]),
     providerName(detail, ["gateway", "Gateway"]),
   ].includes("STONE");
-  const card = channel === "credit_card" || channel === "debit_card";
+  const card = channel !== "pix";
 
   return {
     ...(nsu && card && explicitlyStone ? { providerTransactionId: nsu } : {}),
@@ -90,16 +90,30 @@ function pdvTimestampMillis(value: string) {
     ? value.replace(" ", "T") : `${value.replace(" ", "T")}-03:00`).getTime();
 }
 
+function optionalMoney(item: Record<string, unknown>, lower: string, upper: string) {
+  if (!Object.hasOwn(item, lower) && !Object.hasOwn(item, upper)) return 0;
+  return exactSalesCents(field(item, [lower, upper]));
+}
+
 function itemCancellationAdjustment(row: Record<string, unknown>, finalAmountCents: number, finalizedAt: string) {
   const items = pdvCouponItems(row);
-  if (!items.length) return undefined;
+  if (!items.length || typeof field(row, ["dtrecebimento", "DtRecebimento"]) !== "string"
+    || optionalMoney(row, "valordesconto", "ValorDesconto") !== 0
+    || optionalMoney(row, "valoracrescimo", "ValorAcrescimo") !== 0
+    || optionalMoney(row, "valorentrega", "ValorEntrega") !== 0) return undefined;
   let originalAmountCents = 0;
   let cancelledAmountCents = 0;
+  let itemDiscountCents = 0;
   const cancellationTimes: string[] = [];
   let cancelledItems = 0;
   for (const item of items) {
-    const amount = exactSalesCents(field(item, ["valortotal", "ValorTotal"]));
-    if (amount === null) return undefined;
+    const gross = exactSalesCents(field(item, ["valortotal", "ValorTotal"]));
+    const discount = optionalMoney(item, "valordesconto", "ValorDesconto");
+    const surcharge = optionalMoney(item, "valoracrescimo", "ValorAcrescimo");
+    if (gross === null || discount === null || surcharge === null || discount > gross) return undefined;
+    const amount = gross - discount + surcharge;
+    itemDiscountCents += discount;
+    if (itemDiscountCents > MAX_SALE_CENTS) return undefined;
     originalAmountCents += amount;
     if (!Number.isSafeInteger(originalAmountCents) || originalAmountCents > MAX_SALE_CENTS) return undefined;
     if (isPdvItemCancelled(item)) {
@@ -122,6 +136,7 @@ function itemCancellationAdjustment(row: Record<string, unknown>, finalAmountCen
     type: "item_cancellation" as const,
     originalAmountCents,
     cancelledAmountCents,
+    ...(itemDiscountCents ? { itemDiscountCents } : {}),
     finalAmountCents,
     lastCancellationAt,
     finalizedAt,
@@ -172,18 +187,19 @@ function pdvFacts(raw: unknown, scope: DailySalesScope, issues: SalesSourceIssue
       ? itemCancellationAdjustment(row, total, coupon.timestamp)
       : undefined;
     const status = storned ? "refunded"
-      : coupon.isCancelled && coupon.hasExplicitItemCancellation
+      : coupon.hasExplicitItemCancellation
         ? adjustment?.finalizedAfterCancellation ? "pending" : "partial_cancellation"
         : coupon.isCancelled ? "cancelled" : "pending";
     coupon.paymentRows.forEach((payment, paymentIndex) => {
       const { channel } = normalizeChannel(payment.rawName);
       if (channel === "cash") return;
-      if (channel !== "pix" && channel !== "credit_card" && channel !== "debit_card") { issue("unsupported_channel"); return; }
+      const salesChannel = /^VOUCHER$/i.test(payment.rawName.trim()) ? "voucher" : channel;
+      if (salesChannel !== "voucher" && salesChannel !== "pix" && salesChannel !== "credit_card" && salesChannel !== "debit_card") { issue("unsupported_channel"); return; }
       facts.push({ id: JSON.stringify([id, paymentIndex]), source: "pdv", workspaceId: scope.workspaceId,
-        kioskId: scope.kioskId, businessDate: scope.referenceDate, soldAt: coupon.timestamp, channel,
+        kioskId: scope.kioskId, businessDate: scope.referenceDate, soldAt: coupon.timestamp, channel: salesChannel,
         // Take the validated raw decimal, not the legacy parser's float conversion.
         grossAmountCents: exactSalesCents(field(payments[paymentIndex], ["valortotal", "ValorTotal"]))!,
-        status, couponId: id, identifiers: pdvPaymentIdentifiers(payments[paymentIndex], channel),
+        status, couponId: id, identifiers: pdvPaymentIdentifiers(payments[paymentIndex], salesChannel),
         ...(adjustment ? { adjustment } : {}) });
     });
   });
@@ -219,10 +235,12 @@ export function reviewDailySales(input: { scope: DailySalesScope; pdvCoupons: un
       reference: JSON.stringify([file.fileId, row.sourceSection, row.transactionId]), reason });
     const adverseReasons = adverseReasonsById.get(row.transactionId);
     if (adverseReasons) continue;
-    // Account movements/payment events must never be imported as new sales.
+    // Regular settlement stays in stoneEvents for audit, without blocking the sales review.
+    if (row.sourceSection === "FinancialTransactionsAccounts" && row.events.Captures === 0 && row.events.Payments > 0) continue;
     if (row.sourceSection !== "FinancialTransactions" || row.events.Captures === 0) { issue("non_capture_event"); continue; }
     const channel = row.accountTypeCode === "1" || row.accountTypeCode === "3" ? "debit_card"
-      : row.accountTypeCode === "2" || row.accountTypeCode === "4" ? "credit_card" : null;
+      : row.accountTypeCode === "2" || row.accountTypeCode === "4" ? "credit_card"
+      : row.accountTypeCode === "5" ? "voucher" : null;
     if (!channel || row.currencyCode !== "986" || row.events.Captures !== 1 || !row.captureLocalDateTime) {
       issue("unsupported_capture"); continue;
     }

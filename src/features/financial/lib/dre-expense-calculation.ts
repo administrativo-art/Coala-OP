@@ -51,6 +51,7 @@ export type DreExpenseLineDetail = {
   amount: number;
   billingIdentity?: FinancialExpenseDreDocument["billingIdentity"];
   cardChargeDate?: string | null;
+  feeRecognition?: FinancialExpenseDreDocument["feeRecognition"];
 };
 
 export type DreExpenseCalculation = {
@@ -180,6 +181,7 @@ export function calculateDreExpenses(input: {
         accountPlanId: allocation.accountPlanId,
         accountPlanName: account.name || allocation.accountPlanName || allocation.accountPlanId,
         amount: amountInCents / 100,
+        ...(expense.feeRecognition ? { feeRecognition: expense.feeRecognition } : {}),
         ...(expense.billingIdentity ? { billingIdentity: expense.billingIdentity } : {}),
         ...(expense.cardChargeDate ? { cardChargeDate: expense.cardChargeDate } : {}),
       });

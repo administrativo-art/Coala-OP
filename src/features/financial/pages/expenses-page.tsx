@@ -29,6 +29,7 @@ import {
   X,
 } from "lucide-react";
 import { PayExpenseDialog } from "@/features/financial/components/pay-expense-dialog";
+import { purchasePixNeedsSync, supplierPixPrepareInput } from "@/features/financial/lib/expense-supplier-pix-ui";
 import {
   ExpensePeriodFilter,
   type ExpensePeriodPreset,
@@ -60,6 +61,8 @@ import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import { bankStatementsHref } from "@/features/financial/lib/reconciliation-navigation";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
+import { buildExpenseLifecycleData } from "@/features/financial/lib/cash-flow-analysis";
+import { financialExpenseChargeDateKey, financialExpenseChargePeriods } from "@/features/financial/lib/expense-accounting-contract";
 import {
   expenseReferencesResultCenter,
   expenseValueForResultCenter,
@@ -84,6 +87,7 @@ import {
 import {
   compareExpenseCompetenceMonths,
   consolidateExpenseObligations,
+  expandExpenseInstallmentsForList,
   groupExpensesByDueWeek,
   sumExpenseValues,
   type ExpenseDueWeekGroup,
@@ -95,7 +99,6 @@ import {
   type PlannedPaymentMethodType,
 } from "@/features/financial/lib/card-invoices";
 import {
-  cardExpenseStatementOccurrences,
   groupExpensesByCardStatement,
   type ExpenseCardStatementDocument,
   type ExpenseCardStatementListEntry,
@@ -122,6 +125,8 @@ import { cardStatementDisplayAmounts, cardStatementHasOverdueBalance, expenseDis
 import { canViewBudgetComparison } from "@/features/financial/budgets/comparison";
 import { PageContainer } from "@/components/layout/page-container";
 import { PageHeader } from "@/components/layout/page-header";
+
+const EMPTY_EXPENSES: never[] = [];
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Rascunho",
@@ -201,7 +206,7 @@ function InstallmentScheduleTooltip({
           <p className="mb-2 text-xs font-semibold">Cronograma das parcelas</p>
           <div className="space-y-1.5">
             {installments.map((installment, index) => {
-              const dueDate = toDate(installment?.dueDate);
+              const dueDate = financialExpenseChargeDateKey(installment?.dueDate);
               const status = installment?.status === "paid"
                 ? "Paga"
                 : installment?.status === "cancelled"
@@ -210,9 +215,9 @@ function InstallmentScheduleTooltip({
                 ? "Pendente"
                 : null;
               return (
-                <div key={`${installment?.number || index + 1}-${dueDate?.getTime() || index}`} className="grid grid-cols-[40px_1fr_auto] gap-2 text-xs">
+                <div key={`${installment?.number || index + 1}-${dueDate ?? index}`} className="grid grid-cols-[40px_1fr_auto] gap-2 text-xs">
                   <span className="text-muted-foreground">{installment?.number || index + 1}/{scheduleTotal}</span>
-                  <span>{dueDate ? format(dueDate, "dd/MM/yyyy") : "Sem data"}</span>
+                  <span>{dueDate ? dueDate.split("-").reverse().join("/") : "Sem data"}</span>
                   <span className="text-right">
                     {formatCurrency(Number(installment?.value) || 0)}
                     {status ? <span className="ml-1 text-[10px] text-muted-foreground">· {status}</span> : null}
@@ -277,13 +282,7 @@ function matchesBaseFilters(
 ) {
   const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "";
   const accountingPlanNames = Array.from(new Set([planName, ...expenseAccountPlanLabels(expense, accountPlanMap)].filter(Boolean)));
-  const due = toDate(expense.dueDate);
-  const statementOccurrences = cardExpenseStatementOccurrences(expense, cardStatements);
-  const periodDueDates = statementOccurrences
-    .map((occurrence) => occurrence.dueDate)
-    .filter((date): date is Date => date !== null);
-  const dueDateCandidates = periodDueDates.length > 0 ? periodDueDates : due ? [due] : [];
-  const competence = toDate(expense.competenceDate);
+  const periods = financialExpenseChargePeriods(expense, cardStatements);
   const belongsToUnit =
     unitFilter === "all" || expenseReferencesResultCenter(expense, unitFilter, resultCenterNameById);
   const normalizedSearch = search.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -313,17 +312,12 @@ function matchesBaseFilters(
     (originFilter === "purchasing" && expense.originModule === "purchasing") ||
     (originFilter === "manual" && expense.originModule !== "purchasing");
 
-  const dateFromValue = dateFrom ? new Date(`${dateFrom}T00:00:00`) : null;
-  const dateToValue = dateTo ? new Date(`${dateTo}T23:59:59`) : null;
-  const matchesDateRange = (!dateFromValue && !dateToValue) || dueDateCandidates.some((candidate) => (
-    (!dateFromValue || candidate >= dateFromValue) && (!dateToValue || candidate <= dateToValue)
+  const matchesPeriod = periods.some((period) => (
+    (!competenceMonth || competenceMonth === "all" || period.competenceMonth === competenceMonth)
+    && ((!dateFrom && !dateTo) || Boolean(period.dueDate
+      && (!dateFrom || period.dueDate >= dateFrom)
+      && (!dateTo || period.dueDate <= dateTo)))
   ));
-  const matchesCompetence =
-    !competenceMonth
-    || competenceMonth === "all"
-    || (statementOccurrences.length > 0
-      ? statementOccurrences.some((occurrence) => occurrence.monthKey === competenceMonth)
-      : competence && format(competence, "yyyy-MM") === competenceMonth);
   const matchesSupplier = supplierFilter === "all" || (expense.supplier || "") === supplierFilter;
   const matchesAccountPlan = accountPlanFilter === "all" || accountingPlanNames.includes(accountPlanFilter);
   const matchesPaymentType =
@@ -334,13 +328,36 @@ function matchesBaseFilters(
   return (
     matchesSearch &&
     matchesOrigin &&
-    matchesDateRange &&
-    matchesCompetence &&
+    matchesPeriod &&
     matchesSupplier &&
     matchesAccountPlan &&
     matchesPaymentType &&
     belongsToUnit
   );
+}
+
+function matchesExpenseLink(
+  expense: { id?: unknown; sourceExpense?: { id?: unknown }; installmentNumber?: unknown },
+  searchParams: Pick<URLSearchParams, "get">,
+) {
+  const target = searchParams.get("expense");
+  const installment = searchParams.get("installment");
+  return (!target || (expense.sourceExpense ?? expense).id === target)
+    && (!installment || String(expense.installmentNumber) === installment);
+}
+
+type ExpenseRateioSource = Parameters<typeof expenseValueForResultCenter>[0];
+
+function expenseRowValueForResultCenter(
+  expense: ExpenseRateioSource & { sourceExpense?: ExpenseRateioSource },
+  center: string | undefined,
+  names: ResultCenterNameMap,
+) {
+  const source = expense.sourceExpense;
+  const sourceTotal = Number(source?.totalValue);
+  if (!center || !source || !(sourceTotal > 0)) return expenseValueForResultCenter(expense, center, names);
+  const ratio = expenseValueForResultCenter(source, center, names) / sourceTotal;
+  return (Number(expense.totalValue) || 0) * ratio;
 }
 
 type ExpenseDisplayEntry = ExpenseCardStatementListEntry<any>;
@@ -465,15 +482,15 @@ export function ExpensesPage() {
     );
   }
 
-  const expenses = expensesData || [];
+  const expenses = expensesData ?? EMPTY_EXPENSES;
   const expenseById = useMemo(
     () => new Map(expenses.map((expense) => [String(expense.id), expense])),
     [expenses]
   );
-  const consolidatedExpenses = useMemo(
-    () => consolidateExpenseObligations(expenses),
-    [expenses]
-  );
+  const { consolidatedExpenses, expenseRows } = useMemo(() => {
+    const consolidatedExpenses = consolidateExpenseObligations(expenses);
+    return { consolidatedExpenses, expenseRows: consolidatedExpenses.flatMap(expandExpenseInstallmentsForList) };
+  }, [expenses]);
   const transactions = transactionsData || [];
   const accountPlanMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -546,6 +563,15 @@ export function ExpensesPage() {
       .map((value) => ({ value, label: breadcrumbByName.get(value) || value }))
       .sort((left, right) => left.label.localeCompare(right.label, "pt-BR"));
   }, [accountPlanMap, accountPlans, consolidatedExpenses]);
+  // Provisionado × pago dos últimos 7 meses, na faixa do período (mesmas despesas já carregadas; sem nova leitura).
+  const competenceTimeline = useMemo(() => {
+    const rows = groupExpensesByCardStatement(expenseRows, { statements: cardStatementsData || [], allExpenses: expenses });
+    return buildExpenseLifecycleData(rows.map((row) => row.kind === "expense" ? row.expense : {
+      competenceMonth: row.statement.monthKey,
+      totalValue: row.statement.totalValue,
+      status: row.statement.status,
+    }), 7);
+  }, [cardStatementsData, expenseRows, expenses]);
   const competenceOptions = useMemo(
     () => {
       const rollingPastMonths = Array.from({ length: 13 }, (_, offset) =>
@@ -556,20 +582,13 @@ export function ExpensesPage() {
           [
             ...rollingPastMonths,
             ...(competenceMonth !== "all" ? [competenceMonth] : []),
-            ...consolidatedExpenses.flatMap((expense) => {
-              const statementMonths = cardExpenseStatementOccurrences(
-                expense,
-                cardStatementsData || [],
-              ).map((occurrence) => occurrence.monthKey);
-              if (statementMonths.length > 0) return statementMonths;
-              const date = toDate(expense.competenceDate);
-              return date ? [format(date, "yyyy-MM")] : [];
-            }),
+            ...expenseRows.flatMap((expense) => financialExpenseChargePeriods(expense, cardStatementsData || [])
+              .flatMap(({ competenceMonth: month }) => month ? [month] : [])),
           ]
         )
       ).sort(compareExpenseCompetenceMonths);
     },
-    [cardStatementsData, competenceMonth, consolidatedExpenses]
+    [cardStatementsData, competenceMonth, expenseRows]
   );
 
   const units = useMemo(
@@ -594,11 +613,10 @@ export function ExpensesPage() {
 
   const filtered = useMemo(() => {
     const now = startOfDay(new Date());
-    return consolidatedExpenses
+    return expenseRows
       .filter((expense) => {
         if (!showExpenseInOperationalList(expense, statusFilter)) return false;
-        const target = searchParams.get("expense");
-        if (target && expense.id !== target) return false;
+        if (!matchesExpenseLink(expense, searchParams)) return false;
         if (
           !matchesBaseFilters(expense, {
             accountPlanMap,
@@ -636,11 +654,11 @@ export function ExpensesPage() {
       .sort((left, right) => expenseSort.key === "value"
         ? compareExpensesByValue(left, right, expenseSort.direction)
         : compareExpensesByDueDateDirection(left, right, expenseSort.direction));
-  }, [accountPlanFilter, accountPlanMap, cardStatementsData, competenceMonth, consolidatedExpenses, dateFrom, dateTo, expenseSort, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, searchParams, statusFilter, supplierFilter]);
+  }, [accountPlanFilter, accountPlanMap, cardStatementsData, competenceMonth, expenseRows, dateFrom, dateTo, expenseSort, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, searchParams, statusFilter, supplierFilter]);
 
   const scopedExpenses = useMemo(() => {
     const now = startOfDay(new Date());
-    return consolidatedExpenses.filter((expense) =>
+    return expenseRows.filter((expense) =>
       showExpenseInOperationalList(expense, statusFilter) &&
       matchesBaseFilters(expense, {
         accountPlanMap,
@@ -658,7 +676,7 @@ export function ExpensesPage() {
         now,
       })
     );
-  }, [accountPlanFilter, accountPlanMap, cardStatementsData, competenceMonth, consolidatedExpenses, dateFrom, dateTo, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, statusFilter, supplierFilter]);
+  }, [accountPlanFilter, accountPlanMap, cardStatementsData, competenceMonth, expenseRows, dateFrom, dateTo, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, statusFilter, supplierFilter]);
   const scopedDisplayEntries = useMemo(
     () => groupExpensesByCardStatement(scopedExpenses, {
       statements: cardStatementsData || [],
@@ -779,11 +797,10 @@ export function ExpensesPage() {
 
   const pendingAuditScope = useMemo(() => {
     const now = startOfDay(new Date());
-    return consolidatedExpenses.filter((expense) => {
+    return expenseRows.filter((expense) => {
       if (!showExpenseInOperationalList(expense, "all")) return false;
       if (getExpenseStatusKey(expense, now) !== "pending_audit") return false;
-      const target = searchParams.get("expense");
-      if (target && expense.id !== target) return false;
+      if (!matchesExpenseLink(expense, searchParams)) return false;
       return matchesBaseFilters(expense, {
         accountPlanMap,
         cardStatements: cardStatementsData || [],
@@ -800,9 +817,9 @@ export function ExpensesPage() {
         now,
       });
     });
-  }, [accountPlanFilter, accountPlanMap, cardStatementsData, competenceMonth, consolidatedExpenses, dateFrom, dateTo, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, searchParams, supplierFilter]);
+  }, [accountPlanFilter, accountPlanMap, cardStatementsData, competenceMonth, expenseRows, dateFrom, dateTo, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, searchParams, supplierFilter]);
   const pendingAuditCount = pendingAuditScope.length;
-  const pendingAuditValue = pendingAuditScope.reduce((sum, expense) => sum + expenseValueForResultCenter(
+  const pendingAuditValue = pendingAuditScope.reduce((sum, expense) => sum + expenseRowValueForResultCenter(
     expense,
     financialUnitFilter === "all" ? undefined : financialUnitFilter,
     resultCenterNameById,
@@ -826,7 +843,7 @@ export function ExpensesPage() {
       if (entry.kind === "expense") {
         const expense = entry.expense;
         const due = toDate(expense.dueDate);
-        const scopedValue = expenseValueForResultCenter(
+        const scopedValue = expenseRowValueForResultCenter(
           expense,
           financialUnitFilter === "all" ? undefined : financialUnitFilter,
           resultCenterNameById
@@ -892,7 +909,7 @@ export function ExpensesPage() {
 
   useEffect(() => {
     if (loading || !expandedExpenseId) return;
-    if (!filtered.some((expense) => expense.id === expandedExpenseId)) {
+    if (!filtered.some((expense) => expense.id === expandedExpenseId || expense.sourceExpense?.id === expandedExpenseId)) {
       setExpandedExpenseId(null);
     }
   }, [expandedExpenseId, filtered, loading]);
@@ -988,7 +1005,10 @@ export function ExpensesPage() {
   if (accountPlanFilter !== "all") activeFilterPills.push({ key: "plan", label: accountPlanOptions.find((option) => option.value === accountPlanFilter)?.label ?? accountPlanFilter, onClear: () => setAccountPlanFilter("all") });
   if (unitFilter !== "all") activeFilterPills.push({ key: "unit", label: unitFilter, onClear: () => setUnitFilter("all") });
   const hasActiveFilters = activeFilterPills.length > 0;
-  const selectedExpense = expandedExpenseId ? filtered.find((expense) => expense.id === expandedExpenseId) ?? null : null;
+  const selectedExpenseRow = expandedExpenseId ? filtered.find((expense) => (
+    expense.id === expandedExpenseId || expense.sourceExpense?.id === expandedExpenseId
+  )) : null;
+  const selectedExpense = selectedExpenseRow?.sourceExpense ?? selectedExpenseRow;
   const selectedStatement = expandedCardStatementKey
     ? filteredDisplayEntries.find((entry) => entry.kind === "card_statement" && entry.statement.key === expandedCardStatementKey)
     : null;
@@ -1027,7 +1047,9 @@ export function ExpensesPage() {
           {relatedPurchaseExpense ? (
             <Button variant="ds-secondary" size="xs" asChild>
               <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${relatedPurchaseExpense.id}`}>
-                {expense.purchaseExpenseRole === "freight" ? "Ver mercadoria" : "Ver frete separado"}
+                {expense.purchaseExpenseRole === "freight" || expense.purchaseExpenseRole === "service_fee"
+                  ? "Ver mercadoria"
+                  : relatedPurchaseExpense.purchaseExpenseRole === "service_fee" ? "Ver taxa de serviço" : "Ver frete separado"}
               </Link>
             </Button>
           ) : null}
@@ -1055,7 +1077,14 @@ export function ExpensesPage() {
           canViewPersonnelCosts={canViewPersonnelCosts}
           canViewExpenses={canViewExpenses}
           canEdit={permissions.financial?.expenses?.edit === true && !expense.budgetMigration && !expense.sourceSettlement}
-          canPay={permissions.financial?.expenses?.pay === true && !expense.budgetMigration && !expense.sourceSettlement && expenseCashForecastAmount(expense) > 0}
+          canPay={!expense.budgetMigration && !expense.sourceSettlement && expenseCashForecastAmount(expense) > 0 && (
+            permissions.financial?.expenses?.pay === true || (
+              permissions.financial?.view === true && permissions.financial?.expenses?.view === true
+              && permissions.financial?.expenses?.edit === true && permissions.financial?.paymentRequests?.view === true
+              && permissions.financial?.paymentRequests?.create === true
+              && (Boolean(supplierPixPrepareInput(expense)) || purchasePixNeedsSync(expense))
+            )
+          )}
           canDelete={permissions.financial?.expenses?.delete === true && !expense.budgetMigration && !expense.sourceSettlement}
           finalizingAudit={finalizingAuditId === expense.id}
           onFinalizeAudit={() => void handleFinalizeAudit(expense)}
@@ -1322,6 +1351,14 @@ export function ExpensesPage() {
         auditActive={statusFilter === "pending_audit"}
         onAuditClick={() => setStatusFilter("pending_audit")}
         periodLabel={activePeriodLabel}
+        competences={competenceTimeline}
+        selectedCompetence={competenceMonth}
+        onCompetenceSelect={(competence) => {
+          setCompetenceMonth(competence);
+          setPeriodPreset("custom");
+          setDateFrom("");
+          setDateTo("");
+        }}
       />
 
       {searchParams.get("expense") && (
@@ -1473,7 +1510,7 @@ export function ExpensesPage() {
                 expense={expense}
                 statusKey={statusKey}
                 statusLabel={expense.budgetMigration ? "Transferida para orçamento" : STATUS_LABELS[statusKey] || statusKey}
-                selected={expandedExpenseId === expense.id}
+                selected={selectedExpenseRow?.id === expense.id}
                 onOpen={() => setExpandedExpenseId(expense.id)}
                 due={due}
                 showDueHint={Boolean(due) && !expenseAwaitingConfirmation(expense) && !["paid", "reconciled", "cancelled"].includes(expense.status)}

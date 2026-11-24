@@ -20,6 +20,7 @@ import {
   isAdmissionSignatureTemplateApplicable,
 } from "../../src/features/hr/documents/admission-signature-order";
 import { admissionBundleSignerPositions } from "../../src/features/hr/documents/admission-signature-positions";
+import { admissionDependentConditions } from "../../src/features/hr/documents/admission-dependent-conditions";
 import {
   isSelectableAdmissionSignatureTemplate,
   SYSTEM_DOCUMENT_TEMPLATES,
@@ -27,7 +28,7 @@ import {
 } from "../../src/features/hr/documents/system-template-catalog";
 
 test("catálogo reúne base institucional, uniformes, kit admissional e comprovante de ponto", () => {
-  assert.equal(SYSTEM_DOCUMENT_TEMPLATES.length, 21);
+  assert.equal(SYSTEM_DOCUMENT_TEMPLATES.length, 24);
   assert.deepEqual(
     [...new Set(SYSTEM_DOCUMENT_TEMPLATES.map((template) => template.category))].sort(),
     ["Admissão", "Base institucional", "Benefícios", "Contratos", "Controle de ponto", "Documentos", "Financeiro e recibos", "Patrimônio", "Uniformes"].sort(),
@@ -51,12 +52,12 @@ test("catálogo reúne base institucional, uniformes, kit admissional e comprova
   );
   assert.equal(
     SYSTEM_DOCUMENT_TEMPLATES.filter((template) => template.renderer === "admission_docx").length,
-    11,
+    13,
   );
   const admissionTemplates = SYSTEM_DOCUMENT_TEMPLATES.filter((template) =>
     template.id.startsWith("system-admission-"),
   );
-  assert.equal(admissionTemplates.length, 9);
+  assert.equal(admissionTemplates.length, 11);
   assert.ok(admissionTemplates.every((template) => template.status === "published"));
 });
 
@@ -81,9 +82,9 @@ test("termo de ponto eletrônico não integra o catálogo operacional", () => {
   );
 });
 
-test("seleção admissional oferece oito modelos e mantém o encerramento automático", () => {
+test("seleção admissional oferece dez modelos e mantém o encerramento automático", () => {
   const selectable = SYSTEM_DOCUMENT_TEMPLATES.filter(isSelectableAdmissionSignatureTemplate);
-  assert.equal(selectable.length, 8);
+  assert.equal(selectable.length, 10);
   assert.equal(
     selectable.some((template) => template.id === "system-admission-bundle-closing-term"),
     false,
@@ -155,6 +156,52 @@ test("kit admissional exige todos os componentes aplicáveis como uma unidade", 
     isCompleteAdmissionSignaturePackage([...forRequest, forRequest[0]], "yes"),
     true,
   );
+  const withDependents = admissionSignaturePackageTemplateIds("yes", {
+    familySalaryGranted: true,
+    incomeTaxDeclared: true,
+  });
+  assert.equal(withDependents.length, 9);
+  assert.equal(isCompleteAdmissionSignaturePackage(withDependents, "yes", {
+    familySalaryGranted: true,
+    incomeTaxDeclared: true,
+  }), true);
+  assert.equal(isCompleteAdmissionSignaturePackage(forRequest, "yes", {
+    familySalaryGranted: true,
+    incomeTaxDeclared: true,
+  }), false);
+});
+
+test("análise legal não decide a concessão do salário-família", () => {
+  const base = {
+    employmentRelationshipType: "clt",
+    expectedAdmissionDate: "2026-08-26",
+    monthlySalary: 1500,
+    publicFormAnswers: {
+      children: [{ name: "Criança A", birthDate: "2015-01-02", cpf: "12345678901", incomeTaxDependent: false }],
+    },
+    documents: [
+      { id: "child_1_birth_certificate", status: "approved", filePath: "birth.pdf" },
+      { id: "child_1_school_attendance", status: "approved", filePath: "school.pdf" },
+    ],
+  };
+  assert.deepEqual(admissionDependentConditions(base).conditions, {
+    familySalaryGranted: false,
+    incomeTaxDeclared: false,
+  });
+  assert.match(admissionDependentConditions(base).familySalaryAssessment, /ELEGÍVEL/);
+  assert.equal(admissionDependentConditions(base).familySalaryDecisionRequired, true);
+  assert.deepEqual(admissionDependentConditions({
+    ...base,
+    familySalaryDecision: { grant: true },
+    publicFormAnswers: { children: [{ ...base.publicFormAnswers.children[0], incomeTaxDependent: true }] },
+    documents: [],
+  }).conditions, {
+    familySalaryGranted: true,
+    incomeTaxDeclared: true,
+  });
+  assert.equal(admissionDependentConditions({ ...base, expectedAdmissionDate: "2027-01-10" }).parameterYearSupported, false);
+  assert.equal(admissionDependentConditions({ ...base, familySalaryDecision: { grant: false } }).conditions.familySalaryGranted, false);
+  assert.equal(admissionDependentConditions({ ...base, employmentRelationshipType: "internship", familySalaryDecision: { grant: true } }).conditions.familySalaryGranted, true);
 });
 
 test("posiciona as duas assinaturas no termo final do pacote", () => {

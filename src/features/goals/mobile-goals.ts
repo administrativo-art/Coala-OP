@@ -95,7 +95,7 @@ function resolveRole(goals: EmployeeGoal[]): GoalParticipantRole {
 }
 
 /** One row per person, even when the person has more than one shift goal in the period. */
-export function mobileGoalTeam(employeeGoals: EmployeeGoal[]) {
+export function mobileGoalTeam(employeeGoals: EmployeeGoal[], workedDaysByEmployeeId: Record<string, number> = {}) {
   const byEmployee = new Map<string, EmployeeGoal[]>();
   for (const goal of employeeGoals) byEmployee.set(goal.employeeId, [...(byEmployee.get(goal.employeeId) ?? []), goal]);
   return [...byEmployee.entries()].map(([employeeId, goals]) => {
@@ -105,6 +105,7 @@ export function mobileGoalTeam(employeeGoals: EmployeeGoal[]) {
       employeeId,
       role: resolveRole(goals),
       scheduledTurns: goals.reduce((sum, goal) => sum + (goal.scheduledTurnCount ?? 0), 0),
+      scheduledDays: workedDaysByEmployeeId[employeeId] ?? Math.max(...goals.map((goal) => goal.scheduledDays ?? 0)),
       currentValue: round(currentValue),
       targetValue: round(targetValue),
       percent: targetValue > 0 ? round((currentValue / targetValue) * 100) : 0,
@@ -120,8 +121,10 @@ export function mobileGoalTeam(employeeGoals: EmployeeGoal[]) {
 export function mobileGoalPrize(period: MobileGoalPeriodInput, team: ReturnType<typeof mobileGoalTeam>) {
   const method = period.method;
   if (!method || method.type !== "tiered_unit_bonus") return null;
-  const participants = team.map((row) => ({ employeeId: row.employeeId, participantRole: row.role, scheduledTurnCount: row.scheduledTurns }) as EmployeeGoal);
-  const closing = { currentValue: period.currentValue, goalMethodSnapshot: method, shifts: Array.from({ length: period.shiftCount }, () => ({})) } as unknown as Parameters<typeof buildGoalClosureBonusSnapshot>[0]["period"];
+  const participants = team.map((row) => ({ employeeId: row.employeeId, participantRole: row.role,
+    scheduledTurnCount: row.scheduledTurns, scheduledDays: row.scheduledDays }) as EmployeeGoal);
+  const closing = { currentValue: period.currentValue, goalMethodSnapshot: method,
+    shifts: Array.from({ length: period.shiftCount }, () => ({})), startDate: period.startKey } as unknown as Parameters<typeof buildGoalClosureBonusSnapshot>[0]["period"];
   let snapshot: ReturnType<typeof buildGoalClosureBonusSnapshot>;
   let forecast: ReturnType<typeof calculateTieredGoalBonus>;
   try {

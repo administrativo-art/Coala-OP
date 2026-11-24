@@ -18,6 +18,7 @@ import {
   calculateTieredGoalBonus,
   formatCurrencyBRL,
 } from '@/lib/goal-methods';
+import { goalReliefBasisForStart } from '@/lib/goal-relief-basis';
 import { useToast } from '@/hooks/use-toast';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
 import { ProductSimulationContext } from '@/components/product-simulation-provider';
@@ -523,6 +524,10 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
         fixedCollaboratorCount: teamParticipantRows.filter(row => row.role === 'fixed').length,
         reliefWorkerCount: reliefParticipantRows.length,
         reliefWorkerCoveredTurnsByPerson: reliefParticipantRows.map(row => row.coveredTurns),
+        reliefWorkerBasis: goalReliefBasisForStart(activeDateRange.start),
+        reliefWorkerCoveredDaysByPerson: reliefParticipantRows.map(row => row.scheduledDays),
+        totalPeriodDays: Math.round((Date.parse(`${dateKey(activeDateRange.end)}T00:00:00Z`)
+          - Date.parse(`${dateKey(activeDateRange.start)}T00:00:00Z`)) / 86_400_000) + 1,
         totalPeriodTurns: new Set(
           kioskShifts
             .filter(shift => shift.type === 'work')
@@ -530,7 +535,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
         ).size,
       }
     ),
-    [kioskShifts, reliefParticipantRows, revenueConfig, revenueGoalMethodSnapshot, teamParticipantRows]
+    [activeDateRange.start, activeDateRange.end, kioskShifts, reliefParticipantRows, revenueConfig, revenueGoalMethodSnapshot, teamParticipantRows]
   );
 
   const participantOptions = useMemo(

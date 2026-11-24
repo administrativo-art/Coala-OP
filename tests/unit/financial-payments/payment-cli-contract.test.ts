@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { validateOverdueSettlementCliRevision, validatePaymentCliAction, validatePaymentCliCancellation, validatePaymentCliPreparation } from "../../../scripts/financial/payment-cli-contract";
+import { validateOverdueSettlementCliRevision, validatePaymentCliAction, validatePaymentCliCancellation, validatePaymentCliPixAction, validatePaymentCliPixPreparation, validatePaymentCliPreparation } from "../../../scripts/financial/payment-cli-contract";
 
 const order = {
   sourceType: "financial_inbox", paymentRail: "barcode", sourceId: "inbox_1", expenseId: "expense_1",
@@ -73,6 +73,9 @@ test("retoma uma única vez somente rejeição HTTP 400 confirmada", () => {
   assert.throws(() => validatePaymentCliAction({ request: { ...failed, submissionAttemptCount: 2 }, action: "retry-send", ...expected }));
   assert.throws(() => validatePaymentCliAction({ request: { ...failed, lastError: { code: "INTER_REQUEST_FAILED" } }, action: "retry-send", ...expected }));
   assert.throws(() => validatePaymentCliAction({ request: { ...failed, interRequestId: "bank_1" }, action: "retry-send", ...expected }));
+  assert.throws(() => validatePaymentCliAction({ request: { ...failed,
+    lastError: { code: "INTER_HTTP_400", details: '{"message":"Pagamento mínimo aceito: R$ 1098.80"}' },
+  }, action: "retry-send", ...expected }));
 });
 
 test("revisa e envia valor documental vencido somente após duas rejeições", () => {
@@ -119,6 +122,40 @@ test("revisa e envia valor documental vencido somente após duas rejeições", (
   assert.throws(() => validatePaymentCliAction({ request: adjusted, action: "send", ...expected }));
 });
 
+test("revisa valor vencido após uma recusa somente com cotação exata do Inter", () => {
+  const failed = {
+    ...order,
+    status: "failed",
+    submissionStartedAt: "2026-10-07T16:00:00.000Z",
+    submissionAttemptCount: 1,
+    lastError: { code: "INTER_HTTP_400", occurredAt: "2026-10-07T16:00:05.000Z", details: '{"message":"Pagamento mínimo aceito: R$ 1098.80. Gentileza alterar o valor total pago"}' },
+    barcodeSnapshot: { ...order.barcodeSnapshot, dueDate: "2026-09-29" },
+  };
+  const revision = {
+    request: failed, principalAmountCents: 106680, settlementAmountCents: 109880,
+    lateChargeAmountCents: 3200, scheduledFor: "2026-10-07",
+    beneficiaryDocument: expected.beneficiaryDocument, expenseId: expected.expenseId,
+    barcode: expected.barcode, sourceAttachmentId: "attachment_1", sourceAttachmentSha256: "a".repeat(64),
+  };
+  assert.equal(validateOverdueSettlementCliRevision(revision).evidenceSource, "inter_rejection");
+  assert.throws(() => validateOverdueSettlementCliRevision({ ...revision, settlementAmountCents: 109881, lateChargeAmountCents: 3201 }));
+  assert.throws(() => validateOverdueSettlementCliRevision({ ...revision, scheduledFor: "2026-10-08" }));
+  const adjusted = {
+    ...failed, status: "ready_to_submit", requestedSettlementAmount: 1098.8,
+    requestedLateChargeAmount: 32,
+    settlementRevision: {
+      source: "inter_rejection", evidenceSource: "inter_rejection", interQuoteAmountCents: 109880,
+      interQuoteObservedAt: "2026-10-07T16:00:05.000Z", sourceAttachmentId: "attachment_1",
+      sourceAttachmentSha256: "a".repeat(64), barcode: expected.barcode,
+      beneficiaryDocument: expected.beneficiaryDocument,
+    },
+    barcodeSnapshot: { ...failed.barcodeSnapshot, scheduledFor: "2026-10-07" },
+  };
+  assert.doesNotThrow(() => validatePaymentCliAction({ request: adjusted, action: "send-adjusted", ...expected,
+    scheduledFor: "2026-10-07", settlementAmountCents: 109880, lateChargeAmountCents: 3200,
+    sourceAttachmentId: "attachment_1", sourceAttachmentSha256: "a".repeat(64) }));
+});
+
 test("recusa datas impossíveis, ações desconhecidas e estados posteriores", () => {
   for (const date of ["2026-02-30", "2026-13-01", "2026-09-31"]) {
     assert.throws(() => validatePaymentCliAction({ request: { ...order, barcodeSnapshot: { ...order.barcodeSnapshot, scheduledFor: date } }, action: "authorize", ...expected, scheduledFor: date }));
@@ -144,4 +181,53 @@ test("prepara somente a cobrança vinculada sem ordem ou pagamento anterior", ()
   assert.throws(() => validatePaymentCliPreparation({ ...input, message: { ...input.message, linkedExpenseId: "expense_2" } }));
   assert.throws(() => validatePaymentCliPreparation({ ...input, beneficiaryDocument: "00000000000000" }));
   assert.throws(() => validatePaymentCliPreparation({ ...input, barcode: `9${expected.barcode.slice(1)}` }));
+});
+
+test("guia pública íntegra dispensa o CNPJ; outros códigos continuam exigindo", () => {
+  const darf = "858900000107499903852637230716263100518788193907";
+  const message = {
+    id: "inbox_darf", status: "linked", linkedExpenseId: "expense_darf", paymentRequestId: null,
+    classification: { amountCents: 104999, dueDate: "2026-11-19", barcode: darf },
+    existingBankPayment: null, existingSettlement: null,
+  };
+  const preparation = { message, inboxMessageId: "inbox_darf", amountCents: 104999, scheduledFor: "2026-11-19",
+    beneficiaryDocument: "", expenseId: "expense_darf", barcode: darf };
+  assert.doesNotThrow(() => validatePaymentCliPreparation(preparation));
+  const notGovernment = `84${darf.slice(2)}`;
+  assert.throws(() => validatePaymentCliPreparation({ ...preparation, barcode: notGovernment,
+    message: { ...message, classification: { ...message.classification, barcode: notGovernment } } }));
+
+  const request = { sourceType: "financial_inbox", paymentRail: "barcode", sourceId: "inbox_darf", expenseId: "expense_darf",
+    amount: 1049.99, status: "awaiting_financial_authorization",
+    barcodeSnapshot: { code: darf, scheduledFor: "2026-11-19", beneficiaryDocument: null } };
+  const action = { amountCents: 104999, scheduledFor: "2026-11-19", beneficiaryDocument: "", expenseId: "expense_darf", barcode: darf };
+  assert.doesNotThrow(() => validatePaymentCliAction({ request, action: "authorize", ...action }));
+  assert.throws(() => validatePaymentCliAction({ request: { ...request, sourceType: "expense_boleto", sourceId: "expense_darf" }, action: "authorize", ...action }));
+  assert.throws(() => validatePaymentCliAction({ request, action: "authorize", ...action, beneficiaryDocument: "12345678000195" }));
+});
+
+test("Pix copia e cola da guia FGTS: prepara, autoriza e envia somente a ordem exata", () => {
+  const pix = "00020101021226900014br.gov.bcb.pix2568pix-qrcode.caixa.gov.br/api/v2/cobv/7848581fcaea42e993a4208953e6c5cb5204000053039865802BR5923CAIXA ECONOMICA FEDERAL6008Brasilia62070503***6304DC8A";
+  const message = {
+    id: "inbox_fgts", status: "linked", linkedExpenseId: "expense_fgts", paymentRequestId: null,
+    classification: { documentType: "fgts", fiscalIdentity: { documentKind: "fgts" }, amountCents: 378507, dueDate: "2026-11-19" },
+    existingBankPayment: null, existingSettlement: null,
+  };
+  const preparation = { message, inboxMessageId: "inbox_fgts", amountCents: 378507, scheduledFor: "2026-11-19", expenseId: "expense_fgts", pixPayload: pix };
+  const parsed = validatePaymentCliPixPreparation(preparation);
+  assert.match(parsed.payloadHash, /^[0-9a-f]{64}$/);
+  assert.throws(() => validatePaymentCliPixPreparation({ ...preparation, scheduledFor: "2026-11-20" }));
+  assert.throws(() => validatePaymentCliPixPreparation({ ...preparation, pixPayload: `${pix.slice(0, -4)}0000` }));
+  assert.throws(() => validatePaymentCliPixPreparation({ ...preparation, message: { ...message, classification: { ...message.classification, documentType: "inss_darf" } } }));
+
+  const request = { sourceType: "financial_inbox", paymentRail: "pix_copy_paste", sourceId: "inbox_fgts", expenseId: "expense_fgts",
+    amount: 3785.07, status: "awaiting_financial_authorization",
+    pixCopyPasteSnapshot: { payloadHash: parsed.payloadHash, scheduledFor: "2026-11-19" } };
+  const action = { amountCents: 378507, scheduledFor: "2026-11-19", expenseId: "expense_fgts", pixPayloadSha256: parsed.payloadHash };
+  assert.doesNotThrow(() => validatePaymentCliPixAction({ request, action: "authorize", ...action }));
+  assert.doesNotThrow(() => validatePaymentCliPixAction({ request: { ...request, status: "ready_to_submit" }, action: "send", ...action }));
+  assert.throws(() => validatePaymentCliPixAction({ request, action: "send", ...action }));
+  assert.throws(() => validatePaymentCliPixAction({ request: { ...request, status: "ready_to_submit", submissionStartedAt: "x" }, action: "send", ...action }));
+  assert.throws(() => validatePaymentCliPixAction({ request, action: "authorize", ...action, pixPayloadSha256: "0".repeat(64) }));
+  assert.throws(() => validatePaymentCliPixAction({ request: { ...request, paymentRail: "barcode" }, action: "authorize", ...action }));
 });

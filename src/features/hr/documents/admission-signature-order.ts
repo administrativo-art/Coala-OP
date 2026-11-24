@@ -7,6 +7,8 @@ export const ADMISSION_SIGNATURE_TEMPLATE_ORDER = [
   "system-admission-transportation-voucher-request",
   "system-admission-transportation-voucher-waiver",
   "system-admission-confidentiality-agreement",
+  "system-admission-family-salary-term",
+  "system-admission-income-tax-dependents",
   "system-admission-bundle-closing-term",
 ] as const;
 
@@ -16,6 +18,13 @@ export const ADMISSION_TRANSPORT_VOUCHER_WAIVER_TEMPLATE_ID =
   "system-admission-transportation-voucher-waiver";
 export const ADMISSION_BUNDLE_CLOSING_TEMPLATE_ID =
   "system-admission-bundle-closing-term";
+export const ADMISSION_FAMILY_SALARY_TEMPLATE_ID = "system-admission-family-salary-term";
+export const ADMISSION_INCOME_TAX_TEMPLATE_ID = "system-admission-income-tax-dependents";
+
+export type AdmissionDependentTemplateConditions = {
+  familySalaryGranted: boolean;
+  incomeTaxDeclared: boolean;
+};
 
 type AdmissionSignatureOrderItem = {
   id?: unknown;
@@ -56,8 +65,11 @@ export function admissionTransportVoucherTemplateId(answer: unknown) {
 export function isAdmissionSignatureTemplateApplicable(
   item: Pick<AdmissionSignatureOrderItem, "id" | "templateId">,
   transportVoucherAnswer: unknown,
+  dependentConditions: AdmissionDependentTemplateConditions = { familySalaryGranted: false, incomeTaxDeclared: false },
 ) {
   const id = templateId(item);
+  if (id === ADMISSION_FAMILY_SALARY_TEMPLATE_ID) return dependentConditions.familySalaryGranted;
+  if (id === ADMISSION_INCOME_TAX_TEMPLATE_ID) return dependentConditions.incomeTaxDeclared;
   if (
     id !== ADMISSION_TRANSPORT_VOUCHER_REQUEST_TEMPLATE_ID
     && id !== ADMISSION_TRANSPORT_VOUCHER_WAIVER_TEMPLATE_ID
@@ -69,6 +81,7 @@ export function isAdmissionSignatureTemplateApplicable(
 
 export function admissionSignaturePackageTemplateIds(
   transportVoucherAnswer: unknown,
+  dependentConditions: AdmissionDependentTemplateConditions = { familySalaryGranted: false, incomeTaxDeclared: false },
 ) {
   return ADMISSION_SIGNATURE_TEMPLATE_ORDER.filter(
     (id) =>
@@ -76,6 +89,7 @@ export function admissionSignaturePackageTemplateIds(
       && isAdmissionSignatureTemplateApplicable(
         { id },
         transportVoucherAnswer,
+        dependentConditions,
       ),
   );
 }
@@ -83,9 +97,11 @@ export function admissionSignaturePackageTemplateIds(
 export function isCompleteAdmissionSignaturePackage(
   templateIds: readonly string[],
   transportVoucherAnswer: unknown,
+  dependentConditions: AdmissionDependentTemplateConditions = { familySalaryGranted: false, incomeTaxDeclared: false },
 ) {
   const expected = admissionSignaturePackageTemplateIds(
     transportVoucherAnswer,
+    dependentConditions,
   );
   const received = new Set(templateIds);
   return received.size === expected.length

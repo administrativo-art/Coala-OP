@@ -13,6 +13,8 @@ Use este mapa ao alterar cadastro, escala, ponto, metas, permissões ou fechamen
 
 Na escala do DP, a lista diária usa a vigência operacional da data. Apenas pessoas sem esse campo mantêm a união legada de unidades e quiosques. Depois da inicialização, quiosque atribuído não acrescenta unidade habitual. Cobertura externa aparece na data do turno e não muda a lotação financeira nem o empregador.
 
+Na lista de unidades em Configurações, o botão de colaboradores abre os vínculos operacionais ativos da unidade **hoje** para quem tem acesso ao diretório completo de pessoas. A mesma resolução de vigência usada pela equipe habitual da escala é aplicada à unidade DP; para um quiosque ainda sem cadastro DP, apenas a atribuição legada do quiosque é mostrada. Essa consulta usa as pessoas já carregadas na tela e não representa quem efetivamente está escalado em uma data futura. Sem permissão de diretório, o botão fica oculto porque o contexto de autenticação entrega apenas a própria pessoa e produziria uma lista incompleta.
+
 ## Percurso obrigatório de investigação
 
 1. Parta do cadastro e confirme `unitId`, `unitIds`, escopo de visualização e revisão histórica do vínculo na data.

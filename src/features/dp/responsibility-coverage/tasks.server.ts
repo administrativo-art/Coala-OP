@@ -105,6 +105,10 @@ export async function actOnResponsibilityTask(actor: ServerUserContext, taskId: 
     if (input.action === 'resolve' && !['claimed', 'pending'].includes(task.status)) {
       throw fail('DP_RESPONSIBILITY_TASK_RESOLVE_UNAVAILABLE', 'A pendência não está disponível para conclusão.');
     }
+    if (input.action === 'resolve' && task.kind === 'automatic_absence_restoration_review') {
+      throw fail('DP_AUTO_ABSENCE_SYNC_PENDING',
+        'A pendência termina quando a rotina restaurar o turno após a revisão da escala.');
+    }
     const now = new Date().toISOString();
     const version = task.version + 1;
     const update = input.action === 'claim'

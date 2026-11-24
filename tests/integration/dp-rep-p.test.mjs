@@ -380,19 +380,19 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     assert.equal(storedAfd.artifacts.bundle.retentionMode, 'Locked');
     assert.equal(storedAfd.artifacts.bundle.storageBucket, 'fiscal-test');
 
-    // Piloto nominal: ativar a unidade não coleta de quem não está na lista, mesmo se um cliente adulterado enviar coordenadas.
+    // Coleta para todos: a lista nominal do piloto não restringe mais; quem decide é o turno e a unidade entrega a área.
     await saveRepPLocationPolicy(context, executionUnitId, {
       expectedRevision: 1, mode: 'observe', center: { latitude: -1.4558, longitude: -48.4902 },
       radiusMeters: 150, maxAccuracyMeters: 100, maxAgeSeconds: 60, captureTimeoutMs: 10_000,
       privacyNoticeUrl: 'https://example.test/privacidade', legalBasisReference: 'Aditivo LGPD aprovado pelo controlador',
-      retentionDays: 1_825, participantUserIds: [anotherUser.id], activationConfirmation: true,
+      retentionDays: 1_825, participantUserIds: [anotherUser.id], activationConfirmation: true, // legado, ignorado
     }, { mainDb: dbAdmin, repDb: repPDbAdmin, now: () => new Date('2026-10-18T12:00:00.000Z') });
     const excludedOptions = await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, dependencies);
-    assert.equal(excludedOptions.executionUnits.find((unit) => unit.id === executionUnitId).locationPolicy.mode, 'disabled');
+    assert.equal(excludedOptions.executionUnits.find((unit) => unit.id === executionUnitId).locationPolicy.mode, 'observe');
     const excluded = await recordOwnRepPMarking(context, { attemptId: 'attempt-excluded-location', workDate: '2026-10-18',
       executionUnitId, channel: 'mobile', locationAttempt: { ...mobileLocation, captureId: 'capture-excluded' } }, dependencies);
-    assert.equal(excluded.location, null);
-    assert.equal((await repPDbAdmin.collection(REP_P_LOCATION_EVIDENCE).where('employeeId', '==', userId).get()).size, 2);
+    assert.notEqual(excluded.location, null);
+    assert.equal((await repPDbAdmin.collection(REP_P_LOCATION_EVIDENCE).where('employeeId', '==', userId).get()).size, 3);
 
     const eventSnapshot = await repPDbAdmin.collection('repP_events').where('establishmentId', '==', establishmentId).get();
     const attemptSnapshot = await repPDbAdmin.collection('repP_attempts').where('employeeId', '==', userId).get();
@@ -418,7 +418,7 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     await assert.rejects(saveRepPLocationPolicy(restricted, executionUnitId, policyInput, policyDeps),
       { code: 'DP_TIME_LOCATION_POLICY_FORBIDDEN' });
     for (const invalid of [{ privacyNoticeUrl: 'http://example.test/privacy' },
-      { legalBasisReference: null }, { activationConfirmation: false }, { participantUserIds: [] }]) {
+      { activationConfirmation: false }]) {
       await assert.rejects(saveRepPLocationPolicy(context, executionUnitId, { ...policyInput, ...invalid }, policyDeps),
         { code: 'DP_TIME_LOCATION_POLICY_INPUT_INVALID' });
     }
@@ -443,13 +443,29 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
       assert.equal(replay.marking.nsr, result.marking.nsr, name);
     }
     const finalEvidence = await repPDbAdmin.collection(REP_P_LOCATION_EVIDENCE).where('employeeId', '==', userId).get();
-    assert.equal(finalEvidence.size, 2 + cases.length, 'reenvio não duplica evidência');
+    assert.equal(finalEvidence.size, 3 + cases.length, 'reenvio não duplica evidência');
     assert.ok(finalEvidence.docs.every((doc) => doc.get('expiresAt') instanceof Timestamp));
     const finalEvents = await repPDbAdmin.collection('repP_events').where('establishmentId', '==', establishmentId).get();
     assert.equal(finalEvents.size, 5 + cases.length);
     assert.ok(finalEvents.docs.every((doc) => doc.get('capture') === undefined && doc.get('location') === undefined));
+
+    // A área pode ser preparada antes da decisão jurídica, mas deve falhar fechada para a coleta sem bloquear a batida fiscal.
+    await saveRepPLocationPolicy(context, executionUnitId, {
+      ...policyInput, expectedRevision: 3, legalBasisReference: null,
+    }, policyDeps);
+    const noLegalBasisOptions = await listOwnRepPExecutionUnits(context, { workDate: '2026-10-18' }, dependencies);
+    assert.equal(noLegalBasisOptions.executionUnits.find((unit) => unit.id === executionUnitId).locationPolicy.mode, 'disabled');
+    const evidenceBeforeNoLegalBasis = (await repPDbAdmin.collection(REP_P_LOCATION_EVIDENCE)
+      .where('employeeId', '==', userId).get()).size;
+    const noLegalBasisMarking = await recordOwnRepPMarking(context, { attemptId: 'attempt-without-legal-basis',
+      workDate: '2026-10-18', executionUnitId, channel: 'mobile',
+      locationAttempt: { ...mobileLocation, captureId: 'capture-without-legal-basis' } }, dependencies);
+    assert.equal(noLegalBasisMarking.status, 'recorded');
+    assert.equal(noLegalBasisMarking.location, null);
+    assert.equal((await repPDbAdmin.collection(REP_P_LOCATION_EVIDENCE)
+      .where('employeeId', '==', userId).get()).size, evidenceBeforeNoLegalBasis);
     const policyAudit = await repPLocationPolicyRef(repPDbAdmin, workspaceId, executionUnitId).collection('audit').get();
-    assert.equal(policyAudit.size, 3, 'ativações e alterações da política são auditadas');
+    assert.equal(policyAudit.size, 4, 'ativações e alterações da política são auditadas');
 
     await t.test('AFD particionado na meia-noite do fuso da execução preserva todos os NSRs entre páginas', async () => {
       const at = (instant) => ({ async read() { return { ...(await clock.read()), instant: new Date(instant) }; } });

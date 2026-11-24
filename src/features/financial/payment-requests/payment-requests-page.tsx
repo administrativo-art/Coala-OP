@@ -136,6 +136,7 @@ function apiErrorMessage(payload: unknown, fallback: string) {
 
 function railLabel(item: BankPaymentRequest, long = false) {
   if (item.paymentRail === "barcode") return long ? "Código de barras" : "Boleto";
+  if (item.paymentRail === "pix_copy_paste") return long ? "Pix copia e cola" : "Pix guia";
   return "Pix";
 }
 
@@ -143,19 +144,21 @@ function destination(item: BankPaymentRequest) {
   return (
     item.beneficiarySnapshot?.maskedPaymentDestination ??
     item.barcodeSnapshot?.maskedCode ??
+    item.pixCopyPasteSnapshot?.maskedPayload ??
     "—"
   );
 }
 
 function partyName(item: BankPaymentRequest) {
-  return item.beneficiarySnapshot?.name ?? "Código de barras";
+  return item.beneficiarySnapshot?.name ?? item.pixCopyPasteSnapshot?.merchantName ?? "Código de barras";
 }
 
 type DueInfo = { immediate: boolean; date: string | null; days: number | null };
 
 function dueInfo(item: BankPaymentRequest): DueInfo {
-  if (item.barcodeSnapshot?.dueDate) {
-    const date = item.barcodeSnapshot.dueDate;
+  const documentDueDate = item.barcodeSnapshot?.dueDate ?? item.pixCopyPasteSnapshot?.dueDate;
+  if (documentDueDate) {
+    const date = documentDueDate;
     return { immediate: false, date, days: financialDaysUntil(date) };
   }
   if (item.scheduledFor) {
@@ -762,8 +765,12 @@ function ChargeReviewDrawer({
   const supplierTaxId = item.paymentRail === "barcode"
     ? item.barcodeSnapshot.beneficiaryDocument ?? "—"
     : item.beneficiarySnapshot?.document ?? "—";
-  const dueDate = item.paymentRail === "barcode" ? item.barcodeSnapshot.dueDate : null;
-  const scheduledFor = item.paymentRail === "barcode" ? item.barcodeSnapshot.scheduledFor : item.scheduledFor;
+  const dueDate = item.paymentRail === "barcode"
+    ? item.barcodeSnapshot.dueDate
+    : item.paymentRail === "pix_copy_paste" ? item.pixCopyPasteSnapshot.dueDate : null;
+  const scheduledFor = item.paymentRail === "barcode"
+    ? item.barcodeSnapshot.scheduledFor
+    : item.paymentRail === "pix_copy_paste" ? item.pixCopyPasteSnapshot.scheduledFor : item.scheduledFor;
   const sourceDescription = item.description || partyName(item);
   const hasAction = canAnalyze || canRecover;
 

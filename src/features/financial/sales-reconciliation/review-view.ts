@@ -9,16 +9,17 @@ import type {
   SalesReconciliationMatchBasis,
 } from "./types";
 
-export type CaseFilter = "attention" | "all" | "auto";
+export type CaseFilter = "attention" | "all" | "auto" | "resolved";
 export type ChannelFilter = "all" | ReconciliationSalesChannel;
 export type KindFilter = "all" | Exclude<SalesReconciliationCaseKind, "matched">;
 
-export const channelOrder: ReconciliationSalesChannel[] = ["pix", "debit_card", "credit_card"];
+export const channelOrder: ReconciliationSalesChannel[] = ["pix", "debit_card", "credit_card", "voucher"];
 
 export const channels: Record<ReconciliationSalesChannel, string> = {
   pix: "Pix",
   debit_card: "Débito",
   credit_card: "Crédito",
+  voucher: "Voucher",
 };
 
 export const kinds: Record<SalesReconciliationCaseKind, string> = {
@@ -144,8 +145,17 @@ export const addDays = (key: string, delta: number) => {
 
 export const isAttention = (row: SuggestedSalesReconciliationCase) => row.reviewStatus === "attention_required";
 export const isMultiset = (row: SuggestedSalesReconciliationCase) => row.kind === "matched" && row.matchBasis === "daily_amount_multiset";
-export const caseBadgeLabel = (row: SuggestedSalesReconciliationCase) => isMultiset(row) ? "Conjunto diário conferido" : kinds[row.kind];
-export const caseReason = (row: SuggestedSalesReconciliationCase) => isMultiset(row) ? multisetReason : caseReasons[row.kind];
+export const caseBadgeLabel = (row: SuggestedSalesReconciliationCase) => row.reviewStatus === "resolved_without_link"
+  ? "Resolvida sem vínculo" : row.paymentMethodDifference ? "Pagamento localizado"
+    : isMultiset(row) ? "Conjunto diário conferido" : kinds[row.kind];
+export function caseReason(row: SuggestedSalesReconciliationCase) {
+  if (row.paymentMethodDifference) return "Pagamento localizado — PDV: crédito · Stone: voucher.";
+  if (row.reviewStatus === "resolved_without_link") return "Pagamento confirmado na Stone, sem vínculo com venda do PDV.";
+  if (row.pixRefundCheck?.state === "clear") return "O pagamento aprovado pela Stone tem o mesmo valor do PDV e a verificação de devoluções está completa.";
+  if (row.pixRefundCheck?.state === "events_found") return "Há evidência de devolução Pix na Stone para esta transação.";
+  if (row.pixRefundCheck?.state === "incomplete") return "A confirmação depende de completar a verificação de devoluções Pix na Stone.";
+  return isMultiset(row) ? multisetReason : caseReasons[row.kind];
+}
 export const caseTime = (row: SuggestedSalesReconciliationCase, facts: Map<string, SalesMatchFact>) => {
   const fact = facts.get(row.pdvFactIds[0] ?? "") ?? facts.get(row.stoneSaleIds[0] ?? "");
   return fact ? new Date(fact.soldAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "—";
@@ -157,7 +167,8 @@ export function summarizeChannel(cases: SuggestedSalesReconciliationCase[], chan
   const pdv = list.reduce((sum, row) => sum + row.pdvGrossAmountCents, 0);
   const stone = list.reduce((sum, row) => sum + row.stoneGrossAmountCents, 0);
   const attention = list.filter(isAttention).length;
-  return { list, pdv, stone, difference: stone - pdv, attention, auto: list.length - attention };
+  return { list, pdv, stone, difference: stone - pdv, attention,
+    resolved: list.filter(row => row.reviewStatus === "resolved_without_link").length, auto: list.filter(row => row.reviewStatus === "auto_checked").length };
 }
 
 export function filterCases(cases: SuggestedSalesReconciliationCase[], filters: { channel: ChannelFilter; caseFilter: CaseFilter; kind: KindFilter }) {
@@ -167,7 +178,9 @@ export function filterCases(cases: SuggestedSalesReconciliationCase[], filters: 
   attention.forEach(row => kindCounts.set(row.kind, (kindCounts.get(row.kind) ?? 0) + 1));
   // Um filtro por tipo só vale para divergências e se ainda existir no recorte atual.
   const kind: KindFilter = filters.caseFilter === "attention" && filters.kind !== "all" && kindCounts.has(filters.kind) ? filters.kind : "all";
-  let rows = filters.caseFilter === "all" ? inChannel : filters.caseFilter === "auto" ? inChannel.filter(row => !isAttention(row)) : attention;
+  const auto = inChannel.filter(row => row.reviewStatus === "auto_checked");
+  const resolved = inChannel.filter(row => row.reviewStatus === "resolved_without_link");
+  let rows = { all: inChannel, auto, resolved, attention }[filters.caseFilter];
   if (kind !== "all") rows = rows.filter(row => row.kind === kind);
-  return { inChannel, attention, auto: inChannel.length - attention.length, rows, kind, kindCounts };
+  return { inChannel, attention, auto: auto.length, resolved: resolved.length, rows, kind, kindCounts };
 }

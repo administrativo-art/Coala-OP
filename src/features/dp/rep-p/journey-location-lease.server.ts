@@ -81,7 +81,7 @@ export async function issueOwnJourneyLocationLease(context: ServerUserContext, i
     throw denied('DP_JOURNEY_LOCATION_JOURNEY_INACTIVE', 'O acompanhamento só fica disponível durante a jornada ativa.');
   }
   const policy = (await deps.loadPolicies(deps.policyDb, context.workspace_id, [input.executionUnitId])).get(input.executionUnitId);
-  if (!policy || policy.mode !== 'observe' || !policy.participantUserIds.includes(context.decoded.uid)
+  if (!policy || policy.mode !== 'observe'
     || !policy.legalBasisReference || policy.retentionDays !== REP_P_LOCATION_RETENTION_DAYS) {
     throw denied('DP_JOURNEY_LOCATION_POLICY_INACTIVE', 'O acompanhamento não está ativo para esta pessoa e unidade.');
   }

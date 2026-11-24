@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   compareExpenseCompetenceMonths,
   consolidateExpenseObligations,
+  expandExpenseInstallmentsForList,
   groupExpensesByDueWeek,
   sumExpenseValues,
 } from "../../src/features/financial/lib/expense-list";
@@ -55,6 +56,24 @@ test("mantém previsão conciliada órfã visível para não ocultar inconsistê
   };
 
   assert.deepEqual(consolidateExpenseObligations([forecast]), [forecast]);
+});
+
+test("linhas de parcelas mantêm o título de origem para abrir o detalhe", () => {
+  const expense = {
+    id: "titulo", paymentMethod: "installments", competenceMonth: "2026-10", totalValue: 300, status: "partially_paid",
+    installments: [
+      { number: 1, dueDate: "2026-10-28", value: 100, status: "paid" },
+      { number: 2, dueDate: "2026-11-01", value: 100, status: "pending" },
+      { number: 3, dueDate: "2026-12-01", value: 100, status: "cancelled" },
+    ],
+  };
+  const rows = expandExpenseInstallmentsForList(expense);
+  assert.deepEqual(rows.map(({ id, competenceMonth, totalValue, status }) => [id, competenceMonth, totalValue, status]), [
+    ["titulo:installment:1", "2026-10", 100, "paid"],
+    ["titulo:installment:2", "2026-11", 100, "pending"],
+  ]);
+  assert.ok(rows.every((row) => "sourceExpense" in row && row.sourceExpense === expense));
+  assert.equal(expense.totalValue, 300);
 });
 
 test("agrupa despesas por semanas de vencimento iniciadas na segunda-feira", () => {

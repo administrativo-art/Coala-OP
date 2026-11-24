@@ -2,7 +2,7 @@
 
 ## Escopo e modelo
 
-Pepper Potts pode executar um procedimento delimitado no Codex CLI, após autorização explícita para aquele boleto. Isso não instala um agente no produto, não cria uma rotina autônoma e não autoriza outros pagamentos. O perfil usa `gpt-6-luna`, esforço `high`; TARS coordena exceções, sem repetir as consultas. Demais agentes e modelo da sessão principal não mudam.
+Pepper Potts pode executar um procedimento delimitado no Codex CLI, após autorização explícita para aquele boleto. Isso não instala um agente no produto, não cria uma rotina autônoma e não autoriza outros pagamentos. O perfil usa `gpt-6-luna`, esforço `high`; Leia coordena a operação financeira e encaminha falhas de produto a TARS por meio de Nemo, sem repetir as consultas. Demais agentes e modelo da sessão principal não mudam.
 
 Antes de delegar, anuncie o nome completo, confira que não existe outro especialista em execução e registre modelo solicitado, identificação real da sessão e modelo efetivo quando informado. Se a ferramenta não carregar perfis por nome, forneça explicitamente as instruções do perfil e registre esse fallback; não alegue carregamento nativo. A configuração e os testes estáticos não comprovam execução bancária.
 
@@ -24,6 +24,10 @@ Antes de delegar, anuncie o nome completo, confira que não existe outro especia
 
 Os testes locais da CLI verificam entradas e transições, não certificam a identidade bancária nem a disponibilidade da integração. Antes da primeira operação real, validar o caminho completo de preflight com fontes reais autorizadas, sem envio. Só prosseguir se os guardrails existentes aceitarem todos os campos, inclusive CNPJ do favorecido. Snapshot sem identidade não pode ser preenchido diretamente no banco nem aceito por remoção de validação.
 
-Pepper Potts interrompe a etapa e devolve a TARS: fontes/IDs, ponto de bloqueio, ações já realizadas e próximo passo necessário. Mudança de produto, implantação, cadastro com classificação desconhecida ou ampliação de autorização exigem a decisão correspondente. Não trocar de modelo nem abrir outros agentes automaticamente.
+Pepper Potts interrompe a etapa e devolve a Leia/Nemo: fontes/IDs, ponto de bloqueio, ações já realizadas e próximo passo necessário. Mudança de produto, implantação, cadastro com classificação desconhecida ou ampliação de autorização exigem a decisão correspondente. Não trocar de modelo nem abrir outros agentes automaticamente.
+
+## Padrão confirmado para a linha Vivo
+
+Para a conta Vivo `0461855379`, Tiago decidiu em 2026-11-09 que uma cobrança mensal confirmada atualiza a previsão da própria competência e as competências futuras **já lançadas** para o valor atual, desde que conta, linha, série, estado e valor anterior coincidam. Este padrão evita perguntar de novo sobre o alcance temporal. Ele não cria previsões novas nem altera competências anteriores, despesas realizadas, parcelas pagas ou solicitações bancárias. Se as previsões futuras tiverem valores diferentes entre si, documento conflitante ou identidade incompleta, interrompa e peça a decisão específica. Antes de gravar, informe quantas previsões existentes serão afetadas; depois, confira o resultado. A cobrança atual exige conciliação própria e a ordem Inter continua sujeita à autorização explícita do boleto.
 
 Configuração por agente: [OpenAI Docs](https://learn.chatgpt.com/docs/agent-configuration/subagents). A redução de custo é uma hipótese a medir; delegação também consome tokens.

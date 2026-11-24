@@ -153,3 +153,17 @@ test("recorrência rateada exige vigência e bases válidas para critérios vari
     false
   );
 });
+
+test("rateio conserva centavos e sinal com desempate estável, independente da ordem e nomes", () => {
+  const apportionments = [{ resultCenter: "a", percentage: 50 }, { resultCenter: "b", percentage: 50 }];
+  const names = { a: "Zulu", b: "Alpha" };
+  for (const totalValue of [0, 0.01, 0.03, 101.03, -0.01, -101.03]) {
+    const expense = { totalValue, isApportioned: true, apportionments };
+    const values = ["Zulu", "Alpha"].map(center => expenseValueForResultCenter(expense, center, names));
+    assert.equal(Math.round(values.reduce((sum, value) => sum + value, 0) * 100), Math.round(totalValue * 100));
+    assert.deepEqual(["Zulu", "Alpha"].map(center => expenseValueForResultCenter({ ...expense, apportionments: [...apportionments].reverse() }, center, names)), values);
+    assert.equal(expenseValueForResultCenter(expense, "missing", names), 0);
+  }
+  assert.equal(expenseValueForResultCenter({ totalValue: 0.01, isApportioned: true, apportionments }, "Zulu", names), 0.01);
+  assert.equal(expenseValueForResultCenter({ totalValue: 100, isApportioned: true, apportionments: [{ resultCenter: "a", percentage: 99 }] }, "a"), 99);
+});

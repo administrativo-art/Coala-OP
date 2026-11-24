@@ -4,6 +4,10 @@
 
 | Plano | Área |
 | --- | --- |
+| [Resolução de Pix Stone sem vínculo](plano-resolucao-pix-stone-sem-vinculo.md) | Financeiro, Conciliação de vendas |
+| [Taxas de vendas conciliadas na DRE](plano-taxas-vendas-conciliadas-dre.md) | Financeiro, conciliação, competência e recebíveis |
+| [Exportação da DRE](plano-exportacao-dre.md) | Financeiro, PDF timbrado e Excel |
+| [Verificação de devoluções Pix na Stone](plano-verificacao-devolucoes-pix-stone.md) | Financeiro, Conciliação de vendas |
 | [Rastreabilidade por pessoa](plano-rastreabilidade-pessoa.md) | Privacidade, Pessoas, documentos e integrações |
 | [Destinação dos arquivos de Cobranças](plano-destinacao-documental-cobrancas.md) | Financeiro, Patrimônio e Documentos |
 | [Armazenamento documental único](plano-armazenamento-documental-unico.md) | PDF assinado compartilhado por Acervo/processo, integridade e limpeza histórica separada |
@@ -27,7 +31,16 @@
 | [Plano — Favorecidos unificados para pagamentos](plano-favorecidos-pagamentos-unificados.md) | Financeiro |
 | [Plano completo do modulo de fechamento de caixa e depositos em dinheiro](plano-fechamento-caixa-depositos.md) | Financeiro |
 | [Plano de integração Stone e conciliação de receitas — v5](plano-integracao-stone-conciliacao.md) | Financeiro |
+| [Plano — Conciliação de recebimentos, 1ª parte (venda → conta Stone)](plano-conciliacao-recebimentos-conta-stone.md) | Financeiro |
+| [Plano — Estudo de fluxo de caixa (13 semanas)](plano-estudo-fluxo-caixa.md) | Financeiro |
+| [Plano — Fechamento financeiro mensal](plano-fechamento-financeiro-mensal.md) | Financeiro |
 | [Plano de provisões financeiras - rascunho para validação](plano-provisoes-financeiras-draft.md) | Financeiro |
 | [Retomada — conciliação e Coala Financeiro](plano-retomada-financeiro-2026-09-22.md) | Financeiro |
 | [Plano de Implementação: Analytics Operacional em Formulários](plano-implementacao-analytics-formularios.md) | Formulários |
 | [Documentos e histórico de férias](plano-ferias-documentos.md) | Pessoas e DP |
+- [Taxas confirmadas de Recebimentos → DRE](plano-taxas-confirmadas-recebimentos-dre.md)
+- [Recebimentos: pagamentos entre competências](plano-recebimentos-pagamentos-entre-competencias.md)
+
+- [Visão do caixa — estágios do numerário](plano-visao-caixa-estagios-especie.md)
+
+- [Visão do caixa por fatura de cartão](plano-visao-caixa-faturas-cartao.md).

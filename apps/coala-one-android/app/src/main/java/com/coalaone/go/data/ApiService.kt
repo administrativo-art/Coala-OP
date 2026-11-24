@@ -49,6 +49,8 @@ interface ApiService {
     @POST("api/dp/time-recording/journey-location/lease") suspend fun journeyLocationLease(@Body request: JourneyLocationLeaseRequest): JourneyLocationLease
     @Streaming @GET("api/dp/time-recording/receipts/{receiptId}") suspend fun receipt(@Path("receiptId") receiptId: String): ResponseBody
     @Streaming @GET("api/dp/time-recording/receipts/export") suspend fun receiptArchive(@Query("startDate") startDate: String, @Query("endDate") endDate: String): ResponseBody
+    @GET("api/dp/time-recording/day-corrections") suspend fun dayCorrections(@Query("month") month: String): DayCorrections
+    @POST("api/dp/time-recording/day-corrections") suspend fun respondToDayCorrection(@Body request: DayCorrectionResponse): DayCorrection
     @GET("api/dp/time-recording/adjustments") suspend fun adjustments(@Query("month") month: String): OwnAdjustments
     @POST("api/dp/time-recording/adjustments") suspend fun requestAdjustment(@Body request: AdjustmentRequest): AdjustmentCreated
     @GET("api/dp/time-recording/time-bank") suspend fun timeBank(@Query("date") date: String): TimeBankResponse

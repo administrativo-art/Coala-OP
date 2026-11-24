@@ -1,6 +1,7 @@
 "use client";
 
 import { formatCurrency } from "@/features/financial/lib/utils";
+import type { ExpenseLifecyclePoint } from "@/features/financial/lib/cash-flow-analysis";
 import { cn } from "@/lib/utils";
 
 type ExpenseKpis = {
@@ -21,6 +22,9 @@ export function KpiFlowStrip({
   onAuditClick,
   auditActive = false,
   periodLabel,
+  competences,
+  selectedCompetence,
+  onCompetenceSelect,
 }: {
   kpis: ExpenseKpis;
   openCount: number;
@@ -28,6 +32,10 @@ export function KpiFlowStrip({
   onAuditClick: () => void;
   auditActive?: boolean;
   periodLabel: string;
+  /** Provisionado × pago por competência, do mais antigo para o mais recente; clicar filtra a lista pela competência. */
+  competences?: ExpenseLifecyclePoint[];
+  selectedCompetence?: string;
+  onCompetenceSelect?: (competence: string) => void;
 }) {
   const otherOpen = Math.max(kpis.open - kpis.overdue - kpis.dueSoon, 0);
   const periodTotal = kpis.paid + kpis.open;
@@ -131,6 +139,56 @@ export function KpiFlowStrip({
           </div>
         </button>
       </div>
+
+      {competences && competences.length > 0 ? (
+        <CompetenceTimeline points={competences} selected={selectedCompetence} onSelect={onCompetenceSelect} />
+      ) : null}
     </section>
+  );
+}
+
+/** Uma coluna por competência: a parte paga cheia e a parte em aberto tracejada, com o percentual pago. */
+function CompetenceTimeline({ points, selected, onSelect }: { points: ExpenseLifecyclePoint[]; selected?: string; onSelect?: (competence: string) => void }) {
+  const largest = Math.max(...points.map((point) => point.provisioned), 1);
+  return (
+    <div className="grid gap-4 border-t border-dashed border-ds-divider px-5 pb-4 pt-3.5 lg:grid-cols-[170px_minmax(0,1fr)] lg:items-end">
+      <div className="space-y-1.5">
+        <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-muted">Por competência</p>
+        <p className="text-[11.5px] text-ds-ink-faint">Quanto do provisionado já foi pago. Clique num mês para filtrar a lista.</p>
+        <p className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-ds-ink-muted">
+          <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-[2px] bg-ds-ok" aria-hidden="true" />Pago</span>
+          <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-[2px] border border-ds-warn bg-ds-warn-bg" aria-hidden="true" />Em aberto</span>
+        </p>
+      </div>
+      <div className="grid grid-flow-col auto-cols-fr gap-2" role="group" aria-label="Competências">
+        {points.map((point) => {
+          const paidShare = point.provisioned > 0 ? Math.min(point.paid / point.provisioned, 1) : 0;
+          const height = Math.max(Math.round((point.provisioned / largest) * 64), point.provisioned > 0 ? 6 : 2);
+          const active = selected === point.key;
+          return (
+            <button
+              key={point.key}
+              type="button"
+              aria-pressed={active}
+              aria-label={`${point.month}: ${formatCurrency(point.paid)} pagos de ${formatCurrency(point.provisioned)} provisionados`}
+              onClick={() => onSelect?.(point.key)}
+              className={cn(
+                "grid justify-items-center gap-1 rounded-xl px-1 py-1.5 transition-colors hover:bg-ds-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink",
+                active && "bg-ds-accent-row",
+              )}
+            >
+              <span className="flex w-full max-w-[46px] flex-col-reverse overflow-hidden rounded-md bg-ds-muted" style={{ height: 64 }}>
+                <span className="flex w-full flex-col-reverse overflow-hidden rounded-md" style={{ height }}>
+                  <span className="w-full bg-ds-ok" style={{ height: `${paidShare * 100}%` }} />
+                  <span className="w-full border border-ds-warn bg-ds-warn-bg" style={{ height: `${(1 - paidShare) * 100}%` }} />
+                </span>
+              </span>
+              <span className="text-[11.5px] font-bold capitalize text-ds-ink-2">{point.month}</span>
+              <span className={cn("font-mono text-[11px]", paidShare < 0.98 ? "font-bold text-ds-warn" : "text-ds-ink-faint")}>{Math.round(paidShare * 100)}%</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }

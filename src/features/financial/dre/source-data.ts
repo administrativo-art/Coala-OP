@@ -1,3 +1,4 @@
+import type { CompositionReconciliationInput } from "./cmv-reconciliation";
 import type { DreCmvPeriod } from "./cmv-closure";
 import type { SalesReport } from "@/types";
 import type { BudgetPlanningComparison } from "../budgets/projection-view";
@@ -26,6 +27,8 @@ export type DreSalesUnitMonthSummary = {
   /** Coverage witnesses only: item price × quantity is not the integral payments source. */
   dates?: string[];
   hasUndatedReports?: boolean;
+  /** Venda por dia (itens × preço) para os gráficos; não substitui a receita mensal apurada. */
+  dailyRevenue?: Record<string, number>;
 };
 
 export type DreClosureUnitMonthSummary = Partial<CashClosureDreSummary> & {
@@ -51,6 +54,7 @@ export type DreSourceDataStats = {
 export type DreSourceDataPayload = {
   budgetPlanning?: BudgetPlanningComparison[];
   cmvPeriods?: DreCmvPeriod[];
+  cmvReconciliation?: CompositionReconciliationInput[];
   cmvCapabilities?: { canClose: boolean; canReopen: boolean };
   expenses: FinancialExpenseDreDocument[];
   salesSummaries: DreSalesUnitMonthSummary[];
@@ -83,15 +87,23 @@ export function summarizeDreSalesReports(
       cmv: 0,
       dates: [],
       hasUndatedReports: false,
+      dailyRevenue: {},
     };
     const maximumDay = new Date(Date.UTC(report.year, report.month, 0)).getUTCDate();
     if (Number.isInteger(report.day) && report.day! >= 1 && report.day! <= maximumDay) {
       const date = `${report.year}-${String(report.month).padStart(2, "0")}-${String(report.day).padStart(2, "0")}`;
       current.dates = [...new Set([...(current.dates ?? []), date])].sort();
     } else current.hasUndatedReports = true;
+    const reportDate = Number.isInteger(report.day) && report.day! >= 1 && report.day! <= maximumDay
+      ? `${report.year}-${String(report.month).padStart(2, "0")}-${String(report.day).padStart(2, "0")}`
+      : null;
     for (const item of Array.isArray(report.items) ? report.items : []) {
       if (!item || typeof item !== "object") continue;
-      if (Number.isFinite(item.quantity) && Number.isFinite(item.unitPrice ?? 0)) current.revenue += item.quantity * (item.unitPrice ?? 0);
+      if (Number.isFinite(item.quantity) && Number.isFinite(item.unitPrice ?? 0)) {
+        const value = item.quantity * (item.unitPrice ?? 0);
+        current.revenue += value;
+        if (reportDate) current.dailyRevenue![reportDate] = (current.dailyRevenue![reportDate] ?? 0) + value;
+      }
       if (!item.simulationId) continue;
       const cmv = simulationCmv.get(item.simulationId);
       if (cmv === undefined) missingSimulationIds.add(item.simulationId);

@@ -32,6 +32,10 @@ Origem: instruções expressas nesta conversa sobre a posição financeira de se
 
 Ao acrescentar uma regra: registre **enunciado, estado, responsável ou decisão que a aprovou, data e fonte**. Não marque uma hipótese, sugestão da IA ou documento de planejamento como aprovada.
 
+## Competência da cobrança por parcela — 21/11/2026
+
+Regra confirmada por Tiago na revisão do fechamento de outubro. O mês da cobrança é a competência operacional de cada parcela. Para boleto e outras parcelas avulsas, vale o mês do seu vencimento. Para cartão, vale a competência da fatura do ciclo. Despesas e Fechamento compartilham o [contrato central da despesa](../../src/features/financial/lib/expense-accounting-contract.ts). A data efetiva de pagamento determina a baixa. A DRE usa a competência contábil do título.
+
 ## Confronto com a main 70aaab65
 
 Esta integração é documental. A consulta por placa ainda é pública; o heartbeat ainda não valida token; a transição genérica RH não valida enum de destino em runtime. As regras aprovadas acima continuam válidas como intenção, mas suas correções locais não foram integradas. Ver [diferenças e limites](main-map-integration.md). Não interpretar a coluna Alcance como comprovação de implementação.

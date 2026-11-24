@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { expenseValueForResultCenter } from "../../src/features/financial/lib/expense-rateio";
 
 import {
   accountAllocationDifference,
@@ -73,4 +74,31 @@ test("prioriza a matriz individual por conta e centro quando ela existe", () => 
     { accountPlanId: "fgts", accountPlanName: "FGTS", amount: 80 },
     { accountPlanId: "consignado", accountPlanName: "Consignado", amount: 30 },
   ]);
+});
+
+test("DAS e IR/CSLL: cada conta conserva seu total nos centros e qualquer subconjunto usa a mesma distribuição", () => {
+  const expense = {
+    totalValue: 4361.70, hasAccountAllocations: true,
+    accountAllocations: [
+      { accountPlanId: "irpj", amount: 239.89 }, { accountPlanId: "csll", amount: 152.66 },
+      { accountPlanId: "cofins", amount: 555.68 }, { accountPlanId: "pis", amount: 120.38 },
+      { accountPlanId: "cpp", amount: 1831.92 }, { accountPlanId: "icms", amount: 1461.17 },
+    ],
+    isApportioned: true, apportionments: [
+      { resultCenter: "a", percentage: 33.33 }, { resultCenter: "b", percentage: 33.33 }, { resultCenter: "c", percentage: 33.34 },
+    ],
+  };
+  const names = { a: "Loja A", b: "Loja B", c: "Loja C" };
+  const all = ["Loja A", "Loja B", "Loja C"].map(center => expenseAccountAllocationsForResultCenter(expense, center, names));
+  for (let index = 0; index < expense.accountAllocations.length; index++) {
+    assert.equal(all.reduce((sum, row) => sum + Math.round(row[index].amount * 100), 0), Math.round(expense.accountAllocations[index].amount * 100));
+    assert.equal(Math.round(all[0][index].amount * 100) + Math.round(all[2][index].amount * 100),
+      Math.round(expense.accountAllocations[index].amount * 100) - Math.round(all[1][index].amount * 100));
+  }
+  assert.deepEqual(expenseAccountAllocationsForResultCenter({ ...expense, apportionments: [...expense.apportionments].reverse() }, "Loja A", names), all[0]);
+  assert.equal(all.flat().reduce((sum, row) => sum + Math.round(row.amount * 100), 0), 436170);
+  for (let index = 0; index < all.length; index++) {
+    assert.equal(Math.round(expenseValueForResultCenter(expense, ["Loja A", "Loja B", "Loja C"][index], names) * 100),
+      all[index].reduce((sum, row) => sum + Math.round(row.amount * 100), 0));
+  }
 });

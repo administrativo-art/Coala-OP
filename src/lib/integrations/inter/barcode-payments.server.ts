@@ -87,10 +87,13 @@ export async function cancelInterBarcodePayment(transactionCode: string) {
   await client.delete(`/banking/v2/pagamento/${encodeURIComponent(code)}`);
 }
 
-export async function findInterBarcodePaymentsByCode(code: string) {
+export async function findInterBarcodePaymentsByCode(code: string, requireValidResponse = false) {
   const client = await createInterClient("pagamento-boleto.read");
   const response = await client.get("/banking/v2/pagamento", {
     params: { codBarraLinhaDigitavel: code },
   });
+  if (requireValidResponse && !Array.isArray(response.data)) {
+    throw new Error("O Inter devolveu uma consulta de boleto inconclusiva.");
+  }
   return (Array.isArray(response.data) ? response.data : []) as InterBarcodePayment[];
 }

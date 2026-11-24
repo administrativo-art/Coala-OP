@@ -40,6 +40,7 @@ export { interPaymentReconciliation } from './inter-payment-jobs.js';
 export { interStatementSync } from './inter-statement-jobs.js';
 export { cashDepositDailyReconciliation } from './cash-deposit-reconciliation-job.js';
 export { financialInboxMaintenance } from './financial-inbox-jobs.js';
+export { acquirerFeeAutoRecognition } from './acquirer-fee-auto-jobs.js';
 export { financialBudgetGeneration } from './financial-budget-jobs.js';
 export { vacationWorkflowDailyAlerts } from './vacation-alerts.js';
 export { weeklyRevenueGoalsEmail } from './weekly-revenue-goals-email.js';

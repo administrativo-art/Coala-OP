@@ -117,6 +117,7 @@ function sanitizeChildren(value: unknown) {
         birthDate: cleanIsoDate(data.birthDate),
         name: trimText(data.name, 120),
         cpf: trimText(data.cpf, 14).replace(/[^\d.-]/g, ''),
+        incomeTaxDependent: data.incomeTaxDependent === true,
       };
     });
 }
@@ -150,7 +151,7 @@ function sanitizePublicAnswers(rawAnswers: Record<string, unknown>) {
     foodRestrictionActivityEffects: cleanChoices(rawAnswers.foodRestrictionActivityEffects, ['Apenas a ingestão ou degustação', 'O contato ou a manipulação', 'Ambos', 'Preciso de avaliação pelo serviço de saúde ocupacional']),
     hasChildren,
     childrenCount,
-    children: Array.from({ length: childrenCount }, (_, index) => children[index] ?? { birthDate: '', name: '', cpf: '' }),
+    children: Array.from({ length: childrenCount }, (_, index) => children[index] ?? { birthDate: '', name: '', cpf: '', incomeTaxDependent: false }),
     emergencyName: trimText(rawAnswers.emergencyName, 120),
     emergencyPhone: trimText(rawAnswers.emergencyPhone, 15).replace(/[^\d()+\-\s]/g, ''),
     emergencyRelation: cleanChoice(rawAnswers.emergencyRelation, ['Mãe/Pai', 'Cônjuge', 'Filho(a)', 'Irmão/Irmã', 'Parente', 'Amigo(a)', 'Outro']),
@@ -772,6 +773,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
   if (!publicFormAnswers.hasChildren) return jsonError('Informe se possui filhos.');
   if (publicFormAnswers.hasChildren === 'yes' && publicFormAnswers.childrenCount < 1) {
     return jsonError('Informe a quantidade de filhos.');
+  }
+  if (publicFormAnswers.children.some((child) => child.incomeTaxDependent && (!child.name || !child.birthDate || child.cpf.replace(/\D/g, '').length !== 11))) {
+    return jsonError('Informe nome, nascimento e CPF dos filhos declarados para imposto de renda.');
   }
   if (!publicFormAnswers.emergencyName) return jsonError('Informe o nome do contato de emergência.');
   if (publicFormAnswers.emergencyPhone.replace(/\D/g, '').length < 10) return jsonError('Informe o celular do contato de emergência com DDD.');

@@ -109,11 +109,10 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
                 when {
                     Rules.updateRequired(release, BuildConfig.VERSION_CODE) -> Page("Atualização necessária", feedback, footer = { Action("Baixar atualização", feedback.busy) { update.download(::install) } }) { Text("Atualize o Coala Go para continuar."); LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth()) }
                     identity.loading || identity.identity == null || identity.locked -> AuthScreen(session, ::biometric)
-                    !session.mode.simulation && !googleMigration.checked -> GoogleMigrationRequiredScreen(session, googleMigration, checking = true)
                     migrationPoint -> TimeScreen(hiltViewModel(), { migrationPoint = false }, startConfirming = true,
                         onInformAbsence = { migrationPoint = false })
                     !session.mode.simulation && googleMigration.required && !googleMigration.completed ->
-                        GoogleMigrationRequiredScreen(session, googleMigration, checking = false) { migrationPoint = true }
+                        GoogleMigrationRequiredScreen(session, googleMigration) { migrationPoint = true }
                     else -> AppNavigation(session, update, { biometric(enroll = true) }) { confirmDisableBiometric() }
                 }
             }
@@ -156,19 +155,18 @@ private val SCREEN_CAPTURE_ACCOUNTS = setOf(
     }
 }
 
-@Composable private fun GoogleMigrationRequiredScreen(session: SessionViewModel, state: GoogleMigrationState, checking: Boolean,
+@Composable private fun GoogleMigrationRequiredScreen(session: SessionViewModel, state: GoogleMigrationState,
     onRecordPoint: (() -> Unit)? = null) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     Page("Atualização do acesso", Feedback(busy = state.loading || state.busy, error = state.error), showConnectivityNotice = false) {
         CardBlock(selected = true) {
-            Text(if (checking) "Preparando seu acesso" else "Vincule sua conta empresarial", style = MaterialTheme.typography.titleLarge)
+            Text("Vincule sua conta empresarial", style = MaterialTheme.typography.titleLarge)
             Text(when {
-                checking -> "Estamos conferindo seu cadastro. Isso costuma levar poucos segundos."
                 state.busy -> state.step ?: "Concluindo a vinculação…"
                 else -> "Seu cadastro e todo o histórico serão mantidos. Toque em prosseguir e escolha ${state.targetEmail ?: "sua conta Google"}."
             }, color = Tokens.muted)
-            if (checking || state.busy) {
+            if (state.busy) {
                 LinearProgressIndicator(progress = { state.progress.coerceIn(.08f, .95f) }, modifier = Modifier.fillMaxWidth())
                 Text("Etapa ${when { state.progress < .3f -> "1 de 3"; state.progress < .7f -> "2 de 3"; else -> "3 de 3" }}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             } else {

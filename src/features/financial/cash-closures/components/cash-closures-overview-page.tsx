@@ -2,21 +2,24 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowRight, CalendarRange, CheckCircle2, CircleAlert, Clock3, Loader2, Plus, RefreshCw, Store } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, RefreshCw } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
+import { useKioskGroups } from "@/hooks/use-kiosk-groups";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHero } from "@/components/patterns/page-hero";
 import { PageContainer } from "@/components/layout/page-container";
+import { cn } from "@/lib/utils";
 import type { CashCountingSession } from "@/features/financial/cash-counting-sessions/types";
-import {
-  filterCashCountingSessions,
-  type CashCountingSessionFilter,
-} from "@/features/financial/cash-counting-sessions/session-filter";
-import { formatBRL } from "../money";
+import { filterCashCountingSessions } from "@/features/financial/cash-counting-sessions/session-filter";
+import { formatClosureMonthLabel, todayInClosureTimezone } from "../date";
+import type { CashClosure, CashClosureMonthlySummary } from "../types";
+import { activeSessionScopeKeys } from "../analysis";
+import { CashClosuresSessionsTab } from "./cash-closures-sessions-tab";
+import { CashClosuresAnalysisTab } from "./cash-closures-analysis-tab";
 
 type UnitItem = {
   id: string;
@@ -24,28 +27,58 @@ type UnitItem = {
   pdvFilialId: string | null;
 };
 
-function sessionStatus(status: CashCountingSession["status"]) {
-  if (status === "open") return { label: "Contagem em andamento", className: "bg-ds-warn-bg text-ds-alert-ink", icon: Clock3 };
-  if (status === "counted") return { label: "Aguardando composição física", className: "bg-ds-info-bg text-ds-info", icon: CircleAlert };
-  if (status === "deposit_ready") return { label: "Malotes preparados", className: "bg-ds-info-bg text-ds-info", icon: CheckCircle2 };
-  if (status === "completed") return { label: "Concluída", className: "bg-ds-ok-bg text-ds-ok", icon: CheckCircle2 };
-  return { label: "Cancelada", className: "bg-ds-muted text-ds-ink-muted", icon: CircleAlert };
-}
+type Tab = "sessions" | "analysis";
+const ALL_UNITS = "__all__";
+const TAB_PARAM = "aba";
 
+/**
+ * Fechamento do caixa em duas telas: Sessões de contagem (trabalho) e Análise (consulta).
+ * Os filtros de regional (quando há mais de uma) e de quiosque valem para as duas telas.
+ * A contagem acontece só dentro de uma sessão; a Análise não tem ação de contagem.
+ */
 export function CashClosuresOverviewPage() {
   const { firebaseUser, permissions } = useAuth();
   const api = useAuthenticatedApi();
   const { toast } = useToast();
-  const [units, setUnits] = useState<UnitItem[]>([]);
-  const [sessions, setSessions] = useState<CashCountingSession[]>([]);
-  const [sessionFilter, setSessionFilter] = useState<CashCountingSessionFilter>("active");
-  const [loading, setLoading] = useState(true);
+  const { groups } = useKioskGroups();
   const canBrowseCatalog = permissions.financial?.view === true;
   const canViewClosures = permissions.financial?.cashClosures?.view === true;
+  const canOpenSession = canViewClosures && permissions.financial?.cashClosures?.approve === true;
+
+  const today = todayInClosureTimezone();
+  const [todayYear, todayMonth] = today.split("-").map(Number);
+  const [tab, setTab] = useState<Tab>("sessions");
+  const [period, setPeriod] = useState({ year: todayYear, month: todayMonth });
+  const [groupId, setGroupId] = useState<string | null>(null);
+  const [kioskId, setKioskId] = useState<string>(ALL_UNITS);
+  const [units, setUnits] = useState<UnitItem[]>([]);
+  const [sessions, setSessions] = useState<CashCountingSession[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [summariesByUnit, setSummariesByUnit] = useState<Array<{ kioskId: string; summaries: CashClosureMonthlySummary[] }>>([]);
+  const [summariesLoading, setSummariesLoading] = useState(true);
+  const [closuresByUnit, setClosuresByUnit] = useState<Record<string, CashClosure[]>>({});
+  const [closuresLoading, setClosuresLoading] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  const effectiveTab: Tab = canViewClosures ? tab : "analysis";
+
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get(TAB_PARAM);
+    if (requested === "analise") setTab("analysis");
+  }, []);
+
+  const changeTab = useCallback((next: Tab) => {
+    setTab(next);
+    const url = new URL(window.location.href);
+    if (next === "analysis") url.searchParams.set(TAB_PARAM, "analise");
+    else url.searchParams.delete(TAB_PARAM);
+    window.history.replaceState(null, "", url.toString());
+  }, []);
 
   const load = useCallback(async () => {
     if (!firebaseUser || !canBrowseCatalog) return;
     setLoading(true);
+    setSummariesLoading(true);
     try {
       const [unitPayload, sessionPayload] = await Promise.all([
         api<{ units?: UnitItem[] }>("/api/financial/cash-closures/overview", { fallbackError: "Falha ao carregar unidades." }),
@@ -53,57 +86,193 @@ export function CashClosuresOverviewPage() {
           ? api<{ sessions?: CashCountingSession[] }>("/api/financial/cash-counting-sessions", { fallbackError: "Falha ao carregar sessões." })
           : Promise.resolve({ sessions: [] }),
       ]);
-      setUnits(unitPayload.units ?? []);
+      const loadedUnits = unitPayload.units ?? [];
+      setUnits(loadedUnits);
       setSessions(sessionPayload.sessions ?? []);
+      setLoading(false);
+      const withPdv = loadedUnits.filter((unit) => unit.pdvFilialId);
+      const summaries = await Promise.all(withPdv.map(async (unit) => {
+        const payload = await api<{ summaries?: CashClosureMonthlySummary[] }>(`/api/financial/cash-closures/months?kioskId=${encodeURIComponent(unit.id)}`, {
+          fallbackError: "Falha ao carregar competências.",
+        });
+        return { kioskId: unit.id, summaries: payload.summaries ?? [] };
+      }));
+      setSummariesByUnit(summaries);
+    } catch (error) {
+      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao carregar." });
+    } finally {
+      setLoading(false);
+      setSummariesLoading(false);
     }
-    catch (error) { toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao carregar." }); }
-    finally { setLoading(false); }
   }, [api, canBrowseCatalog, canViewClosures, firebaseUser, toast]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); }, [load, reloadToken]);
 
-  const filteredSessions = useMemo(
-    () => filterCashCountingSessions(sessions, sessionFilter),
-    [sessionFilter, sessions],
+  const unitGroups = useMemo(() => {
+    const unitIds = new Set(units.map((unit) => unit.id));
+    return groups
+      .map((group) => ({ ...group, kioskIds: group.kioskIds.filter((id) => unitIds.has(id)) }))
+      .filter((group) => group.kioskIds.length > 0);
+  }, [groups, units]);
+  const selectedGroupId = groupId ?? (unitGroups.length > 1 ? unitGroups[0].id : ALL_UNITS);
+  const groupUnits = useMemo(() => {
+    if (selectedGroupId === ALL_UNITS) return units;
+    const group = unitGroups.find((item) => item.id === selectedGroupId);
+    return group ? units.filter((unit) => group.kioskIds.includes(unit.id)) : units;
+  }, [selectedGroupId, unitGroups, units]);
+  // Só quiosques com PDV geram fechamento; o filtro lista apenas esses.
+  const kioskOptions = useMemo(() => groupUnits.filter((unit) => unit.pdvFilialId), [groupUnits]);
+  const selectedKioskId = kioskOptions.some((unit) => unit.id === kioskId) ? kioskId : ALL_UNITS;
+  const scopedUnits = useMemo(
+    () => (selectedKioskId === ALL_UNITS ? groupUnits : groupUnits.filter((unit) => unit.id === selectedKioskId)),
+    [groupUnits, selectedKioskId],
   );
-  const sessionCounts = useMemo(() => ({
-    active: filterCashCountingSessions(sessions, "active").length,
-    completed: filterCashCountingSessions(sessions, "completed").length,
-    cancelled: filterCashCountingSessions(sessions, "cancelled").length,
-  }), [sessions]);
+  const isScoped = selectedGroupId !== ALL_UNITS || selectedKioskId !== ALL_UNITS;
+  const changeGroup = useCallback((next: string) => {
+    setGroupId(next);
+    setKioskId(ALL_UNITS);
+  }, []);
+
+  const scopedUnitIds = useMemo(() => new Set(scopedUnits.map((unit) => unit.id)), [scopedUnits]);
+  const scopedSessions = useMemo(
+    () => sessions.filter((session) => session.kioskIds.some((id) => scopedUnitIds.has(id))),
+    [scopedUnitIds, sessions],
+  );
+  const scopedSummaries = useMemo(
+    () => summariesByUnit.filter((entry) => scopedUnitIds.has(entry.kioskId)),
+    [scopedUnitIds, summariesByUnit],
+  );
+
+  const scopedPdvIds = useMemo(() => scopedUnits.filter((unit) => unit.pdvFilialId).map((unit) => unit.id).join(","), [scopedUnits]);
+  useEffect(() => {
+    if (effectiveTab !== "analysis" || !canViewClosures || !firebaseUser || !scopedPdvIds) return;
+    let cancelled = false;
+    setClosuresLoading(true);
+    void Promise.all(scopedPdvIds.split(",").map(async (kioskId) => {
+      const params = new URLSearchParams({ kioskId, year: String(period.year), month: String(period.month) });
+      const payload = await api<{ closures?: CashClosure[] }>(`/api/financial/cash-closures?${params}`, { fallbackError: "Falha ao carregar os dias do mês." });
+      return [kioskId, payload.closures ?? []] as const;
+    })).then((entries) => {
+      if (!cancelled) setClosuresByUnit(Object.fromEntries(entries));
+    }).catch((error) => {
+      if (!cancelled) toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao carregar os dias do mês." });
+    }).finally(() => {
+      if (!cancelled) setClosuresLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [api, canViewClosures, effectiveTab, firebaseUser, period.month, period.year, reloadToken, scopedPdvIds, toast]);
+
+  const activeSessions = useMemo(() => filterCashCountingSessions(scopedSessions, "active"), [scopedSessions]);
+  const sessionScopeKeys = useMemo(() => activeSessionScopeKeys(activeSessions), [activeSessions]);
+
+  function shiftMonth(delta: number) {
+    const date = new Date(Date.UTC(period.year, period.month - 1 + delta, 1));
+    const next = { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
+    if (next.year > todayYear || (next.year === todayYear && next.month > todayMonth)) return;
+    setPeriod(next);
+  }
+  const isCurrentMonth = period.year === todayYear && period.month === todayMonth;
 
   if (!canBrowseCatalog) return <div className="rounded-xl border p-8 text-sm text-muted-foreground">Seu perfil não possui acesso ao módulo financeiro.</div>;
 
-  return <PageContainer variant="wide" surface className="space-y-[18px] pb-10">
-<PageHero kicker="Financeiro · Controle de caixa" title="Fechamento do caixa" subtitle={canViewClosures ? "Abra uma sessão para contar malotes ou consulte uma unidade." : "Consulte as unidades e suas competências disponíveis."} actions={<>{canViewClosures && permissions.financial?.cashClosures?.approve && <Button asChild variant="primary-page" size="md"><Link href="/dashboard/financial/cash-closures/sessions/new"><Plus className="mr-2 h-4 w-4" />Nova sessão</Link></Button>}<Button variant="on-dark-secondary" size="md" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button></>} />
-    {canViewClosures && !loading && sessions.length > 0 && <section className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><h2 className="text-lg font-black">Sessões de contagem</h2><p className="text-xs font-medium text-ds-ink-faint">Por padrão, somente sessões ativas ficam visíveis.</p></div>
-        <div className="flex flex-wrap gap-2" aria-label="Filtrar sessões de contagem">{([
-          ["active", "Ativas"],
-          ["completed", "Concluídas"],
-          ["cancelled", "Canceladas"],
-        ] as const).map(([value, label]) => <Button key={value} type="button" size="sm" variant={sessionFilter === value ? "default" : "outline"} className="h-8 rounded-lg px-3 text-xs font-bold" onClick={() => setSessionFilter(value)}>{label}<span className="ml-1.5 opacity-70">{sessionCounts[value]}</span></Button>)}</div>
-      </div>
-      {filteredSessions.length === 0
-        ? <Card className="rounded-2xl border-ds-border"><CardContent className="grid min-h-24 w-full place-items-center p-0! text-center text-sm text-muted-foreground">Nenhuma sessão neste filtro.</CardContent></Card>
-        : <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{filteredSessions.slice(0, 9).map((session) => {
-          const state = sessionStatus(session.status);
-          const StateIcon = state.icon;
-          const progress = session.status === "cancelled" ? "Unidades liberadas" : `${session.finalizedOperatorCount} operador(es) finalizado(s)`;
-          return <Link key={session.id} href={`/dashboard/financial/cash-closures/sessions/${session.id}`} className="group rounded-[17px] border border-ds-border bg-ds-warm p-4 shadow-[0_2px_10px_rgba(15,23,42,.04)] transition-all hover:-translate-y-0.5 hover:border-ds-accent-soft hover:shadow-[0_12px_24px_-18px_rgba(29,29,38,.75)] motion-reduce:transform-none motion-reduce:transition-none">
-            <div className="flex items-start justify-between gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px] bg-ds-accent-soft text-ds-accent-ink"><CalendarRange className="h-4 w-4" /></span><span className="flex min-w-0 flex-wrap justify-end gap-2"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-black ${state.className}`}><StateIcon className="h-3 w-3" />{state.label}</span><span title={session.openedByName} className="inline-flex max-w-52 items-center rounded-full bg-ds-muted px-2.5 py-1 text-[10.5px] font-black text-ds-ink-muted">Responsável: <span className="ml-1 truncate">{session.openedByName}</span></span></span></div>
-            <strong className="mt-3 block truncate text-sm font-extrabold">{session.kioskNames.join(" · ")}</strong>
-            <p className="mt-1 text-xs font-semibold text-ds-ink-faint">{session.periodKeys.length > 0 ? session.periodKeys.join(" · ") : "Datas escolhidas durante a contagem"}</p>
-            <div className="mt-3 flex items-center justify-between gap-3 border-t border-dashed border-ds-border pt-2.5"><span className="text-[11px] font-bold text-ds-ink-muted">{progress}</span><strong className="font-mono text-[13px] font-bold tabular-nums">{formatBRL(session.countedCashCents)}</strong></div>
-          </Link>;
-        })}</div>}
-    </section>}
-    <div><h2 className="text-lg font-black">Unidades</h2><p className="text-xs font-medium text-ds-ink-faint">Os indicadores ficam dentro de cada competência.</p></div>
-    {loading ? <div className="flex h-56 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div> : units.length === 0 ? <Card className="rounded-2xl border-ds-border"><CardContent className="p-10 text-center text-sm text-muted-foreground">Nenhuma unidade disponível para seu perfil.</CardContent></Card> : <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">{units.map((unit) => <Link key={unit.id} href={`/dashboard/financial/cash-closures/${encodeURIComponent(unit.id)}`} className="group rounded-[18px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent focus-visible:ring-offset-2">
-      <Card className="h-full rounded-[18px] border-ds-border bg-ds-warm shadow-[0_2px_10px_rgba(15,23,42,.05)] transition-all group-hover:-translate-y-0.5 group-hover:border-ds-accent-soft group-hover:shadow-[0_8px_24px_rgba(15,23,42,.08)] motion-reduce:transform-none motion-reduce:transition-none">
-        <CardHeader className="p-[18px]"><div className="flex items-center gap-3.5"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-ds-accent-soft text-ds-accent-ink"><Store className="h-5 w-5" /></span><div className="min-w-0 flex-1"><CardTitle className="truncate text-base font-black tracking-tight">{unit.name}</CardTitle><p className="mt-1 truncate text-xs font-semibold text-ds-ink-faint">Filial PDV {unit.pdvFilialId ?? "não configurada"}</p><span className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-ds-ink-muted"><span className="h-2 w-2 rounded-full bg-ds-neutral" />Consulte as competências</span></div><ArrowRight className="h-5 w-5 shrink-0 text-ds-ink-faint transition-transform group-hover:translate-x-1 group-hover:text-ds-accent-ink motion-reduce:transform-none motion-reduce:transition-none" /></div></CardHeader>
-      </Card>
-    </Link>)}</div>}
-  </PageContainer>;
+  const tabs = (
+    <nav aria-label="Seções do fechamento" className="inline-flex rounded-ds-md bg-white/8 p-[3px]">
+      {(canViewClosures ? [["sessions", "Sessões de contagem"], ["analysis", "Análise"]] as const : [["analysis", "Análise"]] as const).map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          aria-current={effectiveTab === value ? "page" : undefined}
+          onClick={() => changeTab(value)}
+          className={cn(
+            "h-9 whitespace-nowrap rounded-ds-sm px-4 text-[13.5px] font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker",
+            effectiveTab === value ? "bg-ds-on-dark text-ds-ink" : "text-ds-on-dark-2 hover:text-ds-on-dark",
+          )}
+        >
+          {label}
+          {value === "sessions" && activeSessions.length > 0 ? <span className="ml-2 rounded-full bg-ds-accent px-1.5 text-[11px] text-white">{activeSessions.length}</span> : null}
+        </button>
+      ))}
+    </nav>
+  );
+
+  return (
+    <PageContainer variant="wide" surface className="space-y-5 pb-10">
+      <PageHero
+        kicker="Financeiro · Controle de caixa"
+        title="Fechamento do caixa"
+        leading={null}
+        subtitle={tabs}
+        actions={(
+          <>
+            <Button variant="on-dark-icon" size="icon" aria-label="Atualizar" title="Atualizar" onClick={() => setReloadToken((value) => value + 1)} disabled={loading}>
+              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            </Button>
+            {effectiveTab === "sessions" && canOpenSession ? (
+              <Button asChild variant="primary-page" size="md">
+                <Link href="/dashboard/financial/cash-closures/sessions/new"><Plus className="mr-2 h-4 w-4" />Nova sessão de contagem</Link>
+              </Button>
+            ) : null}
+          </>
+        )}
+        chips={(
+          <>
+            {effectiveTab === "analysis" ? (
+            <div className="inline-flex h-9 items-center gap-0.5 rounded-full bg-white/5 px-1 ring-1 ring-inset ring-white/10">
+              <button type="button" aria-label="Mês anterior" onClick={() => shiftMonth(-1)} className="grid h-7 w-7 place-items-center rounded-full text-ds-on-dark-2 hover:bg-white/10"><ChevronLeft className="h-4 w-4" /></button>
+              <span className="min-w-36 text-center text-[13px] font-bold text-ds-on-dark">{formatClosureMonthLabel(period.year, period.month).toLocaleLowerCase("pt-BR")}</span>
+              <button type="button" aria-label="Próximo mês" onClick={() => shiftMonth(1)} disabled={isCurrentMonth} className="grid h-7 w-7 place-items-center rounded-full text-ds-on-dark-2 hover:bg-white/10 disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button>
+            </div>
+            ) : null}
+            {unitGroups.length > 1 ? (
+              <Select value={selectedGroupId} onValueChange={changeGroup}>
+                <SelectTrigger aria-label="Regional" className="h-9 w-auto min-w-52 gap-2 rounded-full border-white/10 bg-white/5 px-3.5 text-[13px] font-bold text-ds-on-dark">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {unitGroups.map((group) => <SelectItem key={group.id} value={group.id}>Regional {group.name} · {group.kioskIds.length} {group.kioskIds.length === 1 ? "unidade" : "unidades"}</SelectItem>)}
+                  <SelectItem value={ALL_UNITS}>Todas as unidades · {units.length}</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : null}
+            {kioskOptions.length > 1 ? (
+              <Select value={selectedKioskId} onValueChange={setKioskId}>
+                <SelectTrigger aria-label="Quiosque" className="h-9 w-auto min-w-52 gap-2 rounded-full border-white/10 bg-white/5 px-3.5 text-[13px] font-bold text-ds-on-dark">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_UNITS}>Todos os quiosques · {kioskOptions.length}</SelectItem>
+                  {kioskOptions.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            ) : null}
+          </>
+        )}
+      />
+
+      {effectiveTab === "sessions" ? (
+        <CashClosuresSessionsTab
+          sessions={scopedSessions}
+          units={scopedUnits}
+          summariesByUnit={scopedSummaries}
+          summariesLoading={summariesLoading}
+          today={today}
+          scopeKioskIds={isScoped ? scopedUnitIds : null}
+        />
+      ) : (
+        <CashClosuresAnalysisTab
+          units={scopedUnits}
+          summariesByUnit={summariesByUnit}
+          summariesLoading={summariesLoading || loading}
+          closuresByUnit={closuresByUnit}
+          closuresLoading={closuresLoading}
+          canViewDays={canViewClosures}
+          sessionScopeKeys={sessionScopeKeys}
+          year={period.year}
+          month={period.month}
+          today={today}
+          onOpenSessions={() => changeTab("sessions")}
+        />
+      )}
+    </PageContainer>
+  );
 }

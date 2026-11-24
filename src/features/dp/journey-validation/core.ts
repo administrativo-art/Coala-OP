@@ -12,6 +12,7 @@ export type DPJourneyValidationShift = {
   type: 'work' | 'day_off';
   unitId: string;
   shiftDefinitionId?: string;
+  manualWorkMinutes?: number;
   startTime?: string;
   endTime?: string;
 };
@@ -299,6 +300,7 @@ export function validateDPJourneySchedule(params: {
             const required = distribution === 'weekly' ? 2 : 1;
             const weekWork = params.shifts.filter((shift) => shift.userId === userId && shift.type === 'work' && shift.date >= start && shift.date <= end);
             const durations = weekWork.map((shift) => {
+              if (shift.manualWorkMinutes !== undefined) return shift.manualWorkMinutes;
               const definition = shift.shiftDefinitionId ? params.shiftDefinitions?.[shift.shiftDefinitionId] : undefined;
               if (!shift.startTime || !shift.endTime || !definition) return null;
               return shiftDurationSummary({ ...definition, startTime: shift.startTime, endTime: shift.endTime }).workedMinutes;

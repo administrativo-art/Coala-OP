@@ -22,6 +22,22 @@ e não aparece como opção manual.
 
 ## Modelos operacionais
 
+Em 10/11/2026, dois componentes condicionais foram preparados para o kit:
+`08-termo-salario-familia-v2.docx` e `08-declaracao-dependentes-ir-v1.docx`.
+O primeiro entra quando o operador registra a concessão após a conclusão da
+contabilidade. A análise pelos parâmetros de 2026 é informativa. O segundo entra apenas
+para filhos marcados expressamente pela pessoa como dependentes de IR no
+formulário público. Ambos usam o papel timbrado canônico e são assinados no
+termo final do pacote. Uma alteração posterior exige nova declaração ou termo,
+sem reescrever o kit assinado. Quando faltarem parâmetros para o ano da admissão,
+a tela informa a limitação sem decidir a concessão.
+
+As matrizes são reproduzidas por `node scripts/prepare-admission-dependent-templates.mjs`.
+Seus SHA-256 são `929c79c62097ca63a772af96435f40f5c0a7135cff0398735ee417aec31630d6`
+e `d3271e2414a25867637c8412c76a9c767fba626d3c1fdcfeffc8cd64c93b5ce1`,
+respectivamente. A versão 1 do termo e a declaração de IR foram publicadas
+em 10/11/2026; a versão 2 do termo aguarda a publicação desta correção.
+
 Atualização local de 27/10/2026: o termo LGPD passa à versão 5, com a seção
 3-A aprovada sobre localização no ponto e acompanhamento entre unidades.
 A v4 permanece preservada. A v5 está preparada no código e ainda não foi

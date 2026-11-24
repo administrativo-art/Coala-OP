@@ -19,6 +19,8 @@ import { Plus, Trash2, Building, User, Search, Check, ChevronDown, ChevronLeft, 
 import { type Entity } from '@/types';
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import type { CompanyLookupResponse, NormalizedCompanyData } from '@/lib/company/company-lookup-types';
+import type { PixKeyType } from '@/features/financial/beneficiaries/types';
+import { maskPaymentDestination, normalizeValidatedPixKey, validBrazilianTaxId } from '@/features/financial/beneficiaries/normalization';
 
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -391,7 +393,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit, initialStep = 1,
     initialFiscalOpen?: boolean;
 }) {
     const { addEntity, updateEntity } = useEntities();
-    const { firebaseUser, permissions } = useAuth();
+    const { firebaseUser, permissions, isDefaultAdmin } = useAuth();
 
     const [currentStep, setCurrentStep] = useState<number>(1);
     const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -406,6 +408,10 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit, initialStep = 1,
     const [fiscalOpen, setFiscalOpen] = useState(false);
     const [pixKey, setPixKey] = useState('');
     const [initialPixKey, setInitialPixKey] = useState('');
+    const [pixKeyType, setPixKeyType] = useState<PixKeyType | ''>('');
+    const [initialPixKeyType, setInitialPixKeyType] = useState<PixKeyType | ''>('');
+    const [existingPaymentDestination, setExistingPaymentDestination] = useState<{ method: string; masked: string } | null>(null);
+    const [pixError, setPixError] = useState<string | null>(null);
     const [pixLoading, setPixLoading] = useState(false);
     const lastAutoLookupCnpjRef = useRef<string>('');
 
@@ -425,17 +431,21 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit, initialStep = 1,
         setLoadedCompanyEntityId(entityToEdit?.id ?? null);
         setPixKey('');
         setInitialPixKey('');
+        setPixKeyType('');
+        setInitialPixKeyType('');
+        setExistingPaymentDestination(null);
+        setPixError(null);
         lastAutoLookupCnpjRef.current = CnpjValidator.clean(entityToEdit?.document ?? '');
     }, [entityToEdit, form, initialFiscalOpen, initialStep, open]);
 
     const paymentProfileEntityId = entityToEdit?.id ?? loadedCompanyEntityId;
     const canManagePix = Boolean(
-        permissions.registration?.entities?.edit ||
+        isDefaultAdmin || permissions.registration?.entities?.edit ||
         (!paymentProfileEntityId && permissions.registration?.entities?.add)
     );
 
     useEffect(() => {
-        if (!open || !firebaseUser || !paymentProfileEntityId || !permissions.registration?.entities?.edit) return;
+        if (!open || !firebaseUser || !paymentProfileEntityId || (!isDefaultAdmin && !permissions.registration?.entities?.edit)) return;
         let cancelled = false;
         setPixLoading(true);
         void (async () => {
@@ -450,6 +460,13 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit, initialStep = 1,
                     const currentPixKey = String(payload.pixKey ?? '');
                     setPixKey(currentPixKey);
                     setInitialPixKey(currentPixKey);
+                    const storedType = payload.profile?.pixKeyType as PixKeyType | undefined;
+                    setPixKeyType(storedType ?? '');
+                    setInitialPixKeyType(storedType ?? '');
+                    setExistingPaymentDestination(payload.profile ? {
+                        method: String(payload.profile.paymentMethod ?? ''),
+                        masked: String(payload.profile.maskedPaymentDestination ?? ''),
+                    } : null);
                 }
             } catch (error) {
                 if (!cancelled) setFormError(error instanceof Error ? error.message : 'Falha ao carregar a chave Pix.');
@@ -458,7 +475,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit, initialStep = 1,
             }
         })();
         return () => { cancelled = true; };
-    }, [firebaseUser, open, paymentProfileEntityId, permissions.registration?.entities?.edit]);
+    }, [firebaseUser, isDefaultAdmin, open, paymentProfileEntityId, permissions.registration?.entities?.edit]);
 
     useEffect(() => {
         if (!open || !firebaseUser) return;
@@ -514,6 +531,11 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit, initialStep = 1,
     const heroName = (nameWatch || '').trim() || (isPF ? 'Nova pessoa' : 'Nova empresa');
     const cityState = cityWatch ? `${cityWatch}${stateWatch ? `/${stateWatch}` : ''}` : '';
     const hasPix = pixKey.trim().length > 0;
+    const pixValidationError = hasPix && !validBrazilianTaxId(documentWatch)
+        ? 'Cadastre um CPF/CNPJ válido antes de salvar a chave Pix.'
+        : hasPix && !pixKeyType ? 'Selecione o tipo da chave Pix.'
+        : hasPix && pixKeyType && !normalizeValidatedPixKey(pixKey, pixKeyType, documentWatch)
+            ? 'A chave Pix não corresponde ao tipo ou ao documento do cadastro.' : null;
 
     const avatarClass = cn(
         'relative flex shrink-0 items-center justify-center overflow-hidden font-extrabold tracking-[-.02em]',
@@ -683,6 +705,11 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit, initialStep = 1,
     }, [cleanCnpjWatch, entityType, handleCnpjLookup, open]);
 
     const onSubmit = async (values: EntityFormValues) => {
+        if (canManagePix && pixValidationError) {
+            setPixError(pixValidationError);
+            setCurrentStep(2);
+            return;
+        }
         const payload = entityPayloadFromForm(values);
         setSaving(true);
         setFormError(null);
@@ -723,12 +750,12 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit, initialStep = 1,
             } else {
                 savedEntityId = await addEntity(payload);
             }
-            if (savedEntityId && firebaseUser && canManagePix && pixKey.trim() !== initialPixKey.trim()) {
+            if (savedEntityId && firebaseUser && canManagePix && (pixKey.trim() !== initialPixKey.trim() || pixKeyType !== initialPixKeyType)) {
                 const token = await firebaseUser.getIdToken();
                 const response = await fetch(`/api/financial/beneficiaries/entities/${encodeURIComponent(savedEntityId)}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                    body: JSON.stringify({ pixKey: pixKey.trim() }),
+                    body: JSON.stringify({ pixKey: pixKey.trim(), ...(pixKey.trim() && pixKeyType ? { pixKeyType } : {}) }),
                 });
                 const result = await response.json().catch(() => ({}));
                 if (!response.ok) throw new Error(result.error || 'O cadastro foi salvo, mas não foi possível salvar a chave Pix.');
@@ -1160,17 +1187,31 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit, initialStep = 1,
                                                         </div>
                                                         {hasPix && active ? <span className="whitespace-nowrap rounded-full border border-[#b7e4cd] bg-[#dcf5e8] px-[9px] py-0.5 text-[11px] font-bold text-[#0f6b46]">disponível p/ pagamento</span> : null}
                                                     </div>
+                                                    {existingPaymentDestination ? <p className="text-xs text-[#3f7d63]">Destino atual: {existingPaymentDestination.method === 'pix_key' ? 'chave Pix' : existingPaymentDestination.method === 'pix_copy_paste' ? 'Pix Copia e Cola' : 'dados bancários'} · {existingPaymentDestination.masked || 'protegido'}. Salvar uma nova chave Pix substitui esse destino.</p> : null}
+                                                    <label className="flex flex-col gap-1.5">
+                                                        <span className="text-xs font-bold text-[#0f4a33]">Tipo da chave Pix</span>
+                                                        <Select value={pixKeyType} onValueChange={(value) => { setPixKeyType(value as PixKeyType); setPixError(null); }} disabled={pixLoading}>
+                                                            <SelectTrigger className="h-11 rounded-xl border-[#b7e4cd] bg-white"><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="cpf">CPF</SelectItem><SelectItem value="cnpj">CNPJ</SelectItem>
+                                                                <SelectItem value="phone">Telefone</SelectItem><SelectItem value="email">E-mail</SelectItem>
+                                                                <SelectItem value="random">Aleatória</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </label>
                                                     <label className="flex flex-col gap-1.5">
                                                         <span className="text-xs font-bold text-[#0f4a33]">Chave Pix <span className="font-medium text-[#3f7d63]">(opcional)</span></span>
                                                         <Input
                                                             value={pixKey}
-                                                            onChange={(event) => setPixKey(event.target.value)}
+                                                            onChange={(event) => { setPixKey(event.target.value); setPixError(null); }}
                                                             disabled={pixLoading}
-                                                            placeholder={pixLoading ? 'Carregando chave Pix...' : 'CPF, CNPJ, e-mail, telefone ou chave aleatória'}
+                                                            placeholder={pixLoading ? 'Carregando chave Pix...' : pixKeyType === 'phone' ? 'DDD + celular ou +55' : pixKeyType === 'random' ? 'UUID com hífens' : 'Informe a chave do tipo selecionado'}
                                                             autoComplete="off"
+                                                            aria-invalid={Boolean(pixValidationError || pixError)}
                                                             className="h-11 min-w-0 rounded-xl border-[#b7e4cd] bg-white px-3.5 font-mono text-[13.5px] shadow-none"
                                                         />
-                                                        <span className="text-xs text-[#3f7d63]">A chave é exibida sem máscara somente nesta edição e permanece criptografada no armazenamento.</span>
+                                                        <span className="text-xs text-[#3f7d63]">{pixKeyType === 'phone' ? 'Telefone brasileiro com DDD; 11 dígitos locais ou +55.' : pixKeyType === 'cpf' || pixKeyType === 'cnpj' ? 'A chave de documento deve ser do próprio cadastro.' : pixKeyType === 'random' ? 'Use o UUID completo da chave aleatória.' : 'A chave fica protegida no armazenamento.'}{pixKey ? ` Prévia mascarada: ${maskPaymentDestination(pixKey)}.` : ''}</span>
+                                                        {pixValidationError || pixError ? <span role="alert" className="text-xs font-semibold text-[#b4232f]">{pixValidationError || pixError}</span> : null}
                                                     </label>
                                                 </div>
                                             ) : null}

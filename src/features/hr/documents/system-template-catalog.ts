@@ -17,7 +17,7 @@ import {
 } from "@/features/hr/documents/document-form-schema";
 
 export type SystemDocumentTemplateKind = "system_pdf" | "reference_docx";
-export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx" | "rep_p_receipt" | "rep_p_pilot_receipt" | "time_mirror" | "asset_custody_term" | "asset_maintenance_order" | "editor_html";
+export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx" | "rep_p_receipt" | "rep_p_pilot_receipt" | "time_mirror" | "asset_custody_term" | "asset_maintenance_order" | "editor_html" | "dre_report";
 export type SystemDocumentGenerationMode = "direct" | "contextual" | "reference";
 
 export type SystemDocumentTemplate = {
@@ -34,7 +34,7 @@ export type SystemDocumentTemplate = {
   renderer: SystemDocumentTemplateRenderer;
   /** Define onde o documento nasce; modelos contextuais não aparecem no gerador avulso. */
   generationMode: SystemDocumentGenerationMode;
-  sourceModule?: "documents" | "uniforms" | "admission" | "termination" | "time_recording" | "assets";
+  sourceModule?: "documents" | "uniforms" | "admission" | "termination" | "time_recording" | "assets" | "financial";
   sourceModulePath?: string;
   variables: string[];
   fieldMapping?: TemplateFieldMapping;
@@ -372,6 +372,32 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     ],
   },
   {
+    id: "system-admission-family-salary-term",
+    name: "Termo de responsabilidade para salário-família",
+    category: "Admissão",
+    description: "Incluído quando o operador registra a concessão após a conclusão da contabilidade; a análise legal é informativa.",
+    sourcePath: `${ADMISSION_BASE}/08-termo-salario-familia-v2.docx`,
+    contentHash: "929c79c62097ca63a772af96435f40f5c0a7135cff0398735ee417aec31630d6",
+    version: 2,
+    variables: ["integration.employer_name", "integration.employer_cnpj", "employee.name", "employee.cpf", "family_salary_dependents_lines"],
+    fieldMapping: {
+      family_salary_dependents_lines: { kind: "manual", label: "Dependentes informados para salário-família", format: "multiline", required: true },
+    },
+  },
+  {
+    id: "system-admission-income-tax-dependents",
+    name: "Declaração de dependentes para imposto de renda",
+    category: "Admissão",
+    description: "Incluída somente para filhos que a pessoa marcou expressamente como dependentes de IR.",
+    sourcePath: `${ADMISSION_BASE}/08-declaracao-dependentes-ir-v1.docx`,
+    contentHash: "d3271e2414a25867637c8412c76a9c767fba626d3c1fdcfeffc8cd64c93b5ce1",
+    version: 1,
+    variables: ["integration.employer_name", "integration.employer_cnpj", "employee.name", "employee.cpf", "income_tax_dependents_lines"],
+    fieldMapping: {
+      income_tax_dependents_lines: { kind: "manual", label: "Dependentes declarados para IR", format: "multiline", required: true },
+    },
+  },
+  {
     id: "system-admission-bundle-closing-term",
     name: "Termo de Encerramento, Ciência e Assinatura",
     category: "Admissão",
@@ -551,6 +577,15 @@ const editorTemplates: SystemDocumentTemplate[] = [{
   updatedAt: "2026-11-05T00:00:00.000Z",
 }];
 
+const financialReportTemplates: SystemDocumentTemplate[] = [{
+  id: "system-financial-dre-report", name: "Relatório de DRE mensal e de 12 meses", category: "Financeiro e recibos",
+  description: "Relatório contextual transitório com CMV por movimentação de estoque, unidades autorizadas, situação das fontes e comparação de competências. Não é publicado ou armazenado pelo sistema.",
+  status: "published", version: 1, templateKind: "system_pdf", renderer: "dre_report", generationMode: "contextual",
+  sourceModule: "financial", sourceModulePath: "src/features/financial/dre/report-pdf.ts", variables: [],
+  letterheadVersion: "coala-letterhead-v2", signatureScope: "none", retentionPolicyId: "manual_review",
+  sourceFormat: "pdf", isSystem: true, previewUrl: "/api/documents/templates/system-financial-dre-report/preview", updatedAt: "2026-11-17T00:00:00.000Z",
+}];
+
 export const SYSTEM_DOCUMENT_TEMPLATES: readonly SystemDocumentTemplate[] = [
   ...baseTemplates,
   ...uniformTemplates,
@@ -558,6 +593,7 @@ export const SYSTEM_DOCUMENT_TEMPLATES: readonly SystemDocumentTemplate[] = [
   ...timeRecordingTemplates,
   ...assetTemplates,
   ...editorTemplates,
+  ...financialReportTemplates,
 ];
 
 export function systemDocumentTemplateById(id: string) {

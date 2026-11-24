@@ -47,10 +47,18 @@ test('casamento por nome ignora a palavra quiosque e não casa nome vazio', () =
   assert.equal(matchUnitByName(undefined, [unit({})]), undefined);
 });
 
-test('cobertura sem horário configurado pede atenção; sob demanda e desativada não', () => {
-  assert.equal(coverageSummaryFor(unit({ coverageMode: 'fixed_hours' })).needsConfiguration, true);
-  assert.equal(coverageSummaryFor(unit({ coverageMode: 'on_demand' })).needsConfiguration, false);
-  assert.equal(coverageSummaryFor(unit({ coverageMode: 'disabled' })).needsConfiguration, false);
+test('os dois modos antigos permanecem com alerta ligado sem exigir horário configurado', () => {
+  for (const coverageMode of ['fixed_hours', 'on_demand']) {
+    assert.deepEqual(coverageSummaryFor(unit({ coverageMode })), {
+      text: 'Alerta de escala vazia ligado', needsConfiguration: false,
+    });
+  }
+  assert.deepEqual(coverageSummaryFor(unit({ coverageMode: 'disabled' })), {
+    text: 'Alerta de escala vazia desligado', needsConfiguration: false,
+  });
+  assert.deepEqual(coverageSummaryFor(undefined), {
+    text: 'Alerta indisponível · unidade sem cadastro de DP', needsConfiguration: false,
+  });
 });
 
 test('responsabilidade incompleta limpa os cinco campos e trocar o tipo limpa os níveis seguintes', () => {
@@ -91,6 +99,15 @@ test('endereço e CEP são botões visíveis, sem depender de passar o mouse ou 
   assert.match(detail, /Copiar endereço/);
   assert.match(detail, /Copiar CEP/);
   assert.doesNotMatch(detail, /Popover|onMouseEnter|onContextMenu/);
+});
+
+test('localização é editada na identificação e deriva o endereço da ficha', () => {
+  assert.doesNotMatch(detail, /LocationPolicyControl|Registro de ponto/);
+  assert.match(wizard, /<LocationPolicyControl/);
+  assert.match(wizard, /patch\(\{ address: address \?\? "" \}\)/);
+  assert.match(wizard, /Cancelar esta edição não desfaz a localização já salva/);
+  assert.match(wizard, /A localização e o endereço são alterados juntos/);
+  assert.match(screen, /setUnitDialog\(\{ mode: "edit", unit: \{ \.\.\.created/);
 });
 
 test('contrato com o e2e de estoque: grupo que abastece, função no estoque e botões de salvar', () => {

@@ -938,21 +938,35 @@ service cloud.firestore {
       allow read: if isAuth() && (isAdmin() || canViewPurchasing());
       allow create: if isAuth() && (isAdmin() || canCreatePurchase())
         && request.resource.data.keys().hasAll(['workspaceId', 'supplierId', 'status', 'createdAt'])
-        && request.resource.data.status is string
+        && !request.resource.data.keys().hasAny([
+          'confirmedAt', 'confirmedBy', 'linkedExpenseId', 'linkedFreightExpenseId', 'linkedServiceFeeExpenseId'
+        ])
+        && request.resource.data.status == 'created'
         && request.resource.data.workspaceId is string;
       allow update: if isAuth() && (
         isAdmin() ||
         canCreatePurchase() ||
         purchasingPerm('cancelPurchase') ||
         canReceivePurchase()
-      ) && request.resource.data.workspaceId == resource.data.workspaceId;
-      allow delete: if isAdmin();
+      ) && request.resource.data.workspaceId == resource.data.workspaceId
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'status', 'confirmedAt', 'confirmedBy', 'linkedExpenseId', 'linkedFreightExpenseId', 'linkedServiceFeeExpenseId'
+        ])
+        && (resource.data.status != 'confirmed'
+          || !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'supplierId', 'destinationKioskId', 'invoiceAccessKey', 'invoiceNumber', 'fiscal',
+            'totalEstimated', 'deliveryFee', 'serviceFee', 'freightPaymentMode', 'serviceFeePaymentMode',
+            'freightSupplierId', 'freightSupplierName', 'paymentMethod', 'paymentCondition',
+            'paymentDueDate', 'installmentsCount', 'installmentDueDates', 'purchaseDate',
+            'linkedFreightExpenseId', 'linkedServiceFeeExpenseId'
+          ]));
+      allow delete: if isAdmin() && resource.data.status != 'confirmed';
 
       // Itens do pedido (subcoleção)
       match /items/{itemId} {
         allow read: if isAuth() && (isAdmin() || canViewPurchasing());
-        allow create, update: if isAuth() && (isAdmin() || canCreatePurchase());
-        allow delete: if isAdmin();
+        // Escritas passam pela API, que altera a versão do pedido no mesmo batch.
+        allow create, update, delete: if false;
       }
     }
 
@@ -1050,6 +1064,17 @@ service cloud.firestore {
 
     // Continuations are server-only and contain private scan positions.
     match /privacyPersonCursorStates/{id} { allow read, write: if false; }
+
+    // Diretório e credenciais de prestadores são acessados somente por APIs.
+    match /providerOffices/{id} { allow read, write: if false; }
+    match /providerMembers/{id} { allow read, write: if false; }
+    match /providerPortalGrants/{id} { allow read, write: if false; }
+    match /providerPortalInvitations/{id} { allow read, write: if false; }
+    match /providerPortalSessions/{id} { allow read, write: if false; }
+    match /providerPortalEmailLookups/{id} { allow read, write: if false; }
+    match /providerPortalOperations/{id} { allow read, write: if false; }
+    match /providerPortalAudit/{id} { allow read, write: if false; }
+    match /providerPortalLoginAttempts/{id} { allow read, write: if false; }
 
     // --- CATCH-ALL: bloqueia tudo não mapeado ---
     match /{document=**} {

@@ -11,7 +11,12 @@ import {
   stonePixFileId,
   verifyStoneWebhookSecret,
 } from "@/lib/integrations/stone/pix-conciliation";
-import { AppError, reportSystemError, withApiErrorHandling } from "@/lib/observability";
+import { AppError, reportSystemError } from "@/lib/observability";
+import { writePixRefundProjection } from "@/features/financial/sales-reconciliation/pix-refunds.server";
+import { projectPixRefundDay } from "@/lib/integrations/stone/pix-refunds";
+import { createStandardSecurityEnforcer } from "@/lib/security/enforcer";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import {
   STONE_PIX_FILE_COLLECTION,
@@ -76,6 +81,7 @@ async function processPixFile(input: {
   const fileRef = financialDbAdmin.collection(STONE_PIX_FILE_COLLECTION)
     .doc(stonePixFileId(input.document, input.referenceDate));
   const requestRef = financialDbAdmin.collection(STONE_PIX_REQUEST_COLLECTION).doc(fileRef.id);
+  const projectionScope = { workspaceId: WORKSPACE_ID, document: input.document, referenceDate: input.referenceDate };
   const runId = randomUUID();
   const notificationHash = createHash("sha256").update(input.url).digest("hex");
 
@@ -85,9 +91,13 @@ async function processPixFile(input: {
       const current = await tx.get(fileRef);
       if (current.get("status") === "processed"
         && current.get("schemaVersion") === STONE_PIX_FILE_SCHEMA_VERSION
-        && current.get("notificationHash") === notificationHash) return false;
+        && typeof current.get("refundLayoutSupported") === "boolean"
+        && current.get("notificationHash") === notificationHash) return null;
       if (current.get("status") === "processing"
-        && Number(current.get("processingLeaseExpiresAt") ?? 0) > Date.now()) return false;
+        && Number(current.get("processingLeaseExpiresAt") ?? 0) > Date.now()) return null;
+      const reusableHash = current.get("status") === "processed" && current.get("schemaVersion") === STONE_PIX_FILE_SCHEMA_VERSION
+        ? current.get("sourceHash") : null;
+      await writePixRefundProjection(tx, projectionScope);
       tx.set(fileRef, {
         id: fileRef.id,
         workspaceId: WORKSPACE_ID,
@@ -100,7 +110,7 @@ async function processPixFile(input: {
         processingLeaseExpiresAt: Date.now() + PROCESSING_LEASE_MS,
         notificationHash,
       }, { merge: true });
-      return true;
+      return { reusableHash };
     });
     if (!acquired) return;
 
@@ -118,12 +128,17 @@ async function processPixFile(input: {
     const sourceHash = createHash("sha256").update(bytes).digest("hex");
     const csv = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     const parsed = parseStonePixCsv(csv);
-    await replaceTransactions(fileRef, parsed.transactions, sourceHash);
+    const refundProjection = projectPixRefundDay(input.referenceDate, sourceHash, parsed.transactions);
+    refundProjection.complete &&= parsed.refundCoverageSupported;
+    if (sourceHash !== acquired.reusableHash) {
+      await replaceTransactions(fileRef, parsed.transactions, sourceHash);
+    }
     await financialDbAdmin.runTransaction(async tx => {
       const current = await tx.get(fileRef);
       if (current.get("processingRunId") !== runId) {
         throw new StonePixProcessingError("processing_lease_lost");
       }
+      await writePixRefundProjection(tx, projectionScope, refundProjection);
       const processedAt = new Date().toISOString();
       tx.set(fileRef, {
         status: "processed",
@@ -132,6 +147,7 @@ async function processPixFile(input: {
         sourceHash,
         sourceBytes: bytes.byteLength,
         summary: parsed.summary,
+        refundLayoutSupported: parsed.refundCoverageSupported,
         errorCode: null,
         processingRunId: null,
         processingLeaseExpiresAt: null,
@@ -196,11 +212,9 @@ async function processPixFile(input: {
   }
 }
 
-export const POST = withApiErrorHandling({
-  source: "stone-conciliation",
-  operation: "receive-pix-file",
-  routeOrJob: "/api/webhooks/stone/conciliation",
-}, async (request: NextRequest) => {
+type StaticRouteContext = { params: Promise<Record<string, never>> };
+
+function authenticateStone(request: NextRequest, query = false) {
   if (!process.env.STONE_CONCILIATION_WEBHOOK_SECRET?.trim()) {
     return routeError({
       code: "STONE_WEBHOOK_NOT_CONFIGURED",
@@ -211,12 +225,15 @@ export const POST = withApiErrorHandling({
   }
   if (!isAuthorized(request)) {
     return routeError({
-      code: "STONE_WEBHOOK_UNAUTHORIZED",
+      code: query ? "STONE_QUERY_UNAUTHORIZED" : "STONE_WEBHOOK_UNAUTHORIZED",
       kind: "AUTHENTICATION",
-      safeMessage: "Webhook não autorizado.",
+      safeMessage: query ? "Consulta não autorizada." : "Webhook não autorizado.",
     });
   }
+  return true as const;
+}
 
+async function parseStoneNotification(request: NextRequest) {
   const declaredLength = Number(request.headers.get("content-length") ?? 0);
   if (Number.isFinite(declaredLength) && declaredLength > MAX_WEBHOOK_BODY_BYTES) {
     return routeError({
@@ -261,7 +278,7 @@ export const POST = withApiErrorHandling({
   }
 
   if (notification.type === "validation_notification") {
-    return NextResponse.json({ ok: true });
+    return notification;
   }
 
   const document = expectedDocument();
@@ -281,32 +298,34 @@ export const POST = withApiErrorHandling({
     });
   }
 
+  return notification;
+}
+
+const notificationContract = defineSecurityContract({
+  schemaVersion: 1, id: "stone.conciliation.webhook.receive", version: 1,
+  surface: { method: "POST", path: "/api/webhooks/stone/conciliation" },
+  exposure: "internal-service", identity: { kind: "signed-webhook", provider: "stone" },
+  authorization: { kind: "none" }, resourceScope: { kind: "none" },
+  input: { kind: "schema", schema: "stone.pix.notification", unknownFields: "strip" },
+  effects: { mode: "external", audit: "server-authoritative" }, errorExposure: "sanitized",
+});
+
+const notificationEnforcer = createStandardSecurityEnforcer<
+  NextRequest, StaticRouteContext, unknown, true, Awaited<ReturnType<typeof parseStoneNotification>>
+>(notificationContract, {
+  authenticate: ({ request }) => authenticateStone(request),
+  parseInput: ({ request }) => parseStoneNotification(request),
+});
+
+export const POST = secureRoute({ contract: notificationContract, enforcer: notificationEnforcer }, ({ security }) => {
+  if (security.input.type === "validation_notification") return NextResponse.json({ ok: true });
+  const notification = security.input;
   const receivedAt = new Date().toISOString();
   after(() => processPixFile({ ...notification, receivedAt }));
   return NextResponse.json({ ok: true, accepted: true });
 });
 
-export const GET = withApiErrorHandling({
-  source: "stone-conciliation",
-  operation: "read-pix-file",
-  routeOrJob: "/api/webhooks/stone/conciliation",
-}, async (request: NextRequest) => {
-  if (!process.env.STONE_CONCILIATION_WEBHOOK_SECRET?.trim()) {
-    return routeError({
-      code: "STONE_WEBHOOK_NOT_CONFIGURED",
-      kind: "TRANSIENT_EXTERNAL",
-      httpStatus: 503,
-      safeMessage: "Webhook não configurado.",
-    });
-  }
-  if (!isAuthorized(request)) {
-    return routeError({
-      code: "STONE_QUERY_UNAUTHORIZED",
-      kind: "AUTHENTICATION",
-      safeMessage: "Consulta não autorizada.",
-    });
-  }
-
+function parseStoneQuery(request: NextRequest) {
   const document = request.nextUrl.searchParams.get("document")?.replace(/\D/g, "") ?? "";
   const referenceDate = request.nextUrl.searchParams.get("referenceDate") ?? "";
   if (document !== expectedDocument() || !/^\d{4}-\d{2}-\d{2}$/.test(referenceDate)) {
@@ -317,6 +336,27 @@ export const GET = withApiErrorHandling({
     });
   }
 
+  return { document, referenceDate };
+}
+
+const queryContract = defineSecurityContract({
+  schemaVersion: 1, id: "stone.conciliation.webhook.read", version: 1,
+  surface: { method: "GET", path: "/api/webhooks/stone/conciliation" },
+  exposure: "internal-service", identity: { kind: "signed-webhook", provider: "stone" },
+  authorization: { kind: "none" }, resourceScope: { kind: "none" },
+  input: { kind: "schema", schema: "stone.pix.file-query", unknownFields: "strip" },
+  effects: { mode: "read", audit: "none" }, errorExposure: "sanitized",
+});
+
+const queryEnforcer = createStandardSecurityEnforcer<
+  NextRequest, StaticRouteContext, unknown, true, ReturnType<typeof parseStoneQuery>
+>(queryContract, {
+  authenticate: ({ request }) => authenticateStone(request, true),
+  parseInput: ({ request }) => parseStoneQuery(request),
+});
+
+export const GET = secureRoute({ contract: queryContract, enforcer: queryEnforcer }, async ({ security }) => {
+  const { document, referenceDate } = security.input;
   const fileRef = financialDbAdmin.collection(STONE_PIX_FILE_COLLECTION)
     .doc(stonePixFileId(document, referenceDate));
   const [file, transactionSnapshot] = await Promise.all([
