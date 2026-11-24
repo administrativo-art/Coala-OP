@@ -86,3 +86,6 @@ Na seleção de competência, o cabeçalho mostra quantidade e soma das obrigaç
 ## Conservação de centavos nos rateios — 17/11/2026
 
 `expenseValueForResultCenter` distribui rateios válidos em centavos por maiores restos, usando a referência armazenada do centro para desempatar. O rateio completo precede a seleção da unidade: ordem, aliases de exibição ou consulta de um subconjunto não redistribuem o resíduo. Despesas com apropriações contábeis válidas usam a soma das parcelas por conta, igual à DRE. Centro direto, matriz pessoal e validação de políticas permanecem; percentuais inválidos não são corrigidos implicitamente. Esta mudança afeta a apresentação calculada das parcelas, sem alterar dados históricos, obrigações, pagamentos ou a política gravada. Ver [integridade da DRE](dre.md#integridade-dos-resultados-e-centavos--17112026).
+
+
+A conferência documental da folha compara o líquido ao valor a pagar do título existente e o total da guia à individualização por pessoa/conta. Exige acesso financeiro, custos de pessoal e RH, sem alterar títulos ou pagamentos. Guias usam o anexo fiscal revisado já vinculado na caixa. Ver o [percurso e permissões](dp-time-recording.md).

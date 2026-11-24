@@ -102,7 +102,7 @@ Classificação atual: **174/174 páginas** — 126 ativas, 6 de navegação, 31
 | `organization` | 1 | Traçado | [Organograma](flows/organization.md) — percurso complementado; verificação integrada pendente |
 | `payment-requests` | 2 | Traçado | [Solicitações e Banco Inter](flows/payment-requests.md) — `REALIZADO`, recuperação versionada, conciliação conservadora por conjunto, adoção de agendamento DDA e cotação de boleto vencido possuem cobertura unitária; teste de gravação no emulador foi criado, mas sua execução local depende de Java; fronteiras bancárias reais permanecem pendentes |
 | `pdv-sync` | 1 | Traçado | [Callable e reprocessamento](flows/pdv-sync.md) — percurso complementado; verificação integrada pendente |
-| `people-access` | 6 | Traçado | [Colaboradores e acesso](flows/people-access.md) — percurso complementado; verificação integrada pendente |
+| `people-access` | 7 | Traçado | [Colaboradores e acesso](flows/people-access.md) — percurso complementado; verificação integrada pendente |
 | `platform-home` | 1 | Traçado | [Página inicial](flows/platform-home.md) — percurso complementado; verificação integrada pendente |
 | `pricing` | 4 | Traçado | [Preços](flows/pricing.md) — percurso complementado; verificação integrada pendente |
 | `purchasing` | 15 | Traçado | [Cotação, pedido, recebimento e estoque](flows/purchasing-order-receipt.md) — destino e avisos de recebimento cobertos localmente em testes puros/emulador; prontidão e códigos de pedidos importados cobertos por teste unitário; taxa de serviço com classificação e liquidação próprias coberta em cálculo puro, sem homologação financeira integrada; compra por volume depende do multiplicador no cadastro e exibe quantidade e custo unitário no editor; compra local sem comprovante, sessão única/retomada de vínculo na própria sangria, filtros hierárquicos de unidade e classificação operacional de itens pela IA cobertos por contrato/teste de estado, sem OCR real ou HTTP autenticado; sem criação automática de cadastro/patrimônio pendente; homologação global pendente |
@@ -163,3 +163,15 @@ Exportação DRE mensal/12meses em17/11/2026: [fluxo](flows/dre.md#relatórios-m
 
 
 Atualização local de17/11/2026 — taxas por venda conciliada: [fluxo](flows/stone-sales-review.md#taxas-por-venda-conciliada--implementação-local-17112026), secureRoute e transações com claims/CAS, provisão antes do crédito, guarda de segundo pagamento e avisos comuns DRE. Runner dirigido no emulador demo; resultados e limites constam do registro da tarefa. Nenhuma homologação externa, publicação ou escrita real foi realizada. Não altera a contagem histórica de grupos.
+
+2026-11-23: devolução individual e em lote de dias no saneamento do ponto, resposta do titular no One/Go, histórico por versão e bloqueio transacional do fechamento. Código local com testes dirigidos; validação visual e publicação pendentes. O grupo permanece Traçado.
+
+2026-11-23 — People-access ganhou diretório próprio de prestadores e Portal do Contador, com convite, sessão e autorização por empresa/competência. O [contrato](service-provider-access.md) distingue o acesso da remessa de folha ainda pendente. Implementação local com validações dirigidas.
+
+2026-11-23 — Portal do contador ganhou consulta individual de fechamento e confirmação de liberação pelo RH, com projeção minimizada, extrato canônico, histórico versionado e contracheque protegido. Testes locais dirigidos e interface simulada; publicação pendente.
+
+
+Conferência local do retorno do contador: cartão de fechamento individual → API payslip-reconciliation → entrega imutável/documento ativo → comparação em minutos → revisão/ponteiro → gate transacional de assinatura. Sem OCR ou conciliação monetária. [Guia](flows/dp-time-recording.md).
+
+
+Itens 6/7 do fechamento implementados localmente: grade por situação e closing-progress readonly; seção financeira seleciona título/documento, compara centavos e grava revisão/ponteiro/reserva de exclusividade. Sem escrita em títulos ou pagamentos. Fontes e verificações no [fluxo REP-P](flows/dp-time-recording.md).

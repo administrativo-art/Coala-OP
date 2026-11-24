@@ -68,7 +68,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/documents/templates/[id]` | [page.tsx](../../src/app/dashboard/documents/templates/[id]/page.tsx) | Ler a própria página |
 | `dashboard/documents/templates` | [page.tsx](../../src/app/dashboard/documents/templates/page.tsx) | Redireciona para `/dashboard/documents/generator/models` |
 
-## dp (26)
+## dp (27)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
@@ -82,6 +82,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/dp/ferias/[userId]` | [page.tsx](../../src/app/dashboard/dp/ferias/[userId]/page.tsx) | [dp-ferias-profile.tsx](../../src/components/dp/dp-ferias-profile.tsx) |
 | `dashboard/dp/ferias` | [page.tsx](../../src/app/dashboard/dp/ferias/page.tsx) | [dp-ferias-manager.tsx](../../src/components/dp/dp-ferias-manager.tsx) |
 | `dashboard/dp` | [page.tsx](../../src/app/dashboard/dp/page.tsx) | [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts), [use-dp-schedules-shifts.ts](../../src/hooks/use-dp-schedules-shifts.ts) |
+| `dashboard/dp/prestadores` | [page.tsx](../../src/app/dashboard/dp/prestadores/page.tsx) | [admin-panel.tsx](../../src/features/service-portal/admin-panel.tsx), [page-hero.tsx](../../src/components/patterns/page-hero.tsx) |
 | `dashboard/dp/requests` | [page.tsx](../../src/app/dashboard/dp/requests/page.tsx) | [hr-requests-page.tsx](../../src/features/hr/requests/hr-requests-page.tsx) |
 | `dashboard/dp/schedules/[id]` | [page.tsx](../../src/app/dashboard/dp/schedules/[id]/page.tsx) | [dp-context.tsx](../../src/components/dp-context.tsx), [dp-schedule-editor.tsx](../../src/components/dp/dp-schedule-editor.tsx) |
 | `dashboard/dp/schedules/month/[period]` | [page.tsx](../../src/app/dashboard/dp/schedules/month/[period]/page.tsx) | [dp-schedule-month-view.tsx](../../src/components/dp/dp-schedule-month-view.tsx), [dp-schedule-periods.ts](../../src/lib/dp-schedule-periods.ts) |
@@ -365,4 +366,4 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/users/inactive` | [page.tsx](../../src/app/dashboard/users/inactive/page.tsx) | [inactive-users-screen.tsx](../../src/components/inactive-users-screen.tsx) |
 | `dashboard/users` | [page.tsx](../../src/app/dashboard/users/page.tsx) | Redireciona para `/dashboard/dp/collaborators` |
 
-Total: **183 páginas** no checkout usado para a geração.
+Total: **184 páginas** no checkout usado para a geração.

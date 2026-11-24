@@ -278,3 +278,15 @@ Nova consulta auditada e painel de localização na candidata local, com permiss
 2026-11-20 — Fechamento financeiro mensal: novo grupo `month-closing` (Localizado) com tela inicial e fluxo de Despesas somente leitura, rota `GET /api/financial/month-closing` com `secureRoute` e permissão `financial.monthClosings`. Sem escrita, sem publicação e sem execução sobre dados reais; os demais quatro fluxos aparecem como não conectados. Ver flows/month-closing.md e planos/plano-fechamento-financeiro-mensal.md.
 
 2026-11-21 — Competência de parcelas no fechamento. O fluxo `month-closing` passa a Traçado. Despesas e Fechamento leem o contrato central para o mês, o valor e o estado das parcelas. A consulta Firestore limitada foi verificada em leitura para outubro e novembro. Verificação HTTP e visual permanecem pendentes.
+
+2026-11-23 — DP ponto: devolução do dia traçada entre modo foco, API day-corrections, coleção privada, Registro do titular e Go. Atores separados, unidades do dia e histórico imutável. Implementação local, publicação e homologação visual pendentes.
+
+2026-11-23 — Acesso de prestadores traçado entre gestão RH, convite individual, portal, sessão e concessões. Namespace independente e fontes pessoais live. Remessa versionada de folha e publicação pendentes.
+
+2026-11-23 — Consulta do fechamento por colaborador traçada entre gestão de prestadores, prévia, publicação imutável, portal e download auditado. Prova de empregador por data e validação de fontes financeiras revisadas. Publicação e homologação real pendentes.
+
+
+23/11/2026 — Conferência de eventos do contracheque traçada no fluxo REP-P: entrada interna, fontes e namespaces, permissões RH/todas unidades, comparação determinística, revisões e bloqueio de envio/reenviou. Integração local em emulador e testes dirigidos; publicação e homologação reais pendentes.
+
+
+23/11/2026 — acompanhamento e conciliação documental da folha implementados localmente. TARS consultou contratos; Nemo implementou e verificou. Grade limitada por competência, gates existentes preservados e conciliação com acesso financeiro próprio. Fontes, efeitos e testes no guia REP-P; produção e arquivos reais pendentes.

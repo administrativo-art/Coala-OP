@@ -88,3 +88,23 @@ preview dentro do app. Não foi aberto navegador para renderizar o protótipo.
 Os pares de texto seguem os tokens com contraste registrado em `tokens.md`;
 gradientes são usados na marca grande/ilustrações/progresso, sem substituir
 mensagens ou rótulos das ações. O aceite em aparelhos físicos permanece pendente.
+
+## Prestadores de serviço — 23/11/2026
+
+Portal do Contador e ativação de convite verificados em Chromium local com respostas simuladas, nos tamanhos1280px e390px. O teste percorreu login, ativação, lista de competências e confirmação administrativa de suspensão. A gestão usa campos e botões do sistema, seletor com chevron e cartões que se empilham no celular. Capturas privadas no registro local da tarefa; sem rolagem horizontal ou erros de página. O servidor de teste foi encerrado e o caminho temporário de QA removido. Publicação e operação com contas reais pendentes.
+
+
+## Fechamento individual no Portal do Contador — 23/11/2026
+
+Verificação em Chromium local com APIs simuladas: seleção de empresa e competência, lista de colaboradores, abertura do fechamento, download protegido do contracheque e suspensão de conteúdo após reabertura. A gestão percorreu prévia e confirmação explícita de liberação. Trocar de empresa remove o detalhe anterior. Capturas desktop e celular foram inspecionadas, com campos identificados e sem rolagem horizontal. Evidências privadas no registro local da tarefa. Caminho temporário e servidor de QA removidos após a verificação; publicação pendente.
+
+
+## Conferência do contracheque retornado — 23/11/2026
+
+Playwright do repositório no app local e emuladores demo, com APIs simuladas para percorrer seleção de entrega, download protegido, transcrição explícita, comparação divergente, registro e correção. O envio fica ausente enquanto pendente/divergente/obsoleto e aparece após conferência compatível; o teste confirmou o envio explícito e a retirada do botão após mudança de fonte. Capturas desktop e390px inspecionadas, com rótulos nos campos e sem rolagem horizontal. A rota temporária de QA e o servidor foram removidos; capturas e logs privados no registro da tarefa. Homologação com arquivos reais e publicação pendentes.
+
+
+Conciliação financeira da folha (23/11/2026): Playwright do repositório no app local com emuladores demo e APIs simuladas percorreu salário divergente, registro, correção, guia, naturezas individuais, download e confirmação. Um cenário passou em 33,3s; desktop e 390px sem rolagem horizontal. Capturas privadas inspecionadas; endpoints reais sem sessão 401. Sem pagamentos reais ou navegador do usuário. Rota e scripts temporários removidos após QA; publicação e homologação real pendentes.
+
+
+Revisão do formulário da guia: quatro campos explícitos de identidade do PDF (tipo, número, CNPJ e competência), sem copiar os valores esperados como transcrição. O número esperado no título aparece somente como referência de conferência; PDF múltiplo não é oferecido. Teste dirigido de identificação divergente/correção acompanha a evidência local.
