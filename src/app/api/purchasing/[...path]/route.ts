@@ -42,6 +42,8 @@ import {
 } from '@/lib/purchase-financial-expenses';
 import { computeReceiptFinancialUpdate } from '@/lib/purchase-receipt-financials';
 import { financialExpenseAccountingFields } from '@/features/financial/lib/expense-accounting-contract';
+import { normalizeBrazilianDocument, validBrazilianTaxId } from '@/features/financial/beneficiaries/normalization';
+import { commitVersionedPurchaseOrderBatch } from '@/lib/purchasing-order-version.server';
 import { isValidFinancialDateIso } from '@/features/financial/lib/financial-dates';
 import {
   cancelPurchaseSchema,
@@ -548,6 +550,21 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
 
   const supplierSnap = orderData.supplierId ? await dbAdmin.collection('entities').doc(orderData.supplierId).get() : null;
   const supplier = supplierSnap?.data() as Record<string, any> | undefined;
+  const supplierTaxId = normalizeBrazilianDocument(supplier?.document);
+  if (!supplier || !validBrazilianTaxId(supplierTaxId)
+    || ((orderData.fiscal?.issuerCnpj || orderData.fiscal?.supplierDocument)
+      && normalizeBrazilianDocument(orderData.fiscal.issuerCnpj ?? orderData.fiscal.supplierDocument) !== supplierTaxId)) {
+    throw new Error('O fornecedor da compra precisa de documento fiscal válido e compatível com a nota.');
+  }
+  const unitId = String(orderData.destinationKioskId ?? '').trim();
+  if (!unitId) throw new Error('A compra precisa de unidade operacional para sincronizar a despesa.');
+  const freightEntityId = String(orderData.freightSupplierId ?? '').trim();
+  const freightEntity = freightEntityId ? await dbAdmin.collection('entities').doc(freightEntityId).get() : null;
+  const freightTaxId = freightEntity ? normalizeBrazilianDocument(freightEntity.get('document')) : '';
+  if (freightEntityId && (!freightEntity?.exists || !validBrazilianTaxId(freightTaxId)
+    || freightEntity.get('status') === 'inactive')) {
+    throw new Error('O prestador do frete precisa ter cadastro fiscal ativo e válido.');
+  }
 
   const totalValue = Number(orderData.totalEstimated ?? 0);
   const goodsSupplierName = supplier?.fantasyName || supplier?.name || orderData.supplierName || orderData.supplierId || orderId;
@@ -594,6 +611,9 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
 
   const sharedPayload = {
     workspaceId: WORKSPACE_ID,
+    supplierId: orderData.supplierId,
+    unitId,
+    billingIdentity: { supplierTaxId },
     paymentAccountId: orderData.paymentAccountId ?? null,
     paymentAccountName: orderData.paymentAccountName ?? null,
     paymentMethodId: orderData.paymentMethodId ?? null,
@@ -611,6 +631,8 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     originModule: 'purchasing',
     originStatus: 'pending_audit',
     purchaseOrderId: orderId,
+    purchaseInvoiceAccessKey: orderData.invoiceAccessKey ?? null,
+    purchaseInvoiceNumber: orderData.invoiceNumber ?? orderData.fiscal?.number ?? null,
     purchaseOrderTotalValue: totalValue,
     purchaseGoodsAmount: Math.max(totalValue - Number(orderData.deliveryFee ?? 0) - Number(orderData.serviceFee ?? 0), 0),
     purchaseFreightAmount: Number(orderData.deliveryFee ?? 0),
@@ -645,6 +667,10 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
       } : {}),
       description: component.description,
       supplier: component.supplier,
+      supplierId: component.role === 'freight' ? freightEntityId || null : orderData.supplierId,
+      billingIdentity: component.role === 'freight'
+        ? (freightTaxId ? { supplierTaxId: freightTaxId } : null)
+        : { supplierTaxId },
       accountPlan: component.accountPlanId,
       accountId: component.accountPlanId,
       accountPlanId: component.accountPlanId,
@@ -697,8 +723,18 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     const existingServiceFee = existingExpenses.find((document) => document.id === linkedServiceFeeId)
       ?? existingExpenses.find((document) => document.data().purchaseExpenseRole === 'service_fee');
 
+    const goodsLocked = Boolean(existingGoods && purchaseExpenseHasSettlementEvidence(existingGoods.data()));
+    if (goodsLocked && existingGoods) {
+      const current = existingGoods.data();
+      if (Math.round(Number(current.totalValue) * 100) !== Math.round(primaryComponent.totalValue * 100)
+        || current.supplierId !== orderData.supplierId || current.unitId !== unitId
+        || normalizeBrazilianDocument(current.billingIdentity?.supplierTaxId) !== supplierTaxId
+        || current.purchaseExpenseRole !== primaryComponent.role) {
+        throw new Error('A mercadoria vinculada ao pagamento mudou; não é seguro sincronizar o frete.');
+      }
+    }
     for (const existingExpense of [existingGoods, existingFreight, existingServiceFee]) {
-      if (!existingExpense) continue;
+      if (!existingExpense || (goodsLocked && existingExpense.id === existingGoods?.id)) continue;
       assertPurchaseExpenseCanSync(existingExpense.data());
     }
 
@@ -709,7 +745,7 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     const serviceFeeRef = existingServiceFee?.ref
       ?? financialDbAdmin.collection('expenses').doc(`purchase_service_fee_${orderId}`);
 
-    transaction.set(goodsRef, {
+    if (!goodsLocked) transaction.set(goodsRef, {
       ...componentPayload(primaryComponent, freightComponent ? freightRef.id : serviceFeeComponent ? serviceFeeRef.id : null, goodsRef.id),
       ...(existingGoods ? {} : { createdAt: now, createdBy: uid }),
     }, { merge: true });
@@ -969,6 +1005,9 @@ async function handlePost(request: NextRequest, userContext: ServerUserContext, 
     }
     const ref = dbAdmin.collection('purchase_orders').doc();
     const items = Array.isArray(body.items) ? body.items : [];
+    if (items.length > MAX_ORDER_ITEMS_PER_OPERATION) {
+      return jsonError('O pedido excede o limite seguro de itens.', 409);
+    }
     const itemsTotal = items.reduce((sum: number, item: any) => sum + purchaseLineNetTotal(item), 0);
     const deliveryFee = Number(body.deliveryFee ?? 0);
     const serviceFee = Number(body.serviceFee ?? 0);
@@ -1000,6 +1039,7 @@ async function handlePost(request: NextRequest, userContext: ServerUserContext, 
       ...(destinationKioskId ? { destinationKioskId } : {}),
       supplierId: body.supplierId || '',
       supplierName: supplierName || '',
+      externalOrderNumber: typeof body.externalOrderNumber === 'string' ? body.externalOrderNumber.trim() : null,
       status: 'created',
       receiptMode: body.receiptMode || 'future_delivery',
       estimatedReceiptDate,
@@ -1038,10 +1078,10 @@ async function handlePost(request: NextRequest, userContext: ServerUserContext, 
       updatedAt: now,
       createdBy: decoded.uid,
     };
-    await ref.set(orderData);
+    const batch = dbAdmin.batch();
+    batch.create(ref, orderData);
 
     if (items.length > 0) {
-      const batch = dbAdmin.batch();
       for (const item of items) {
         const itemRef = ref.collection('items').doc();
         const q = Number(item.quantityOrdered || 0);
@@ -1081,25 +1121,26 @@ async function handlePost(request: NextRequest, userContext: ServerUserContext, 
           notes: item.notes ?? null,
         });
       }
-      await batch.commit();
     }
+    await batch.commit();
     return NextResponse.json({ id: ref.id }, { status: 201 });
   }
 
   if (resource === 'orders' && id && child === 'confirm') {
     const orderRef = dbAdmin.collection('purchase_orders').doc(id);
-    const [orderSnap, itemsSnap, existingReceiptsSnap, existingFinancialsSnap] = await Promise.all([
-      orderRef.get(),
+    const orderSnap = await orderRef.get();
+    if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
+    const [itemsSnap, existingReceiptsSnap, existingFinancialsSnap] = await Promise.all([
       orderRef.collection('items').limit(MAX_ORDER_ITEMS_PER_OPERATION + 1).get(),
       dbAdmin.collection('purchase_receipts').where('purchaseOrderId', '==', id).limit(MAX_LINKED_RECORDS_PER_ORDER + 1).get(),
       dbAdmin.collection('purchase_financials').where('purchaseOrderId', '==', id).limit(MAX_LINKED_RECORDS_PER_ORDER + 1).get(),
     ]);
-    if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
     if (itemsSnap.size > MAX_ORDER_ITEMS_PER_OPERATION
       || existingReceiptsSnap.size > MAX_LINKED_RECORDS_PER_ORDER
       || existingFinancialsSnap.size > MAX_LINKED_RECORDS_PER_ORDER) {
       return jsonError('O pedido excede o limite seguro para confirmação automática.', 409);
     }
+    if (itemsSnap.empty) return jsonError('Inclua ao menos um item antes de confirmar o pedido.', 409);
     const order = orderSnap.data()!;
     if (order.status !== 'created') {
       return jsonError('Apenas pedidos em revisão podem ser confirmados.', 409);
@@ -1193,7 +1234,7 @@ async function handlePost(request: NextRequest, userContext: ServerUserContext, 
       }
     }
 
-    batch.update(orderRef, { 
+    const confirmationUpdate = {
       status: 'confirmed', 
       totalEstimated,
       confirmedAt: now,
@@ -1207,7 +1248,7 @@ async function handlePost(request: NextRequest, userContext: ServerUserContext, 
       financialReversalStatus: FieldValue.delete(),
       financialReversalError: FieldValue.delete(),
       updatedAt: now,
-    });
+    };
 
     const reusableReceiptDoc = existingReceiptsSnap.docs
       .filter((document) => document.data().status === 'cancelled' && document.data().revertedAt)
@@ -1339,7 +1380,9 @@ async function handlePost(request: NextRequest, userContext: ServerUserContext, 
       updatedAt: now,
     }, { merge: true });
 
-    await batch.commit();
+    if (!await commitVersionedPurchaseOrderBatch(batch, orderRef, orderSnap, confirmationUpdate)) {
+      return jsonError('O pedido mudou durante a confirmação. Confira os itens e tente novamente.', 409);
+    }
 
     // Sync financial expense
     await internalSyncExpense(id, { ...order, totalEstimated }, decoded.uid).catch(e => console.error('Sync expense error:', e));
@@ -2645,13 +2688,14 @@ async function handlePatch(request: NextRequest, userContext: ServerUserContext,
   if (resource === 'orders' && id && child === 'items' && childId) {
     const orderRef = dbAdmin.collection('purchase_orders').doc(id);
     const itemRef = orderRef.collection('items').doc(childId);
-    const [orderSnap, itemSnap, itemsSnap] = await Promise.all([
-      orderRef.get(),
+    const orderSnap = await orderRef.get();
+    if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
+    const [itemSnap, itemsSnap] = await Promise.all([
       itemRef.get(),
       orderRef.collection('items').get(),
     ]);
-    if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
     if (!itemSnap.exists) return jsonError('Item do pedido não encontrado.', 404);
+    if (orderSnap.get('status') !== 'created') return jsonError('Itens de compra confirmada não podem ser editados.', 409);
 
     const currentOrder = orderSnap.data()!;
     const currentItem = itemSnap.data() ?? {};
@@ -2711,8 +2755,10 @@ async function handlePatch(request: NextRequest, userContext: ServerUserContext,
       ...treatmentFields,
       notes: nextItem.notes ?? null,
     });
-    batch.update(orderRef, { totalEstimated: nextTotalEstimated, updatedAt: now });
-    await batch.commit();
+    if (!await commitVersionedPurchaseOrderBatch(batch, orderRef, orderSnap,
+      { totalEstimated: nextTotalEstimated, updatedAt: now })) {
+      return jsonError('O pedido mudou durante a edição do item. Confira os itens e tente novamente.', 409);
+    }
 
     const financialSnap = await dbAdmin
       .collection('purchase_financials')
@@ -2746,6 +2792,69 @@ async function handlePatch(request: NextRequest, userContext: ServerUserContext,
     const currentOrder = orderSnap.data()!;
 
     const { items, ...rest } = body;
+    if (['status', 'confirmedAt', 'confirmedBy', 'linkedExpenseId'].some((field) => Object.prototype.hasOwnProperty.call(rest, field))) {
+      return jsonError('Confirmação e vínculo financeiro da compra só podem ser alterados pelo fluxo próprio.', 409);
+    }
+    if (currentOrder.status === 'confirmed' && (Array.isArray(items) || [
+      'supplierId', 'destinationKioskId', 'workspaceId',
+      'totalEstimated', 'deliveryFee', 'serviceFee', 'freightPaymentMode', 'serviceFeePaymentMode',
+      'freightSupplierName', 'paymentMethod', 'paymentCondition',
+      'paymentDueDate', 'installmentsCount', 'installmentDueDates', 'purchaseDate',
+      'linkedFreightExpenseId', 'linkedServiceFeeExpenseId',
+    ].some((field) => Object.prototype.hasOwnProperty.call(rest, field)))) {
+      return jsonError('Dados fiscais e financeiros de compra confirmada não podem ser alterados pela edição geral.', 409);
+    }
+    if (currentOrder.status === 'confirmed' && Object.prototype.hasOwnProperty.call(rest, 'freightSupplierId')) {
+      const freightSupplierId = String(rest.freightSupplierId ?? '').trim();
+      const freightExpenseId = String(currentOrder.linkedFreightExpenseId ?? '').trim();
+      if (!freightSupplierId || currentOrder.freightSupplierId || currentOrder.freightPaymentMode !== 'separate'
+        || !freightExpenseId || !String(currentOrder.freightSupplierName ?? '').trim()) {
+        return jsonError('O prestador só pode ser vinculado ao frete separado ainda pendente.', 409);
+      }
+      const [freightSupplier, freightExpense] = await Promise.all([
+        dbAdmin.collection('entities').doc(freightSupplierId).get(),
+        financialDbAdmin.collection('expenses').doc(freightExpenseId).get(),
+      ]);
+      if (!freightSupplier.exists || freightSupplier.get('status') === 'inactive'
+        || !validBrazilianTaxId(normalizeBrazilianDocument(freightSupplier.get('document')))
+        || !freightExpense.exists || freightExpense.get('purchaseOrderId') !== id
+        || freightExpense.get('purchaseExpenseRole') !== 'freight'
+        || freightExpense.get('status') !== 'pending' || freightExpense.get('paymentRequestId')
+        || freightExpense.get('paidAt') || freightExpense.get('linkedBankTransactionId')) {
+        return jsonError('O cadastro ou a despesa de frete não permite completar o vínculo.', 409);
+      }
+      rest.freightSupplierId = freightSupplierId;
+    }
+    if (currentOrder.status === 'confirmed' && ['invoiceAccessKey', 'invoiceNumber', 'fiscal']
+      .some((field) => Object.prototype.hasOwnProperty.call(rest, field))) {
+      const fiscal = rest.fiscal;
+      const key = String(rest.invoiceAccessKey ?? '');
+      const supplierSnap = await dbAdmin.collection('entities').doc(String(currentOrder.supplierId ?? '')).get();
+      const supplierTaxId = normalizeBrazilianDocument(supplierSnap.get('document'));
+      const goodsCents = Math.round(Number(currentOrder.totalEstimated) * 100)
+        - (currentOrder.freightPaymentMode === 'separate' ? Math.round(Number(currentOrder.deliveryFee ?? 0) * 100) : 0)
+        - (currentOrder.serviceFeePaymentMode === 'separate' ? Math.round(Number(currentOrder.serviceFee ?? 0) * 100) : 0);
+      if (currentOrder.invoiceAccessKey || currentOrder.fiscal?.issuerCnpj || currentOrder.fiscal?.supplierDocument
+        || currentOrder.invoiceNumber || !/^\d{44}$/.test(key) || !validBrazilianTaxId(supplierTaxId)
+        || key.slice(6, 20) !== supplierTaxId || !fiscal || typeof fiscal !== 'object'
+        || normalizeBrazilianDocument(fiscal.issuerCnpj ?? fiscal.supplierDocument) !== supplierTaxId
+        || Number(fiscal.totalCents) !== goodsCents || !String(rest.invoiceNumber ?? '').trim()
+        || !String(fiscal.series ?? '').trim() || !String(fiscal.protocol ?? fiscal.authorizationProtocol ?? '').trim()) {
+        return jsonError('A primeira NF da compra deve corresponder ao fornecedor e ao valor da mercadoria.', 409);
+      }
+      const linkedExpenseId = String(currentOrder.linkedExpenseId ?? '');
+      if (linkedExpenseId) {
+        const expense = await financialDbAdmin.collection('expenses').doc(linkedExpenseId).get();
+        const requestId = String(expense.get('paymentRequestId') ?? '');
+        if (requestId) {
+          const request = await financialDbAdmin.collection('bankPaymentRequests').doc(requestId).get();
+          if (!request.exists || ['awaiting_financial_authorization', 'ready_to_submit', 'submitting', 'failed']
+            .includes(String(request.get('status') ?? ''))) {
+            return jsonError('Há Pix em preparo ou envio; revise a solicitação antes de vincular nova NF.', 409);
+          }
+        }
+      }
+    }
     if (Object.prototype.hasOwnProperty.call(rest, 'destinationKioskId')) {
       const destinationKioskId = typeof rest.destinationKioskId === 'string'
         ? rest.destinationKioskId.trim()
@@ -2881,8 +2990,9 @@ async function handlePatch(request: NextRequest, userContext: ServerUserContext,
       rest.freightSupplierName = null;
     }
 
-    batch.update(orderRef, { ...rest, updatedAt: now });
-    await batch.commit();
+    if (!await commitVersionedPurchaseOrderBatch(batch, orderRef, orderSnap, { ...rest, updatedAt: now })) {
+      return jsonError('O pedido mudou durante a edição. Confira os dados e tente novamente.', 409);
+    }
 
     const nextTotalEstimated = Number(rest.totalEstimated ?? currentOrder.totalEstimated ?? 0);
     const nextDeliveryFee = normalizedDeliveryFee;

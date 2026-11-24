@@ -657,6 +657,8 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.settings.manageExpenseDescriptions` — [`src/features/financial/components/expenses/expense-form.tsx`](../../src/features/financial/components/expenses/expense-form.tsx)
 - `financial.settings.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
 - `financial.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
+- `registration.entities.edit` — [`src/features/financial/components/pay-expense-dialog.tsx`](../../src/features/financial/components/pay-expense-dialog.tsx)
+- `registration.view` — [`src/features/financial/components/pay-expense-dialog.tsx`](../../src/features/financial/components/pay-expense-dialog.tsx)
 
 ## `financial-assets`
 
@@ -989,13 +991,18 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/expenses/authorizations/page.tsx`](../../src/app/dashboard/financial/expenses/authorizations/page.tsx).
 
-Arquivos locais percorridos: 27.
+Arquivos locais percorridos: 35.
 
 Chamadas candidatas encontradas:
 
 - `/api/financial/inbox/` — interface [`src/features/financial/payment-requests/payment-requests-page.tsx`](../../src/features/financial/payment-requests/payment-requests-page.tsx); rota candidata [`src/app/api/financial/inbox/[id]/route.ts`](../../src/app/api/financial/inbox/%5Bid%5D/route.ts)
 - `/api/financial/payment-requests` — interface [`src/features/financial/payment-requests/payment-requests-page.tsx`](../../src/features/financial/payment-requests/payment-requests-page.tsx); rota candidata [`src/app/api/financial/payment-requests/route.ts`](../../src/app/api/financial/payment-requests/route.ts)
 - `/api/financial/payment-requests/` — interface [`src/features/financial/payment-requests/payment-requests-page.tsx`](../../src/features/financial/payment-requests/payment-requests-page.tsx); rota candidata [`src/app/api/financial/payment-requests/route.ts`](../../src/app/api/financial/payment-requests/route.ts)
+
+Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
+
+- `entities` — [`src/features/financial/payment-requests/purchase-supplier-pix.server.ts`](../../src/features/financial/payment-requests/purchase-supplier-pix.server.ts)
+- `purchase_orders` — [`src/features/financial/payment-requests/purchase-supplier-pix.server.ts`](../../src/features/financial/payment-requests/purchase-supplier-pix.server.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 

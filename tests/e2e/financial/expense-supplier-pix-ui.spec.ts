@@ -47,7 +47,7 @@ test("despesa real prepara Pix separado da baixa manual e mostra erro seguro", a
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("button", { name: "Solicitar Pix de R$ 50,00" })).toBeVisible();
     await expect(dialog.getByText("A data acima vale apenas para a baixa manual", { exact: false })).toBeVisible();
-    await dialog.screenshot({ path: ".ai-work/development-technology/2026-11-23-pix-chaves/pay-expense-pix-e2e.png" });
+    await dialog.screenshot({ path: ".ai-work/development-technology/2026-11-23-pix-favorecido/pay-expense-pix-e2e.png" });
     await dialog.getByRole("spinbutton", { name: "Juros" }).fill("1");
     await expect(dialog.getByRole("button", { name: "Solicitar Pix de R$ 50,00" })).toBeDisabled();
     await dialog.getByRole("spinbutton", { name: "Juros" }).fill("0");
@@ -89,7 +89,7 @@ test("despesa real prepara Pix separado da baixa manual e mostra erro seguro", a
     await expect(linkedDialog.getByRole("button", { name: "Confirmar pagamento manual" })).toBeDisabled();
     await expect(linkedDialog.getByText("Esta despesa tem uma solicitação bancária vinculada", { exact: false })).toBeVisible();
     await expect(linkedDialog.getByRole("button", { name: "Solicitar Pix de R$ 50,00" })).toHaveCount(0);
-    await linkedDialog.screenshot({ path: ".ai-work/development-technology/2026-11-23-pix-chaves/pay-expense-pix-linked-e2e.png" });
+    await linkedDialog.screenshot({ path: ".ai-work/development-technology/2026-11-23-pix-favorecido/pay-expense-pix-linked-e2e.png" });
     expect((await expense.get()).get("status")).toBe("pending");
 
     await expense.update({
@@ -129,5 +129,76 @@ test("despesa real prepara Pix separado da baixa manual e mostra erro seguro", a
     await Promise.all([expense.delete(), account.delete()]);
     if (previousFinancialUser.exists) await financialUser.set(previousFinancialUser.data()!);
     else await financialUser.delete();
+  }
+});
+
+test("compra confirmada exige indicação explícita para Pix de outra entidade", async ({ page }) => {
+  test.setTimeout(420_000);
+  assertFirestoreEmulatorSafety({ projectId: "demo-coala-e2e" });
+  const app = getApps().find(item => item.name === "expense-supplier-pix-ui-e2e")
+    ?? initializeApp({ projectId: "demo-coala-e2e" }, "expense-supplier-pix-ui-e2e");
+  const main = getFirestore(app, "coala");
+  const financial = getFirestore(app, "coala-financeiro");
+  const supplier = main.collection("entities").doc("pix-ui-purchase-supplier-e2e");
+  const receiver = main.collection("entities").doc("pix-ui-purchase-receiver-e2e");
+  const order = main.collection("purchase_orders").doc("pix-ui-purchase-order-e2e");
+  const expense = financial.collection("expenses").doc("pix-ui-purchase-goods-e2e");
+  const key = `35261111222333000181550010000000011000000012`;
+  const now = new Date();
+  const due = new Date(now.getFullYear(), now.getMonth(), 24, 12);
+  const competence = new Date(now.getFullYear(), now.getMonth(), 1, 12);
+  try {
+    await Promise.all([
+      supplier.set({ name: "Fornecedor Fictício E2E", type: "pessoa_juridica", document: "11222333000181", status: "active" }),
+      receiver.set({ name: "Recebedora Fictícia E2E", type: "pessoa_fisica", document: "52998224725", status: "active" }),
+      order.set({ workspaceId: "coala", status: "confirmed", supplierId: supplier.id, supplierName: "Fornecedor Fictício E2E",
+        destinationKioskId: "loja-e2e", invoiceAccessKey: key, invoiceNumber: "1", fiscal: { number: "1", issuerCnpj: "11222333000181", totalCents: 5950 },
+        linkedExpenseId: expense.id, totalEstimated: 79.5, deliveryFee: 20, freightPaymentMode: "separate", createdAt: now.toISOString() }),
+      expense.set({ workspaceId: "coala", originModule: "purchasing", purchaseOrderId: order.id, purchaseExpenseRole: "goods",
+        description: "Mercadoria fictícia E2E", supplier: "Fornecedor Fictício E2E", supplierId: supplier.id,
+        billingIdentity: { supplierTaxId: "11222333000181" }, unitId: "loja-e2e", accountPlan: "pix-ui-account-e2e",
+        referenceResultCenterId: "loja-e2e", competenceDate: Timestamp.fromDate(competence), dueDate: Timestamp.fromDate(due),
+        status: "pending", provisionType: "actual", paymentMethod: "single", totalValue: 59.5, createdAt: Timestamp.now() }),
+    ]);
+    let sentBody: Record<string, unknown> | null = null;
+    await page.route(`**/api/financial/expenses/${expense.id}/supplier-pix`, async route => {
+      sentBody = route.request().postDataJSON();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ request: { id: "synthetic-request" } }) });
+    });
+    await page.goto("/login");
+    await page.getByLabel("E-mail").fill(E2E_USER.email);
+    await page.getByLabel("Senha").fill(E2E_USER.password);
+    await page.getByRole("button", { name: "Entrar no sistema" }).click();
+    await expect(page.getByRole("button", { name: "Entrar no sistema" })).toBeHidden();
+    await page.goto(`/dashboard/financial/expenses?expense=${expense.id}&competence=all`);
+    await page.getByRole("button", { name: "Registrar pagamento" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Fornecedor da nota/compra")).toBeVisible();
+    await dialog.getByLabel("Quem recebe o Pix").selectOption(receiver.id);
+    await expect(dialog.getByText("NF 1", { exact: false })).toBeVisible();
+    const prepare = dialog.getByRole("button", { name: "Solicitar Pix de R$ 59,50" });
+    await expect(prepare).toBeDisabled();
+    await dialog.getByLabel("Motivo da indicação").fill("Recebedora indicada expressamente para esta mercadoria fictícia.");
+    await dialog.getByLabel("Evidência da NF").fill("NF fictícia número 1, chave fiscal sintética conferida no pedido.");
+    await dialog.getByRole("checkbox").check();
+    await expect(prepare).toBeEnabled();
+    await dialog.screenshot({ path: ".ai-work/development-technology/2026-11-23-pix-favorecido/purchase-pix-indication-desktop.png" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await dialog.screenshot({ path: ".ai-work/development-technology/2026-11-23-pix-favorecido/purchase-pix-indication-mobile.png" });
+    const scrollArea = dialog.locator(".overflow-y-auto");
+    const scrollBefore = await scrollArea.evaluate(element => element.scrollTop);
+    await scrollArea.hover();
+    await page.mouse.wheel(0, 700);
+    await expect.poll(() => scrollArea.evaluate(element => element.scrollTop)).toBeGreaterThan(scrollBefore);
+    await expect(dialog.getByRole("checkbox")).toBeInViewport();
+    await expect(dialog.getByRole("button", { name: "Cancelar" })).toBeInViewport();
+    await expect(prepare).toBeInViewport();
+    await dialog.screenshot({ path: ".ai-work/development-technology/2026-11-23-pix-favorecido/purchase-pix-indication-mobile-scrolled.png" });
+    await prepare.click();
+    await expect.poll(() => sentBody).toMatchObject({ supplierEntityId: receiver.id, amountCents: 5950,
+      purchaseBeneficiaryIndication: { confirmed: true, invoiceAccessKey: key } });
+    expect((await expense.get()).get("supplierId")).toBe(supplier.id);
+  } finally {
+    await Promise.all([supplier.delete(), receiver.delete(), order.delete(), expense.delete()]);
   }
 });

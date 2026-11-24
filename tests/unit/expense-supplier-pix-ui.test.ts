@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { expenseBillingIdentity, expenseHasProtectedSupplierSource, expenseSupplierFields, expenseSupplierIdentity } from "../../src/features/financial/lib/expense-supplier-identity";
-import { supplierPixPrepareInput } from "../../src/features/financial/lib/expense-supplier-pix-ui";
+import { purchasePixNeedsSync, supplierPixPrepareInput } from "../../src/features/financial/lib/expense-supplier-pix-ui";
 
 const entities = [
   { id: "entity-one", name: "Pessoa Exemplo", type: "pessoa_fisica" as const, document: "529.982.247-25" },
@@ -62,4 +62,18 @@ test("Pix preparation uses saved entity and cents, and rejects drafts, partial/m
   assert.equal(supplierPixPrepareInput({ ...expense, financialInboxMessageId: "inbox-one" }), null);
   assert.equal(supplierPixPrepareInput({ ...expense, generatedReceiptId: "receipt-one" }), null);
   assert.equal(supplierPixPrepareInput({ ...expense, installments: [{ status: "pending", value: 400 }] }), null);
+});
+
+test("purchase goods permit a single payment without installments and guide canonical sync", () => {
+  const purchase = {
+    id: "purchase-goods", originModule: "purchasing", purchaseOrderId: "order-one", purchaseExpenseRole: "goods",
+    status: "pending", paymentMethod: "single", supplierId: "supplier-one", unitId: "unit-one",
+    billingIdentity: { supplierTaxId: "52998224725" }, accountPlan: "account-one", resultCenterId: "center-one",
+    competenceDate: "2026-11-01", dueDate: "2026-11-24", totalValue: 59.5,
+  };
+  assert.deepEqual(supplierPixPrepareInput(purchase), { supplierEntityId: "supplier-one", amountCents: 5950 });
+  assert.equal(purchasePixNeedsSync(purchase), false);
+  assert.equal(purchasePixNeedsSync({ ...purchase, billingIdentity: {} }), true);
+  assert.equal(purchasePixNeedsSync({ ...purchase, netPayableValue: 50 }), false);
+  assert.equal(supplierPixPrepareInput({ ...purchase, purchaseExpenseRole: "freight" }), null);
 });
