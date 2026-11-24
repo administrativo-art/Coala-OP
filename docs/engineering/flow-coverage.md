@@ -7,6 +7,8 @@ O ensaio local `tests/integration/document-central.test.mjs` cobre concorrência
 
 # Cobertura dos grupos de fluxo
 
+24/11/2026: [Escalas DP](flows/dp-schedules.md) omite da exportação ao Bizneo os períodos manuais sem ID e informa a quantidade. Testes unitários conferem a classificação dessa omissão, os turnos com ID e o bloqueio para turno comum sem ID. O grupo permanece Traçado.
+
 24/11/2026: [Escalas DP](flows/dp-schedules.md) permite exportar os turnos oficiais em XLSX com DSR ainda sem confirmação do Bizneo. O teste unitário cobre os estados de sincronização e mantém a recusa de turno e folga concorrentes. O grupo permanece Traçado.
 
 10/11/2026: guia interativo de metas (Entenda a meta) no dashboard web, com entrada em Acompanhamento e no painel do colaborador. O exemplo usa o motor de bonificação existente e não publica o PDF. Testes de cálculo e o E2E dirigido cobrem o guia; não há equivalente no aplicativo Android.

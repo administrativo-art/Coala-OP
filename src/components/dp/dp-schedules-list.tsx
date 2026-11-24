@@ -17,7 +17,7 @@ import {
   shiftDefinitionMatchesUnit,
 } from '@/lib/dp-shift-definitions';
 import { isWorkShift } from '@/lib/dp-shift-rules';
-import { findBizneoExportDayOffConflicts } from '@/lib/dp-bizneo-export-preflight';
+import { classifyBizneoExportWorkShift, findBizneoExportDayOffConflicts } from '@/lib/dp-bizneo-export-preflight';
 import { resolveBizneoShiftId } from '@/lib/dp-shift-bizneo';
 import { activeOperationalUnits, canonicalOperationalUnitId, operationalUnitsExistingInPeriod } from '@/lib/dp-units';
 import { formatDPSchedulePeriod, getAutomaticDPSchedulePeriods } from '@/lib/dp-schedule-periods';
@@ -534,6 +534,7 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
 
       const defMap = new Map(shiftDefinitions.map(d => [d.id, d]));
       const unresolvedShiftDetails = new Set<string>();
+      let omittedManualShiftCount = 0;
 
       const rows = exportableShifts
         .sort((a, b) => {
@@ -543,20 +544,26 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
           const ub = userMap.get(b.userId)?.username ?? '';
           return ua.localeCompare(ub);
         })
-        .map(s => {
+        .flatMap(s => {
           const user = userMap.get(s.userId);
           const unitId = s.unitId ?? s.scheduleUnitId;
           const unitName = units.find(u => u.id === unitId)?.name ?? '';
           const def = resolveShiftDefinitionForExport(s, unitId, shiftDefinitions, defMap);
           const shiftId = resolveBizneoShiftId(def);
+          const decision = classifyBizneoExportWorkShift(s, shiftId);
 
-          if (!shiftId) {
+          if (decision === 'omit-manual') {
+            omittedManualShiftCount += 1;
+            return [];
+          }
+          if (decision === 'missing-id') {
             unresolvedShiftDetails.add(
               `${formatShiftDate(s.date)} · ${unitName || 'Sem unidade'} · ${user?.username ?? 'Sem colaborador'} · ${def?.name ?? `${s.startTime}–${s.endTime}`}`
             );
+            return [];
           }
 
-          return {
+          return [{
             date: s.date,
             action: 'overwrite',
             state: 'draft',
@@ -565,7 +572,7 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
             shift_id: shiftId,
             shift: def?.name ?? `${s.startTime}–${s.endTime}`,
             unit: unitName,
-          };
+          }];
         });
 
       if (unresolvedShiftDetails.size > 0) {
@@ -577,6 +584,14 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
           description: `Registros pendentes: ${preview}${remainder}.`,
           variant: 'destructive',
         });
+        return;
+      }
+
+      const omissionNotice = omittedManualShiftCount === 1
+        ? '1 turno manual sem ID Bizneo ficou fora da exportação.'
+        : `${omittedManualShiftCount} turnos manuais sem ID Bizneo ficaram fora da exportação.`;
+      if (rows.length === 0) {
+        toast({ title: 'Nenhum turno com ID Bizneo para exportar.', description: omissionNotice });
         return;
       }
 
@@ -599,6 +614,7 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
             year: selectedYear,
             schedule_count: schedulesToExport.length,
             shift_count: rows.length,
+            omitted_manual_shift_count: omittedManualShiftCount,
             unit_ids: schedulesToExport.map((schedule) => schedule.unitId ?? null),
           },
         }).catch((error) => {
@@ -606,7 +622,11 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
         });
       }
 
-      toast({ title: 'Arquivo exportado.', description: `${rows.length} turno(s) em ${schedulesToExport.length} unidade(s).` });
+      const resultDescription = `${rows.length} turno(s) em ${schedulesToExport.length} unidade(s).`;
+      toast({
+        title: 'Arquivo exportado.',
+        description: omittedManualShiftCount ? `${resultDescription} ${omissionNotice}` : resultDescription,
+      });
       onOpenChange(false);
     } catch (e: any) {
       toast({ title: 'Erro ao exportar.', description: e.message, variant: 'destructive' });
