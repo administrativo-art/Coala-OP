@@ -8,3 +8,12 @@ export function findBizneoExportDayOffConflicts(shifts: readonly DPShift[]): DPS
     isDayOffShift(shift) && conflictKeys.has(`${shift.userId}::${shift.date}`),
   );
 }
+
+export function classifyBizneoExportWorkShift(
+  shift: Pick<DPShift, 'shiftDefinitionId' | 'manualDay' | 'manualDayId'>,
+  bizneoShiftId: string,
+): 'export' | 'omit-manual' | 'missing-id' {
+  if (bizneoShiftId) return 'export';
+  if (!shift.shiftDefinitionId && (shift.manualDay || shift.manualDayId)) return 'omit-manual';
+  return 'missing-id';
+}
