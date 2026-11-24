@@ -15,6 +15,8 @@
     "stoneReceiptMonthSnapshots"
   ],
   "approvedLegacyGaps": [
+    "purchase-order-person-suppliers-gap",
+    "purchase-order-confirmers-gap",
     "audit-targets",
     "editor-content-versions",
     "financial-expense-payment-records",
@@ -31,19 +33,19 @@
       "file": "src/features/privacy/person-inventory.server.ts",
       "function": "collectPersonSource",
       "call": "db.collection(source.collection)",
-      "functionSha256": "dd4d300b18b98cf9084ce321ef9d1ea1e722fdf5c9ea01051ae246526cb54242"
+      "functionSha256": "984ce322e2201a9c77e2f7182e4aab7b3a5d790c45cab6f16546134d1774b314"
     },
     {
       "file": "src/features/privacy/person-inventory.server.ts",
       "function": "collectPersonSource",
       "call": "db.collection(\"employees\").doc(value).collection(source.collection)",
-      "functionSha256": "dd4d300b18b98cf9084ce321ef9d1ea1e722fdf5c9ea01051ae246526cb54242"
+      "functionSha256": "984ce322e2201a9c77e2f7182e4aab7b3a5d790c45cab6f16546134d1774b314"
     },
     {
       "file": "src/features/privacy/person-inventory.server.ts",
       "function": "collectPersonSource",
       "call": "db.collectionGroup(source.collection)",
-      "functionSha256": "dd4d300b18b98cf9084ce321ef9d1ea1e722fdf5c9ea01051ae246526cb54242"
+      "functionSha256": "984ce322e2201a9c77e2f7182e4aab7b3a5d790c45cab6f16546134d1774b314"
     }
   ]
 }

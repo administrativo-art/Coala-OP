@@ -114,10 +114,15 @@ test("API E2E: prepara Pix por despesa e bloqueia envio divergente antes do banc
     installments: [{ number: 1, value: 536.64, status: "pending" }],
   });
 
-  const post = (path: string, access: string, body?: Record<string, unknown>) => fetch(origin + path, {
+  const post = async (path: string, access: string, body?: Record<string, unknown>) => {
+    const response = await fetch(origin + path, {
     method: "POST", headers: { Authorization: `Bearer ${access}`, "Content-Type": "application/json" },
     ...(body ? { body: JSON.stringify(body) } : {}),
-  });
+    });
+    assert.match(response.headers.get("content-type") ?? "", /application\/json/,
+      `${path} HTTP ${response.status}\n${logs}`);
+    return response;
+  };
 
   const deniedCompanyId = "supplier-pix-company-other-unit";
   await expenses.doc(deniedCompanyId).set({ ...(await expense.get()).data(), unitId: "unit-b", paymentRequestId: null });
@@ -142,6 +147,238 @@ test("API E2E: prepara Pix por despesa e bloqueia envio divergente antes do banc
   assert.ok((await prepare()).status >= 400);
   assert.equal((await requests.where("expenseId", "==", expenseId).get()).size, 0);
   await profile.update({ active: true });
+
+  // Synthetic purchase: fiscal entity and Pix receiver have distinct references.
+  const orderId = "purchase-pix-confirmed";
+  const goodsId = "purchase-pix-goods";
+  const freightId = "purchase-pix-freight";
+  const fiscalEntityId = "purchase-pix-fiscal";
+  const receiverId = "purchase-pix-receiver";
+  const receiverCpf = "52998224725";
+  const invoiceKey = `123456${document}${"0".repeat(24)}`;
+  const danfe = { role: "danfe", path: "test-only/danfe-a.pdf", sha256: "a".repeat(64), url: "https://example.test/danfe-a.pdf" };
+  await db.collection("entities").doc(fiscalEntityId).set({ type: "pessoa_juridica", name: "Empresa exemplo", document, status: "active" });
+  await db.collection("entities").doc(receiverId).set({ type: "pessoa_fisica", workspaceId: "coala", name: "Recebedor exemplo", document: receiverCpf, status: "active" });
+  await financial.collection("supplierPaymentProfiles").doc(receiverId).set({
+    entityId: receiverId, workspaceId: "coala", active: true, paymentMethod: "pix_key", pixKeyType: "cpf",
+    holderDocument: receiverCpf, encryptedPaymentData: encryptPaymentDestination({ pixKey: receiverCpf }, encryptionKey),
+    validatedAt: now, updatedAt: now,
+  });
+  await db.collection("purchase_orders").doc(orderId).set({
+    workspaceId: "coala", status: "confirmed", supplierId: fiscalEntityId, destinationKioskId: "test-unit",
+    linkedExpenseId: goodsId, linkedFreightExpenseId: freightId,
+    totalEstimated: 150, deliveryFee: 20, freightPaymentMode: "separate", freightSupplierName: "Transportadora exemplo",
+    paymentMethod: "pix", paymentCondition: "single", paymentDueDate: "2026-11-30", createdAt: now,
+    invoiceAccessKey: invoiceKey, invoiceNumber: "1",
+    fiscal: { issuerCnpj: document, totalCents: 13000, series: "1", protocol: "example" },
+    fiscalDocuments: [danfe], documentUrl: danfe.url,
+  });
+  const commercialOrderId = "purchase-commercial-confirmed";
+  await db.collection("purchase_orders").doc(commercialOrderId).set({
+    workspaceId: "coala", status: "confirmed", supplierId: fiscalEntityId,
+    destinationKioskId: "test-unit", totalEstimated: 130, deliveryFee: 0,
+  });
+  const patchOrder = (id: string, body: Record<string, unknown>) => fetch(`${origin}/api/purchasing/orders/${id}`, {
+    method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  assert.equal((await patchOrder(commercialOrderId, { invoiceAccessKey: invoiceKey, invoiceNumber: "2",
+    fiscal: { issuerCnpj: document, totalCents: 13000, series: "1", protocol: "example" } })).status, 200);
+  assert.equal((await patchOrder(commercialOrderId, { fiscalDocuments: [{ role: "danfe", path: "test-only", sha256: "synthetic" }] })).status, 200);
+  assert.equal((await patchOrder(commercialOrderId, { invoiceAccessKey: `${invoiceKey.slice(0, -1)}1`, invoiceNumber: "3",
+    fiscal: { issuerCnpj: document, totalCents: 13000, series: "1", protocol: "changed" } })).status, 409);
+  assert.equal((await patchOrder(commercialOrderId, { supplierId: receiverId })).status, 409);
+  assert.equal((await patchOrder(commercialOrderId, { status: "created" })).status, 409);
+  await expenses.doc(goodsId).set({
+    workspaceId: "coala", originModule: "purchasing", purchaseOrderId: orderId,
+    purchaseExpenseRole: "goods", status: "pending", paymentMethod: "single", totalValue: 130,
+    supplierId: fiscalEntityId, billingIdentity: { supplierTaxId: document }, unitId: "test-unit",
+    description: "Mercadoria sintética", competenceMonth: "2026-11", dueDate: "2026-11-30",
+    accountPlan: "example-account", resultCenterId: "example-center", installments: null,
+  });
+  await expenses.doc(freightId).set({ ...(await expenses.doc(goodsId).get()).data(),
+    purchaseExpenseRole: "freight", totalValue: 20, supplier: "Transportadora exemplo",
+    supplierId: null, billingIdentity: null });
+  const samePartyCases = [
+    { id: "commercial-without-invoice", total: 130, fee: 0, fiscal: null, expected: 200 },
+    { id: "invoice-amount-mismatch", total: 150, fee: 0, fiscal: 10000, expected: 409 },
+    { id: "invoice-excludes-separate-freight", total: 150, fee: 20, fiscal: 13000, expected: 200 },
+  ];
+  for (const scenario of samePartyCases) {
+    const sameOrderId = `purchase-${scenario.id}`;
+    const sameExpenseId = `expense-${scenario.id}`;
+    await db.collection("purchase_orders").doc(sameOrderId).set({
+      workspaceId: "coala", status: "confirmed", supplierId: supplierEntityId,
+      destinationKioskId: "test-unit", linkedExpenseId: sameExpenseId,
+      totalEstimated: scenario.total, deliveryFee: scenario.fee,
+      freightPaymentMode: scenario.fee ? "separate" : "included_with_goods",
+      ...(scenario.fiscal != null ? { invoiceAccessKey: invoiceKey, invoiceNumber: "1",
+        fiscal: { issuerCnpj: document, totalCents: scenario.fiscal, series: "1", protocol: "example" } } : {}),
+    });
+    await expenses.doc(sameExpenseId).set({ ...(await expenses.doc(goodsId).get()).data(),
+      purchaseOrderId: sameOrderId, supplierId: supplierEntityId,
+      totalValue: scenario.total - scenario.fee, paymentRequestId: null });
+    const response = await post(`/api/financial/expenses/${sameExpenseId}/supplier-pix`, token,
+      { supplierEntityId, amountCents: (scenario.total - scenario.fee) * 100 });
+    assert.equal(response.status, scenario.expected, `${scenario.id}: ${JSON.stringify(await response.clone().json())}`);
+  }
+  await db.collection("kiosks").doc("test-unit").set({ name: "Unidade sintética" });
+  const atomicMarker = "purchase-atomic-create-demo";
+  const observedInitialItems = new Promise<number>((resolve, reject) => {
+    const timer = setTimeout(() => { unsubscribe(); reject(new Error("Pedido atômico não apareceu no monitor.")); }, 15000);
+    const unsubscribe = db.collection("purchase_orders").where("externalOrderNumber", "==", atomicMarker)
+      .onSnapshot(async (snapshot) => {
+        if (snapshot.empty) return;
+        try {
+          const items = await snapshot.docs[0].ref.collection("items").get();
+          clearTimeout(timer);
+          unsubscribe();
+          resolve(items.size);
+        } catch (error) { clearTimeout(timer); unsubscribe(); reject(error); }
+      }, (error) => { clearTimeout(timer); unsubscribe(); reject(error); });
+  });
+  const atomicCreate = await post("/api/purchasing/orders", token, {
+    supplierId: supplierEntityId, supplierName: "Fornecedor criação atômica",
+    externalOrderNumber: atomicMarker, destinationKioskId: "test-unit",
+    receiptMode: "future_delivery", paymentMethod: "pix", paymentCondition: "cash",
+    paymentDueDate: "2026-11-30", items: [{ baseItemId: "synthetic-item",
+      itemName: "Item sintético", itemTreatment: "stock", unit: "un",
+      quantityOrdered: 1, unitPriceOrdered: 150 }],
+  });
+  assert.equal(atomicCreate.status, 201, JSON.stringify(await atomicCreate.clone().json()));
+  assert.equal(await observedInitialItems, 1, "o pedido não pode ser observado sem seu item inicial");
+  const atomicOrderId = (await atomicCreate.json()).id as string;
+  assert.equal((await db.collection("purchase_orders").doc(atomicOrderId).collection("items").get()).size, 1);
+
+  const emptyCreate = await post("/api/purchasing/orders", token, {
+    supplierId: supplierEntityId, supplierName: "Fornecedor pedido vazio",
+    destinationKioskId: "test-unit", receiptMode: "future_delivery",
+    paymentMethod: "pix", paymentCondition: "cash", paymentDueDate: "2026-11-30", items: [],
+  });
+  assert.equal(emptyCreate.status, 201, JSON.stringify(await emptyCreate.clone().json()));
+  const emptyOrderId = (await emptyCreate.json()).id as string;
+  assert.equal((await post(`/api/purchasing/orders/${emptyOrderId}/confirm`, token)).status, 409);
+  assert.equal((await db.collection("purchase_orders").doc(emptyOrderId).get()).get("status"), "created");
+  assert.equal((await db.collection("purchase_receipts").where("purchaseOrderId", "==", emptyOrderId).get()).size, 0);
+  assert.equal((await db.collection("purchase_financials").where("purchaseOrderId", "==", emptyOrderId).get()).size, 0);
+  assert.equal((await expenses.where("purchaseOrderId", "==", emptyOrderId).get()).size, 0);
+
+  const raceOrderId = "purchase-confirm-item-race";
+  const raceOrderRef = db.collection("purchase_orders").doc(raceOrderId);
+  const raceItemRef = raceOrderRef.collection("items").doc("item-one");
+  await raceOrderRef.set({ workspaceId: "coala", status: "created", supplierId: supplierEntityId,
+    supplierName: "Fornecedor concorrência", destinationKioskId: "test-unit",
+    receiptMode: "future_delivery", paymentMethod: "pix", paymentCondition: "cash",
+    paymentDueDate: "2026-11-30", createdAt: now, totalEstimated: 150,
+    accountPlanId: "example-account", resultCenterId: "example-center" });
+  await raceItemRef.set({ purchaseOrderId: raceOrderId, baseItemId: "synthetic-item",
+    itemName: "Item sintético", itemTreatment: "stock", unit: "un", quantityOrdered: 1,
+    unitPriceOrdered: 150, totalOrdered: 150 });
+  const [editRace, confirmRace] = await Promise.all([
+    patchOrder(raceOrderId, { items: [{ baseItemId: "synthetic-item", itemName: "Item sintético",
+      itemTreatment: "stock", unit: "un", quantityOrdered: 1, unitPriceOrdered: 160 }] }),
+    post(`/api/purchasing/orders/${raceOrderId}/confirm`, token),
+  ]);
+  assert.ok([200, 409].includes(editRace.status), `PATCH concorrente: ${editRace.status}`);
+  assert.ok([200, 409].includes(confirmRace.status), `confirm concorrente: ${confirmRace.status}`);
+  if (confirmRace.status === 409) {
+    const retry = await post(`/api/purchasing/orders/${raceOrderId}/confirm`, token);
+    assert.equal(retry.status, 200, JSON.stringify(await retry.clone().json()));
+  }
+  const raceFinalOrder = (await raceOrderRef.get()).data()!;
+  const raceFinalItems = await raceOrderRef.collection("items").get();
+  const raceReceipts = await db.collection("purchase_receipts").where("purchaseOrderId", "==", raceOrderId).get();
+  assert.equal(raceFinalOrder.status, "confirmed");
+  assert.equal(raceReceipts.size, 1);
+  assert.equal(raceFinalItems.size, 1);
+  assert.equal(Math.round(Number(raceFinalOrder.totalEstimated) * 100),
+    Math.round(Number(raceFinalItems.docs[0].get("totalOrdered")) * 100));
+  assert.equal(Math.round(Number(raceReceipts.docs[0].get("totalEstimated")) * 100),
+    Math.round(Number(raceFinalOrder.totalEstimated) * 100));
+  assert.equal(raceReceipts.docs[0].get("status"), "awaiting_delivery");
+  const raceReceiptItems = await raceReceipts.docs[0].ref.collection("items").get();
+  assert.equal(raceReceiptItems.size, 1);
+  assert.equal(Math.round(Number(raceReceiptItems.docs[0].get("totalOrdered")) * 100),
+    Math.round(Number(raceFinalOrder.totalEstimated) * 100));
+  const raceSync = await post(`/api/purchasing/orders/${raceOrderId}/sync-expense`, token);
+  assert.equal(raceSync.status, 200, JSON.stringify(await raceSync.clone().json()));
+  const raceGoods = await expenses.doc((await raceSync.json()).expenseId).get();
+  assert.equal(Math.round(Number(raceGoods.get("totalValue")) * 100),
+    Math.round(Number(raceFinalOrder.totalEstimated) * 100));
+
+  // A confirmação e seus efeitos compartilham a versão do pai com qualquer edição de item.
+  const staleOrderRef = db.collection("purchase_orders").doc("purchase-stale-version");
+  const staleItemRef = staleOrderRef.collection("items").doc("item-one");
+  await staleOrderRef.set({ workspaceId: "coala", status: "created", totalEstimated: 150 });
+  await staleItemRef.set({ totalOrdered: 150 });
+  const staleSnapshot = await staleOrderRef.get();
+  const oldItem = await staleItemRef.get();
+  const { commitVersionedPurchaseOrderBatch } = await import("../../src/lib/purchasing-order-version.server");
+  const itemEditBatch = db.batch();
+  itemEditBatch.update(staleItemRef, { totalOrdered: 160 });
+  assert.equal(await commitVersionedPurchaseOrderBatch(itemEditBatch, staleOrderRef, staleSnapshot,
+    { totalEstimated: 160 }), true);
+  const freshParent = await staleOrderRef.get();
+  assert.equal(oldItem.get("totalOrdered"), 150);
+  assert.equal(freshParent.get("totalEstimated"), 160,
+    "ler item antes do pai permitiria um par de versões incompatíveis");
+  assert.equal((await staleItemRef.get()).get("totalOrdered"), 160,
+    "ler o filho depois do pai atual observa a mesma edição");
+  const staleReceiptRef = db.collection("purchase_receipts").doc("receipt-stale-version");
+  const staleBatch = db.batch();
+  staleBatch.set(staleReceiptRef, { purchaseOrderId: staleOrderRef.id, status: "awaiting_delivery" });
+  assert.equal(await commitVersionedPurchaseOrderBatch(staleBatch, staleOrderRef, staleSnapshot,
+    { status: "confirmed" }), false);
+  assert.equal((await staleReceiptRef.get()).exists, false);
+  assert.equal((await staleOrderRef.get()).get("status"), "created");
+  assert.equal((await post("/api/financial/payment-requests", token, {
+    sourceType: "purchase_order", sourceId: orderId, expenseId: goodsId,
+    beneficiaryReference: { sourceType: "entity", sourceId: receiverId }, amount: 130,
+    description: "Pedido sintético",
+  })).status, 400);
+  const purchasePath = `/api/financial/expenses/${goodsId}/supplier-pix`;
+  const missingIndication = await post(purchasePath, token, { supplierEntityId: receiverId, amountCents: 13000 });
+  assert.equal(missingIndication.status, 409, `${JSON.stringify(await missingIndication.clone().json())}\n${logs}`);
+  const indicated = await post(purchasePath, token, { supplierEntityId: receiverId, amountCents: 13000,
+    purchaseBeneficiaryIndication: { confirmed: true, invoiceAccessKey: invoiceKey,
+      reason: "Recebedor indicado pelo fornecedor fiscal", evidence: "Nota fiscal sintética do pedido" } });
+  assert.equal(indicated.status, 200, JSON.stringify(await indicated.clone().json()));
+  const purchaseRequestId = `expense_supplier_pix_${goodsId}`;
+  assert.equal((await expenses.doc(goodsId).get()).get("billingIdentity.supplierTaxId"), document);
+  assert.equal((await requests.doc(purchaseRequestId).get()).get("beneficiaryReference.sourceId"), receiverId);
+  const purchaseCreatedEvents = await requests.doc(purchaseRequestId).collection("events")
+    .where("type", "==", "PAYMENT_REQUEST_CREATED").get();
+  assert.equal(purchaseCreatedEvents.size, 1);
+  assert.equal(purchaseCreatedEvents.docs[0].get("purchasePixIndication.confirmedBy"), "supplier-pix-admin");
+  assert.equal(purchaseCreatedEvents.docs[0].get("purchasePixIndication.beneficiaryEntityId"), undefined);
+  assert.equal((await financial.collection("expenses").doc(goodsId).get()).get("purchaseInvoiceAccessKey"), invoiceKey,
+    "o preparo preserva a referência fiscal canônica também em despesas anteriores à nova sincronização");
+  assert.equal((await requests.where("expenseId", "==", freightId).get()).size, 0);
+  assert.equal((await patchOrder(orderId, { fiscalDocuments: [{ ...danfe, path: "test-only/danfe-b.pdf", sha256: "b".repeat(64) }] })).status, 200);
+  assert.ok((await post(`/api/financial/payment-requests/${purchaseRequestId}/authorize`, token)).status >= 400,
+    "trocar o DANFE após o preparo impede autorização");
+  assert.equal((await patchOrder(orderId, { fiscalDocuments: [danfe] })).status, 200);
+  assert.equal((await patchOrder(orderId, { freightSupplierId: fiscalEntityId })).status, 200);
+  assert.equal((await patchOrder(orderId, { freightSupplierId: receiverId })).status, 409);
+  const freightSync = await post(`/api/purchasing/orders/${orderId}/sync-expense`, token);
+  assert.equal(freightSync.status, 200, JSON.stringify(await freightSync.clone().json()));
+  assert.equal((await expenses.doc(freightId).get()).get("supplierId"), fiscalEntityId);
+  assert.equal((await expenses.doc(freightId).get()).get("billingIdentity.supplierTaxId"), document);
+  assert.equal((await expenses.doc(freightId).get()).get("paymentRequestId"), undefined);
+  assert.equal((await requests.where("expenseId", "==", freightId).get()).size, 0);
+  await db.collection("purchase_orders").doc(orderId).update({ invoiceNumber: "2" });
+  assert.ok((await post(`/api/financial/payment-requests/${purchaseRequestId}/authorize`, token)).status >= 400);
+  await db.collection("purchase_orders").doc(orderId).update({ invoiceNumber: "1" });
+  assert.equal((await post(`/api/financial/payment-requests/${purchaseRequestId}/authorize`, token)).status, 200);
+  const { submitPaymentRequest: submitPurchasePix } = await import("../../src/features/financial/payment-requests/service.server");
+  assert.equal((await patchOrder(orderId, { documentUrl: "https://example.test/danfe-b.pdf" })).status, 200);
+  await assert.rejects(submitPurchasePix(purchaseRequestId, { uid: "supplier-pix-admin" }), /pedido|valor|despesa/i,
+    "trocar o link legado do DANFE após autorização impede envio");
+  assert.equal((await requests.doc(purchaseRequestId).get()).get("submissionAttemptCount"), undefined);
+  assert.equal((await patchOrder(orderId, { documentUrl: danfe.url })).status, 200);
+  await expenses.doc(goodsId).update({ totalValue: 131 });
+  await assert.rejects(submitPurchasePix(purchaseRequestId, { uid: "supplier-pix-admin" }), /pedido|valor|despesa/i);
+  assert.equal((await requests.doc(purchaseRequestId).get()).get("interRequestId"), undefined);
+  await expenses.doc(goodsId).update({ totalValue: 130 });
 
   const results = await Promise.all([prepare(), prepare()]);
   const requestId = `expense_supplier_pix_${expenseId}`;

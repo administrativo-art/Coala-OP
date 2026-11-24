@@ -27,6 +27,7 @@ import {
 } from "./inbox-pix-copy-paste";
 import { assertSalaryPaymentTarget } from "./salary-payment";
 import { assertArchivedBoletoUnused, assertExpenseSupplierPixTarget, assertSupplierPixBankClosed, assertSupplierPixBeneficiary, hasConflictingSupplierPixHistory, supplierPixDestinationUnchanged, SUPPLIER_PIX_HISTORY_LIMIT } from "./expense-supplier-pix.server";
+import { assertPurchasePixIndication, assertPurchasePixSource, loadPurchasePixSource } from "./purchase-supplier-pix.server";
 import { assertExpenseComplementPaymentTarget } from "./expense-complement";
 import { assertConsultancyActualPaymentTarget } from "./consultancy-provision-payment";
 import { assertValidatedConsultancyContract } from "./consultancy-contract.server";
@@ -107,6 +108,9 @@ export async function createPaymentRequest(input: {
   description: string;
   scheduledFor?: string | null;
 }, actor: PaymentActor, onExistingFound?: () => Promise<void>): Promise<PixBankPaymentRequest> {
+  if (input.sourceType === "purchase_order") {
+    throw new Error("Pedidos de compra exigem despesa financeira vinculada antes do Pix.");
+  }
   if (input.sourceType === "generated_receipt") {
     const expense = input.expenseId ? await financialDbAdmin.collection("expenses").doc(input.expenseId).get() : null;
     assertGeneratedReceiptPaymentTarget(input, expense?.data());
@@ -1115,6 +1119,14 @@ function assertSupplierPixActorScope(request: BankPaymentRequest, expense: Fireb
 
 export async function authorizePaymentRequest(id: string, actor: PaymentActor) {
   const pending = await getPaymentRequest(id);
+  const purchaseSource = pending.sourceType === "expense_supplier_pix" && pending.purchasePixSource
+    ? await loadPurchasePixSource(pending.purchasePixSource.purchaseOrderId) : null;
+  const supplierPixBeneficiary = pending.sourceType === "expense_supplier_pix"
+    ? await resolveValidatedEntityPixBeneficiary(pending.beneficiaryReference.sourceId) : null;
+  if (pending.sourceType === "expense_supplier_pix" && supplierPixBeneficiary
+    && !supplierPixDestinationUnchanged(pending.beneficiarySnapshot, supplierPixBeneficiary)) {
+    throw new Error("O favorecido Pix mudou após o preparo.");
+  }
   if (pending.expenseId) { const target = await financialDbAdmin.collection("expenses").doc(pending.expenseId).get(); if (target.exists) assertExpenseAllowsNewPayment(target.data()!); }
   const supplierPixScope = pending.sourceType === "expense_supplier_pix" ? await supplierPixActorScope(actor) : null;
   const now = new Date().toISOString();
@@ -1125,6 +1137,17 @@ export async function authorizePaymentRequest(id: string, actor: PaymentActor) {
       const expense = await transaction.get(financialDbAdmin.collection("expenses").doc(current.sourceId));
       assertSupplierPixActorScope(current, expense.data(), supplierPixScope);
       assertExpenseAllowsNewPayment(expense.data()!);
+      if (current.purchasePixSource) {
+        if (!purchaseSource) throw new Error("A compra mudou após o preparo.");
+        assertPurchasePixSource(current.sourceId, expense.data(), current.purchasePixSource, purchaseSource);
+      }
+      if (current.purchasePixIndication) {
+        if (!purchaseSource) throw new Error("A indicação do favorecido mudou.");
+        assertPurchasePixIndication(current.sourceId, expense.data(), current.purchasePixIndication, purchaseSource);
+      }
+      assertExpenseSupplierPixTarget(expense.data(), WORKSPACE_ID, current.beneficiaryReference.sourceId,
+        supplierPixBeneficiary ? assertSupplierPixBeneficiary(supplierPixBeneficiary) : "",
+        Math.round(current.amount * 100), current.supplierPixConfirmation, current.purchasePixIndication);
     });
   await addPaymentEvent(id, "FINANCIAL_AUTHORIZATION_GRANTED", actor);
   if (request.sourceType === "aso" || request.sourceType === "termination" || request.sourceType === "vacation") {
@@ -1333,6 +1356,9 @@ export async function submitPaymentRequest(
 ) {
   const requestRef = paymentRequestRef(id);
   const preflightRequest = await getPaymentRequest(id);
+  const purchaseSource = preflightRequest.sourceType === "expense_supplier_pix" && preflightRequest.purchasePixSource
+    ? await loadPurchasePixSource(preflightRequest.purchasePixSource.purchaseOrderId) : null;
+  let supplierPixDocument: string | null = null;
   const supplierPixScope = preflightRequest.sourceType === "expense_supplier_pix" ? await supplierPixActorScope(actor) : null;
   if (preflightRequest.expenseId) { const target = await financialDbAdmin.collection("expenses").doc(preflightRequest.expenseId).get(); if (target.exists) assertExpenseAllowsNewPayment(target.data()!); }
   if (preflightRequest.sourceType === "consultancy_provision") {
@@ -1349,7 +1375,7 @@ export async function submitPaymentRequest(
   }
   if (preflightRequest.sourceType === "expense_supplier_pix") {
     const beneficiary = await resolveValidatedEntityPixBeneficiary(preflightRequest.beneficiaryReference.sourceId);
-    assertSupplierPixBeneficiary(beneficiary);
+    supplierPixDocument = assertSupplierPixBeneficiary(beneficiary);
     if (!supplierPixDestinationUnchanged(preflightRequest.beneficiarySnapshot, beneficiary)) {
       throw new Error("A chave Pix ou a identidade fiscal mudou após o preparo. Confirme novamente o favorecido.");
     }
@@ -1382,10 +1408,18 @@ export async function submitPaymentRequest(
         transaction.get(financialDbAdmin.collection("bankPaymentRequests").where("expenseId", "==", expenseId).limit(SUPPLIER_PIX_HISTORY_LIMIT)),
       ]);
       assertSupplierPixActorScope(current, expense.data(), supplierPixScope);
-      const document = expense.get("billingIdentity.supplierTaxId");
+      if (current.purchasePixSource) {
+        if (!purchaseSource) throw new Error("A compra mudou após o preparo.");
+        assertPurchasePixSource(expenseId, expense.data(), current.purchasePixSource, purchaseSource);
+      }
+      if (current.purchasePixIndication) {
+        if (!purchaseSource) throw new Error("A indicação do favorecido mudou.");
+        assertPurchasePixIndication(expenseId, expense.data(), current.purchasePixIndication, purchaseSource);
+      }
+      const document = supplierPixDocument ?? "";
       const description = assertExpenseSupplierPixTarget(
         expense.data(), WORKSPACE_ID, current.beneficiaryReference.sourceId,
-        normalizeBrazilianDocument(document), Math.round(current.amount * 100), current.supplierPixConfirmation,
+        normalizeBrazilianDocument(document), Math.round(current.amount * 100), current.supplierPixConfirmation, current.purchasePixIndication,
       );
       if (current.workspaceId !== WORKSPACE_ID || expense.get("paymentRequestId") !== current.id
         || current.description !== description || !payment.empty
@@ -1814,9 +1848,17 @@ export async function submitPaymentRequest(
         throw new Error("A chave Pix ou a identidade fiscal mudou após o preparo. Confirme novamente o favorecido.");
       }
       const expense = await financialDbAdmin.collection("expenses").doc(pending.sourceId).get();
+      if (pending.purchasePixSource) {
+        const latestPurchase = await loadPurchasePixSource(pending.purchasePixSource.purchaseOrderId);
+        assertPurchasePixSource(pending.sourceId, expense.data(), pending.purchasePixSource, latestPurchase);
+      }
+      if (pending.purchasePixIndication) {
+        const latestPurchase = await loadPurchasePixSource(pending.purchasePixIndication.purchaseOrderId);
+        assertPurchasePixIndication(pending.sourceId, expense.data(), pending.purchasePixIndication, latestPurchase);
+      }
       const description = assertExpenseSupplierPixTarget(
         expense.data(), WORKSPACE_ID, pending.beneficiaryReference.sourceId,
-        document, Math.round(pending.amount * 100), pending.supplierPixConfirmation,
+        document, Math.round(pending.amount * 100), pending.supplierPixConfirmation, pending.purchasePixIndication,
       );
       if (expense.get("paymentRequestId") !== pending.id || pending.description !== description) {
         throw new Error("A despesa mudou após a autorização.");
