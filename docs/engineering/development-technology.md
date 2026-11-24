@@ -46,7 +46,7 @@ TARS escolhe o modelo e o esforço de raciocínio para cada encaminhamento, cons
 | --- | --- | --- |
 | Inventário delimitado, leitura objetiva, classificação simples, formatação e ajuste mecânico | Codex: `gpt-6-luna`; Claude Code: `haiku`, se disponível | Quando as fontes discordarem, o escopo crescer ou a verificação falhar |
 | Implementação rotineira com contrato claro e testes locais | Codex: `gpt-6-sol`; Claude Code: `sonnet`, se disponível | Quando envolver múltiplos módulos, estado complexo ou integração sensível |
-| Arquitetura ambígua, migração real, permissões, segurança, pagamentos, revisão de alto impacto e decisão de implantação | Codex: Sol; Claude Code: Sonnet | Se não for possível concluir com confiança dentro do teto, registrar o bloqueio e pedir decisão humana |
+| Arquitetura ambígua, migração real, permissões, segurança, pagamentos, revisão de alto impacto e decisão de implantação | Codex: Sol; Claude Code: Sonnet | No Claude Code, elevar para Opus quando Sonnet não concluir com confiança e registrar o motivo. Se o teto autorizado ainda não bastar, registrar o bloqueio e pedir decisão humana |
 
 Gandalf, Shuri, Edna, R2-D2, Velma, Trinity, Rocket e Doc Brown podem receber modelos diferentes em chamados diferentes. Por exemplo, Edna pode usar Luna para catalogar padrões de três telas e Sol para redesenhar um fluxo inteiro; Velma pode usar Luna para conferir uma lista objetiva e Sol para investigar uma regressão complexa. A revisão continua independente e o limite de um especialista por vez continua valendo.
 
