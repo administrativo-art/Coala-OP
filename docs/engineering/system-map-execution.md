@@ -16,6 +16,8 @@
 
 # Acompanhamento do mapa técnico
 
+2026-11-24: mapa de pessoas/DP → [escala oficial](flows/dp-schedules.md) → leitura de turnos por unidade → pré-voo do XLSX. O teste dirigido confirma que o pré-voo ignora o estado de sincronização do DSR e mantém o bloqueio de conflito para a mesma pessoa no mesmo dia. A mudança local fica restrita à planilha; o download completo não foi exercitado.
+
 2026-11-20: jornada híbrida rastreada do modal e dos rascunhos vinculados até a revisão oficial, o portal e o Meu Ponto web/Android. A publicação conjunta reusa as rotas e as permissões de escala. O emulador verificou a ativação conjunta e a recusa quando um dos rascunhos muda durante a preparação. A homologação visual e a representação fiscal de um dia híbrido continuam pendentes. Ver [escalas do DP](flows/dp-schedules.md) e [Registro REP-P](flows/dp-time-recording.md).
 
 2026-11-14: mapa de financeiro → `flows/payment-requests.md` → sincronização Inter e débito esperado. Correção local da baixa de boleto parcelado: valor por parcela, com atualização só da parcela identificada. Teste dirigido passou; typecheck local encontrou dependências TipTap ausentes no `node_modules` reaproveitado, fora dos arquivos alterados. O grupo segue Traçado até CI e verificação do rollout.
