@@ -495,9 +495,6 @@ async function prepareDayOff(params: {
 
     const legacyPublicationFence = !revisionId ? await preparePublicationFenceAdvance(transaction,
       context.workspace_id, [input.userId]) : null;
-    if (operationalGuardRequested()) await guardOccupancyWrite(transaction, context.workspace_id,
-      [{ beneficiaryUid: input.userId, date: input.date, fromMinute: 0, toMinute: 1440, addsOccupancy: false }], 4);
-    legacyPublicationFence?.apply();
     const now = Timestamp.now();
     const confirmedAt = existingDayOff?.get('dayOffConfirmedAt') ?? now;
     const shiftPayload = {
@@ -520,12 +517,19 @@ async function prepareDayOff(params: {
       updatedAt: now,
       ...(!existingDayOff ? { createdAt: now } : {}),
     };
+    // Todas as leituras (revisão oficial) vêm antes de qualquer escrita; a proteção de ocupação lê e escreve ao final.
+    let overlay: Awaited<ReturnType<typeof prepareActiveRevisionOperationalChanges>> | null = null;
     if (revisionId) {
       const next = { ...(existingDayOff?.data() ?? {}), ...shiftPayload } as Record<string, unknown>;
       delete next.bizneoLastErrorCode;
-      const overlay = await prepareActiveRevisionOperationalChanges({ tx: transaction, schedule: scheduleSnapshot, workspaceId: context.workspace_id,
+      overlay = await prepareActiveRevisionOperationalChanges({ tx: transaction, schedule: scheduleSnapshot, workspaceId: context.workspace_id,
         changes: [{ shiftId: shiftRef.id, previous: existingDayOff?.data() ?? null, next }],
         actorId: context.decoded.uid, reason: 'day_off_publishing' });
+    }
+    if (operationalGuardRequested()) await guardOccupancyWrite(transaction, context.workspace_id,
+      [{ beneficiaryUid: input.userId, date: input.date, fromMinute: 0, toMinute: 1440, addsOccupancy: false }], 4);
+    legacyPublicationFence?.apply();
+    if (overlay) {
       overlay.apply();
     } else {
       transaction.set(shiftRef, shiftPayload, { merge: true });
@@ -863,8 +867,6 @@ async function prepareDayOffRemoval(params: {
       });
     }
 
-    if (operationalGuardRequested()) await guardOccupancyWrite(transaction, context.workspace_id,
-      [{ beneficiaryUid: input.userId, date: input.date, fromMinute: 0, toMinute: 1440, addsOccupancy: false }], 3);
     const now = Timestamp.now();
     const removing: Record<string, unknown> = { ...(shiftSnapshot.data() ?? {}), bizneoSyncStatus: 'removing',
       bizneoSyncUpdatedAt: now, updatedAt: now };
@@ -872,6 +874,8 @@ async function prepareDayOffRemoval(params: {
     const overlay = revisionId ? await prepareActiveRevisionOperationalChanges({ tx: transaction, schedule: scheduleSnapshot, workspaceId: context.workspace_id,
       changes: [{ shiftId: shiftRef.id, previous: shiftSnapshot.data() ?? null, next: removing }],
       actorId: context.decoded.uid, reason: 'day_off_removing' }) : null;
+    if (operationalGuardRequested()) await guardOccupancyWrite(transaction, context.workspace_id,
+      [{ beneficiaryUid: input.userId, date: input.date, fromMinute: 0, toMinute: 1440, addsOccupancy: false }], 3);
     if (overlay) overlay.apply(); else transaction.update(shiftRef, {
       bizneoSyncStatus: 'removing',
       bizneoSyncUpdatedAt: now,

@@ -29,6 +29,7 @@ import {
   X,
 } from "lucide-react";
 import { PayExpenseDialog } from "@/features/financial/components/pay-expense-dialog";
+import { purchasePixNeedsSync, supplierPixPrepareInput } from "@/features/financial/lib/expense-supplier-pix-ui";
 import {
   ExpensePeriodFilter,
   type ExpensePeriodPreset,
@@ -1076,7 +1077,14 @@ export function ExpensesPage() {
           canViewPersonnelCosts={canViewPersonnelCosts}
           canViewExpenses={canViewExpenses}
           canEdit={permissions.financial?.expenses?.edit === true && !expense.budgetMigration && !expense.sourceSettlement}
-          canPay={permissions.financial?.expenses?.pay === true && !expense.budgetMigration && !expense.sourceSettlement && expenseCashForecastAmount(expense) > 0}
+          canPay={!expense.budgetMigration && !expense.sourceSettlement && expenseCashForecastAmount(expense) > 0 && (
+            permissions.financial?.expenses?.pay === true || (
+              permissions.financial?.view === true && permissions.financial?.expenses?.view === true
+              && permissions.financial?.expenses?.edit === true && permissions.financial?.paymentRequests?.view === true
+              && permissions.financial?.paymentRequests?.create === true
+              && (Boolean(supplierPixPrepareInput(expense)) || purchasePixNeedsSync(expense))
+            )
+          )}
           canDelete={permissions.financial?.expenses?.delete === true && !expense.budgetMigration && !expense.sourceSettlement}
           finalizingAudit={finalizingAuditId === expense.id}
           onFinalizeAudit={() => void handleFinalizeAudit(expense)}

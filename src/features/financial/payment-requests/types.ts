@@ -95,6 +95,7 @@ type BankPaymentRequestBase = {
   authorizedAt?: string;
   submissionStartedAt?: string;
   submissionAttemptCount?: number;
+  submissionReservationId?: string;
   submittedAt?: string;
   bankApprovalObservedAt?: string;
   bankSchedulingObservedAt?: string;
@@ -153,6 +154,8 @@ export type PixBankPaymentRequest = BankPaymentRequestBase & {
     previousPaidRequestId: string;
     replacedBoletoHash?: string;
   };
+  purchasePixIndication?: import("./purchase-supplier-pix.server").PurchasePixIndication;
+  purchasePixSource?: import("./purchase-supplier-pix.server").PurchasePixSourceSnapshot;
   status: Exclude<BankPaymentRequestStatus, "awaiting_statement">;
 };
 

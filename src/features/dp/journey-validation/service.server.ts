@@ -26,6 +26,7 @@ const HISTORY_SHIFT_LIMIT = 31_000;
 const JOURNEY_LIMIT = 500;
 const SHIFT_DEFINITION_LIMIT = 500;
 const FIRESTORE_IN_LIMIT = 30;
+const DRAFT_EDIT_LIMIT = 500;
 
 function stringValue(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
@@ -210,6 +211,35 @@ export async function validateScheduleJourneys(params: {
     const proposed = proposedShift(shift);
     if (proposed && participantIds.includes(proposed.userId)) {
       historyShifts.set(`dp_schedules/${shift.scheduleId}/shifts/${shift.id}`, proposed);
+    }
+  }
+
+  // Repouso e dias seguidos são da pessoa, não da escala: o rascunho atual das outras escalas do período
+  // (ainda não publicado) vale sobre o histórico oficial, para publicar cada escala em qualquer ordem.
+  const participantSet = new Set(participantIds);
+  for (const competence of months) {
+    const [year, month] = competence.split('-').map(Number);
+    const others = await dbAdmin.collection('dp_schedules').where('year', '==', year).where('month', '==', month).limit(21).get();
+    if (others.size === 21) throw new AppError({ code: 'DP_JOURNEY_VALIDATION_POINTER_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'Há escalas demais para validar o histórico oficial.' });
+    for (const other of others.docs) {
+      const generation = stringValue(other.get('draftGenerationId'));
+      if (replacedScheduleIds.has(other.id) || !generation || !(Number(other.get('draftVersion') ?? 0) > 0)) continue;
+      const edits = await other.ref.collection('draftEdits').where('generationId', '==', generation).limit(DRAFT_EDIT_LIMIT + 1).get();
+      if (edits.size > DRAFT_EDIT_LIMIT) {
+        throw new AppError({ code: 'DP_JOURNEY_VALIDATION_HISTORY_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'O histórico necessário excede o limite seguro de validação.' });
+      }
+      for (const edit of edits.docs) {
+        const shiftId = stringValue(edit.get('shiftId')) ?? edit.id;
+        const key = `dp_schedules/${other.id}/shifts/${shiftId}`;
+        const value = edit.get('value') as Record<string, unknown> | null | undefined;
+        const draftShift = value ? proposedShift({ ...value, id: shiftId }) : null;
+        if (draftShift && participantSet.has(draftShift.userId) && draftShift.date >= historyFrom && draftShift.date <= periodEnd) {
+          historyShifts.set(key, draftShift);
+        } else {
+          historyShifts.delete(key);
+        }
+      }
+      if (historyShifts.size > HISTORY_SHIFT_LIMIT) throw new AppError({ code: 'DP_JOURNEY_VALIDATION_HISTORY_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'O histórico necessário excede o limite seguro de validação.' });
     }
   }
 

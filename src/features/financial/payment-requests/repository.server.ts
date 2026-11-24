@@ -78,13 +78,15 @@ export async function addPaymentEvent(requestId: string, type: string, actor: Pa
   });
 }
 
-export async function transitionPaymentRequest(id: string, allowedFrom: BankPaymentRequestStatus[], next: BankPaymentRequestStatus, patch: Record<string, unknown> = {}) {
+export async function transitionPaymentRequest(id: string, allowedFrom: BankPaymentRequestStatus[], next: BankPaymentRequestStatus, patch: Record<string, unknown> = {},
+  guard?: (transaction: FirebaseFirestore.Transaction, current: BankPaymentRequest) => Promise<void>) {
   const ref = paymentRequestRef(id);
   return financialDbAdmin.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists) throw new Error("Solicitação de pagamento não encontrada.");
     const current = snapshot.data() as BankPaymentRequest;
     if (!allowedFrom.includes(current.status)) throw new Error(`A solicitação está em ${current.status} e não pode avançar para ${next}.`);
+    if (guard) await guard(transaction, { ...current, id: snapshot.id });
     const updatedAt = new Date().toISOString();
     transaction.set(ref, { status: next, updatedAt, ...patch }, { merge: true });
     return { ...current, id: snapshot.id, status: next, updatedAt, ...patch } as BankPaymentRequest;

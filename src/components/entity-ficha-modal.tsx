@@ -72,11 +72,11 @@ function DetailGroup({ title, onEdit, rows }: { title: string; onEdit: () => voi
 }
 
 export function EntityFichaModal({ open, onOpenChange, entity, asoClinic, onEdit, actions = [] }: EntityFichaModalProps) {
-  const { firebaseUser, permissions } = useAuth();
+  const { firebaseUser, permissions, isDefaultAdmin } = useAuth();
   const [tab, setTab] = useState<FichaTab>('general');
   const [moreOpen, setMoreOpen] = useState(false);
   const [hasPix, setHasPix] = useState<boolean | null>(null);
-  const canSeePix = Boolean(permissions.registration?.entities?.edit);
+  const canSeePix = isDefaultAdmin || Boolean(permissions.registration?.entities?.edit);
   const entityId = entity?.id;
 
   useEffect(() => {

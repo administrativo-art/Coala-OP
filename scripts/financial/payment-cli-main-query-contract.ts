@@ -1,4 +1,5 @@
 import { PaymentCliError } from "./payment-cli-transport";
+import { validBrazilianTaxId } from "../../src/features/financial/beneficiaries/normalization";
 
 function equal(fieldPath: string, stringValue: string) {
   return { fieldFilter: { field: { fieldPath }, op: "EQUAL", value: { stringValue } } };
@@ -7,8 +8,10 @@ function equal(fieldPath: string, stringValue: string) {
 export function mainPaymentLookupQuery(kind: string, value: string) {
   if (kind === "entity-document") {
     const digits = value.replace(/\D/g, "");
-    if (digits.length !== 14) throw new PaymentCliError("CNPJ de fornecedor inválido.");
-    const formatted = `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+    if (!validBrazilianTaxId(digits)) throw new PaymentCliError("CPF/CNPJ de fornecedor inválido.");
+    const formatted = digits.length === 11
+      ? `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`
+      : `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
     return { from: [{ collectionId: "entities" }], where: { compositeFilter: { op: "OR", filters: [
       equal("documentNormalized", digits), equal("cnpj", digits), equal("document", digits), equal("document", formatted),
     ] } }, limit: 26 };

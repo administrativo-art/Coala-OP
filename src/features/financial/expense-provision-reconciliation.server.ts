@@ -50,6 +50,7 @@ export async function reconcileExpenseProvisionOnServer(
     expensePatch?: RawRecord;
     createIfMissing?: RawRecord;
     requiredProvisionId?: string;
+    assertRequiredProvisionAccess?: (provision: RawRecord) => void;
   } = {},
 ) {
   const expenseRef = financialDbAdmin.collection("expenses").doc(expenseId);
@@ -113,6 +114,7 @@ export async function reconcileExpenseProvisionOnServer(
         return { status: "missing" as const };
       }
       const provision = asRecord(consultation.provision);
+      options.assertRequiredProvisionAccess?.(provision);
       const [payments, requests] = await Promise.all([
         transaction.get(financialDbAdmin.collection("payments").where("expenseId", "==", options.requiredProvisionId).limit(1)),
         transaction.get(financialDbAdmin.collection("bankPaymentRequests").where("expenseId", "==", options.requiredProvisionId).limit(1)),

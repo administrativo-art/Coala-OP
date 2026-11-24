@@ -1,4 +1,6 @@
 import type { PixKeyType } from "./types";
+import { CnpjValidator } from "@/lib/company/cnpj-validator";
+import { isValidCpf } from "@/lib/hr/employee-document-match";
 
 export function normalizeBrazilianDocument(value: unknown) {
   return String(value ?? "").replace(/\D/g, "");
@@ -34,6 +36,33 @@ export function pixDocumentKeyMatchesHolder(input: {
   const keyDocument = normalizeBrazilianDocument(input.pixKey);
   const holderDocument = normalizeBrazilianDocument(input.holderDocument);
   return Boolean(keyDocument && holderDocument && keyDocument === holderDocument);
+}
+
+export function validBrazilianTaxId(value: unknown) {
+  const document = normalizeBrazilianDocument(value);
+  return document.length === 11 ? isValidCpf(document) : CnpjValidator.validate(document).valid;
+}
+
+/** Canonical Pix destination used by the expense flow and its immutable snapshot. */
+export function normalizeValidatedPixKey(value: string, type: PixKeyType, holderDocument: string): string | null {
+  const key = value.trim();
+  const document = normalizeBrazilianDocument(holderDocument);
+  if (!validBrazilianTaxId(document)) return null;
+  if (type === "cpf" || type === "cnpj") {
+    const digits = normalizeBrazilianDocument(key);
+    if (type === "cpf" ? !isValidCpf(digits) : !CnpjValidator.validate(digits).valid) return null;
+    return digits === document ? digits : null;
+  }
+  if (type === "email") return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key) ? key.toLowerCase() : null;
+  if (type === "random") return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key) ? key.toLowerCase() : null;
+  if (type === "phone") {
+    const compact = key.replace(/[\s()-]/g, "");
+    if (!/^\+?\d+$/.test(compact)) return null;
+    const national = compact.startsWith("+55") ? compact.slice(3) : compact.startsWith("55") && compact.length === 13 ? compact.slice(2) : compact;
+    if (!/^[1-9][0-9]9[0-9]{8}$/.test(national)) return null;
+    return `+55${national}`;
+  }
+  return null;
 }
 
 export function maskBrazilianDocument(value: unknown) {

@@ -615,7 +615,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/expenses/new/page.tsx`](../../src/app/dashboard/financial/expenses/new/page.tsx), [`src/app/dashboard/financial/expenses/page.tsx`](../../src/app/dashboard/financial/expenses/page.tsx), [`src/app/dashboard/financial/reconciliation/bank-statements/page.tsx`](../../src/app/dashboard/financial/reconciliation/bank-statements/page.tsx).
 
-Arquivos locais percorridos: 116.
+Arquivos locais percorridos: 119.
 
 Chamadas candidatas encontradas:
 
@@ -657,17 +657,19 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.expenses.create` — [`src/features/financial/components/expenses/expense-form.tsx`](../../src/features/financial/components/expenses/expense-form.tsx)
 - `financial.expenses.delete` — [`src/features/financial/pages/expenses-page.tsx`](../../src/features/financial/pages/expenses-page.tsx)
 - `financial.expenses.edit` — [`src/features/financial/components/expenses/expense-form.tsx`](../../src/features/financial/components/expenses/expense-form.tsx)
-- `financial.expenses.pay` — [`src/features/financial/pages/expenses-page.tsx`](../../src/features/financial/pages/expenses-page.tsx)
-- `financial.expenses.view` — [`src/features/financial/pages/expenses-page.tsx`](../../src/features/financial/pages/expenses-page.tsx)
+- `financial.expenses.pay` — [`src/features/financial/components/pay-expense-dialog.tsx`](../../src/features/financial/components/pay-expense-dialog.tsx)
+- `financial.expenses.view` — [`src/features/financial/components/pay-expense-dialog.tsx`](../../src/features/financial/components/pay-expense-dialog.tsx)
 - `financial.inbox.view` — [`src/features/financial/pages/expenses-page.tsx`](../../src/features/financial/pages/expenses-page.tsx)
 - `financial.paymentRequests.create` — [`src/features/financial/components/pay-expense-dialog.tsx`](../../src/features/financial/components/pay-expense-dialog.tsx)
-- `financial.paymentRequests.view` — [`src/features/financial/pages/expenses-page.tsx`](../../src/features/financial/pages/expenses-page.tsx)
+- `financial.paymentRequests.view` — [`src/features/financial/components/pay-expense-dialog.tsx`](../../src/features/financial/components/pay-expense-dialog.tsx)
 - `financial.personnelCosts.edit` — [`src/features/financial/components/expenses/expense-form.tsx`](../../src/features/financial/components/expenses/expense-form.tsx)
 - `financial.personnelCosts.view` — [`src/features/financial/components/expenses/expense-form.tsx`](../../src/features/financial/components/expenses/expense-form.tsx)
 - `financial.reconciliation.classifyAdjustments` — [`src/features/financial/components/expenses/expense-financial-summary.tsx`](../../src/features/financial/components/expenses/expense-financial-summary.tsx)
 - `financial.settings.manageExpenseDescriptions` — [`src/features/financial/components/expenses/expense-form.tsx`](../../src/features/financial/components/expenses/expense-form.tsx)
 - `financial.settings.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
 - `financial.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
+- `registration.entities.edit` — [`src/features/financial/components/pay-expense-dialog.tsx`](../../src/features/financial/components/pay-expense-dialog.tsx)
+- `registration.view` — [`src/features/financial/components/pay-expense-dialog.tsx`](../../src/features/financial/components/pay-expense-dialog.tsx)
 
 ## `financial-assets`
 
@@ -1000,13 +1002,18 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/expenses/authorizations/page.tsx`](../../src/app/dashboard/financial/expenses/authorizations/page.tsx).
 
-Arquivos locais percorridos: 27.
+Arquivos locais percorridos: 35.
 
 Chamadas candidatas encontradas:
 
 - `/api/financial/inbox/` — interface [`src/features/financial/payment-requests/payment-requests-page.tsx`](../../src/features/financial/payment-requests/payment-requests-page.tsx); rota candidata [`src/app/api/financial/inbox/[id]/route.ts`](../../src/app/api/financial/inbox/%5Bid%5D/route.ts)
 - `/api/financial/payment-requests` — interface [`src/features/financial/payment-requests/payment-requests-page.tsx`](../../src/features/financial/payment-requests/payment-requests-page.tsx); rota candidata [`src/app/api/financial/payment-requests/route.ts`](../../src/app/api/financial/payment-requests/route.ts)
 - `/api/financial/payment-requests/` — interface [`src/features/financial/payment-requests/payment-requests-page.tsx`](../../src/features/financial/payment-requests/payment-requests-page.tsx); rota candidata [`src/app/api/financial/payment-requests/route.ts`](../../src/app/api/financial/payment-requests/route.ts)
+
+Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
+
+- `entities` — [`src/features/financial/payment-requests/purchase-supplier-pix.server.ts`](../../src/features/financial/payment-requests/purchase-supplier-pix.server.ts)
+- `purchase_orders` — [`src/features/financial/payment-requests/purchase-supplier-pix.server.ts`](../../src/features/financial/payment-requests/purchase-supplier-pix.server.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
@@ -1506,7 +1513,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/registration/base-products/page.tsx`](../../src/app/dashboard/registration/base-products/page.tsx), [`src/app/dashboard/registration/entities/page.tsx`](../../src/app/dashboard/registration/entities/page.tsx), [`src/app/dashboard/registration/items/page.tsx`](../../src/app/dashboard/registration/items/page.tsx).
 
-Arquivos locais percorridos: 73.
+Arquivos locais percorridos: 75.
 
 Chamadas candidatas encontradas:
 
@@ -1577,7 +1584,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`src/app/dashboard/settings/units/page.tsx`](../../src/app/dashboard/settings/units/page.tsx).
 
-Arquivos locais percorridos: 251.
+Arquivos locais percorridos: 253.
 
 Chamadas candidatas encontradas:
 

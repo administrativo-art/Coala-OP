@@ -290,3 +290,5 @@ Nova consulta auditada e painel de localização na candidata local, com permiss
 
 
 23/11/2026 — acompanhamento e conciliação documental da folha implementados localmente. TARS consultou contratos; Nemo implementou e verificou. Grade limitada por competência, gates existentes preservados e conciliação com acesso financeiro próprio. Fontes, efeitos e testes no guia REP-P; produção e arquivos reais pendentes.
+
+2026-11-23 — Interface local do Pix de mercadoria: mapa de Despesas, Compras e solicitações levou à ação de pagamento compartilhada e à API protegida. O diálogo mantém fornecedor fiscal e escolhe recebedor PF/PJ por ID; indicação distinta exige NF, motivo, evidência e confirmação. Compra antiga sem campos canônicos usa `sync-expense` com permissão existente. E2E sintético em Firebase demo/Playwright validou desktop, celular e corpo do preparo; HTTP E2E de backend pertence à etapa Shuri/Nemo. Sem banco real, envio bancário ou publicação nesta etapa; `expenses`, `purchasing` e `payment-requests` permanecem Traçados.

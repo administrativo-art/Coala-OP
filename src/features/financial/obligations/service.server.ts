@@ -7,6 +7,8 @@ import { WORKSPACE_ID } from "@/lib/workspace";
 import { consultExpenseProvision } from "@/features/financial/lib/expense-provisions";
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
 import { planPaymentRequestStatementSettlement } from "@/features/financial/payment-requests/statement-settlement";
+import { assertSupplierPixBankClosed } from "@/features/financial/payment-requests/expense-supplier-pix.server";
+import type { PixBankPaymentRequest } from "@/features/financial/payment-requests/types";
 import { calculateFinancialObligationSummary, moneyToCents } from "./calculations";
 import type { RegisterReportedPaymentInput } from "./schemas";
 import type {
@@ -597,11 +599,41 @@ export async function registerReportedPayment(
   const paymentId = `manual_${safeKey(`${expenseId}:${input.idempotencyKey}`)}`;
   const paymentRef = financialDbAdmin.collection("payments").doc(paymentId);
 
+  // A prova bancária é externa à transação. A transação relê e compara a ordem
+  // antes de qualquer escrita, inclusive quando o preparo corre em paralelo.
+  const before = await expenseRef.get();
+  const beforeRequestId = String(before.get("paymentRequestId") ?? "").trim();
+  const beforeRequest = beforeRequestId
+    ? await financialDbAdmin.collection("bankPaymentRequests").doc(beforeRequestId).get() : null;
+  const beforePix = beforeRequest?.get("sourceType") === "expense_supplier_pix"
+    ? { id: beforeRequest!.id, ...beforeRequest!.data() } as PixBankPaymentRequest : null;
+  let bankClosed: { id: string; status: string; interRequestId: string; updatedAt: string } | null = null;
+  if (beforePix && ["rejected", "approval_expired"].includes(beforePix.status)
+    && !beforePix.paidAt && !beforePix.endToEndId && beforePix.statementReconciliationStatus !== "matched") {
+    await assertSupplierPixBankClosed(beforePix);
+    bankClosed = { id: beforePix.id, status: beforePix.status,
+      interRequestId: beforePix.interRequestId!, updatedAt: beforePix.updatedAt };
+  }
+
   return financialDbAdmin.runTransaction(async (transaction) => {
     const expenseSnapshot = await transaction.get(expenseRef);
     if (!expenseSnapshot.exists) throw new Error("Despesa não encontrada.");
     const expense = expenseSnapshot.data() ?? {};
     assertExpenseAllowsNewPayment(expense);
+    const linkedRequestId = String(expense.paymentRequestId ?? "").trim();
+    if (linkedRequestId) {
+      const linked = await transaction.get(financialDbAdmin.collection("bankPaymentRequests").doc(linkedRequestId));
+      if (!linked.exists) throw new Error("A solicitação bancária vinculada à despesa não foi encontrada; confira antes da baixa manual.");
+      if (linked.get("sourceType") === "expense_supplier_pix") {
+        if (!bankClosed || bankClosed.id !== linked.id || bankClosed.status !== linked.get("status")
+          || bankClosed.interRequestId !== linked.get("interRequestId") || bankClosed.updatedAt !== linked.get("updatedAt")
+          || linked.get("sourceId") !== expenseId || linked.get("expenseId") !== expenseId
+          || linked.get("workspaceId") !== expense.workspaceId || linked.get("paidAt") || linked.get("endToEndId")
+          || linked.get("statementReconciliationStatus") === "matched") {
+          throw new Error("O Pix vinculado à despesa ainda não tem encerramento bancário seguro para baixa manual.");
+        }
+      }
+    }
     if (["draft", "cancelled", "reconciled"].includes(String(expense.status))) {
       throw new Error("Esta despesa não pode receber um pagamento manual.");
     }
