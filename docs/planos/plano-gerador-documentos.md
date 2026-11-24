@@ -46,7 +46,7 @@ Descartados por licença ou custo (leitura de documentação; texto das licença
 
 **Regras técnicas observadas na prova:** campo com `white-space: nowrap` (sem isso 20 de 49 nomes longos se partiram); conversor de listas do Word em `transformPastedHTML` (sem ele as listas viram parágrafos com "·"); extensões de texto para preservar cor, tamanho e família ao colar; web font embutida no PDF (mecanismo validado com fonte de teste, não com a fonte da marca); família colada de uma fonte ausente no servidor cai em fallback.
 
-**Pendências nomeadas (nenhuma resolvida):**
+**Pendências identificadas na avaliação e decisões posteriores:**
 
 1. ~~Decisão do formato oficial~~ — **resolvida em 05/11/2026** pela escolha do Tiptap: JSON/HTML é a fonte da verdade e o PDF é o artefato fiel. O que fazer com os modelos DOCX existentes (migrar, manter em paralelo ou converter) continua **pendente** e precisa de decisão própria.
 2. Repetir a medição do Gotenberg no serviço real de produção (ainda não provisionado): latência, partida a frio, concorrência e custo. Em contêiner local (M1) o Gotenberg 8 deu, para HTML→PDF de 40/130/500 blocos, 4/14/51 páginas (as mesmas do Chromium local), 250–600 ms após a primeira chamada (~1,1 s na primeira), e ~150–750 ms para DOCX→PDF. A divergência eigenpal × LibreOffice já foi medida localmente (87% dos blocos na mesma página, com um documento sintético de 45 parágrafos); falta repetir com um modelo real e com a fonte de produção, pois o LibreOffice substituiu Arial por fonte equivalente.
@@ -70,7 +70,7 @@ O DEV decidiu seguir com o **editor interno, em Tiptap**: o documento é editado
 
 ## Situação após a implementação — 05/11/2026
 
-Os itens (1) a (3) da ordem sugerida acima foram implementados e publicados em produção (PR #762 em `main`, PR de promoção #763; rollout do App Hosting `SUCCEEDED` no commit `13969b94`). Esta seção descreve o que foi verificado; o que não foi executado está listado abaixo e não deve ser lido como entregue.
+Os itens (1) a (3) da ordem sugerida acima foram implementados e integrados pelos PRs #762 em `main` e #763 de promoção para `production` (commit `13969b94`). O registro original relata rollout do App Hosting `SUCCEEDED`, mas a evidência desse estado não foi recuperada nesta atualização. Esta seção distingue o código entregue das verificações ainda pendentes.
 
 **Entregue:**
 
@@ -94,6 +94,6 @@ Os itens (1) a (3) da ordem sugerida acima foram implementados e publicados em p
 6. Fechar a lacuna `legacy_gap` restante (`audit-targets` e `contentVersions.documentId`, esta só um vínculo de documento) e validar a consulta por collection group no emulador.
 7. Assistência de IA (etapa 3 deste plano) continua não iniciada.
 
-**Operação:** os índices de `editorDocuments` e `editorTemplates` e as exceções de campo `COLLECTION_GROUP` foram implantados no banco `coala` em 05/11/2026, logo após o rollout.
+**Operação:** os índices de `editorDocuments` e `editorTemplates` e as exceções de campo `COLLECTION_GROUP` estão definidos no repositório. A implantação no banco `coala` em 05/11/2026 foi relatada no histórico, mas não foi comprovada pelo registro local recuperado; confirmar o estado no destino antes de considerar essa etapa encerrada.
 
 Registro do chamado: `.ai-work-archive/development-technology/editor-documentos-20261105/record.md` (arquivo local, fora do repositório).
