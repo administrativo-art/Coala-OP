@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { findBizneoExportDayOffConflicts } from '../../src/lib/dp-bizneo-export-preflight';
+import { classifyBizneoExportWorkShift, findBizneoExportDayOffConflicts } from '../../src/lib/dp-bizneo-export-preflight';
 import type { DPShift } from '../../src/types';
 
 function shift(params: Partial<DPShift> & Pick<DPShift, 'id' | 'userId' | 'date'>): DPShift {
@@ -47,4 +47,19 @@ test('permite folga publicada sem turno concorrente', () => {
   ]);
 
   assert.deepEqual(blockers, []);
+});
+
+test('exclui somente os períodos manuais sem ID Bizneo e preserva outros turnos da pessoa', () => {
+  const segments = [
+    { manualDay: { mode: 'fixed', expectedBreakMinutes: 30 } as const, manualDayId: 'manual-day-1' },
+    { manualDayId: 'manual-day-1' },
+  ];
+  assert.deepEqual(segments.map((segment) => classifyBizneoExportWorkShift(segment, '')), ['omit-manual', 'omit-manual']);
+  assert.equal(classifyBizneoExportWorkShift(segments[0], '123'), 'export');
+  assert.equal(classifyBizneoExportWorkShift({ shiftDefinitionId: 'definition-2' }, '456'), 'export');
+});
+
+test('mantém o bloqueio de turno comum sem ID Bizneo, inclusive sem definição', () => {
+  assert.equal(classifyBizneoExportWorkShift({ shiftDefinitionId: 'definition-no-bizneo' }, ''), 'missing-id');
+  assert.equal(classifyBizneoExportWorkShift({}, ''), 'missing-id');
 });
