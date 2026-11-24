@@ -102,3 +102,15 @@ import kotlinx.serialization.Serializable
 @Serializable data class PairScreen(val kioskId: String, @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val screenId: String? = null, val orientation: String, val code: String)
 @Serializable data class PairedScreen(val id: String, val name: String, val kioskName: String, val orientation: String)
 @Serializable data class PairResponse(val screen: PairedScreen, val created: Boolean)
+
+@Serializable data class DayCorrectionEvent(val action: String, val reason: String, val at: String, val adjustmentId: String? = null)
+@Serializable data class DayCorrection(
+    val id: String, val workDate: String, val status: String, val version: Int,
+    val reason: String, val response: String? = null, val history: List<DayCorrectionEvent> = emptyList()
+)
+@Serializable data class DayCorrections(val items: List<DayCorrection> = emptyList())
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+@Serializable data class DayCorrectionResponse(
+    val action: String = "respond", val id: String, val expectedVersion: Int,
+    val reason: String, @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val adjustmentId: String? = null
+)

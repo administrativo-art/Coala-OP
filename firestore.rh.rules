@@ -214,6 +214,13 @@ service cloud.firestore {
     match /ptrp_adjustmentRequests/{id} { allow read, write: if false; }
     match /ptrp_markingClassifications/{id} { allow read, write: if false; }
     match /ptrp_treatments/{id} { allow read, write: if false; }
+    match /ptrp_dayCorrectionEvents/{id} { allow read, write: if false; }
+    match /ptrp_payslipReconciliations/{document=**} { allow read, write: if false; }
+    match /ptrp_payslipReconciliationState/{document=**} { allow read, write: if false; }
+    match /ptrp_payslipReconciliationAudit/{document=**} { allow read, write: if false; }
+    match /providerClosureReleases/{id} { allow read, write: if false; }
+    match /providerClosureAccess/{id} { allow read, write: if false; }
+    match /ptrp_dayCorrections/{id} { allow read, write: if false; }
     match /dp_timeClosureAlertReviews/{id} { allow read, write: if false; }
     match /ptrp_competenceClosures/{id} {
       allow read, write: if false;

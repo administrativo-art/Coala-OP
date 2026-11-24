@@ -21,6 +21,7 @@ export function canViewPersonSource(actor: ServerUserContext, source: Source): b
   if (!SOURCE_VALUES.permissionPolicy.includes(source.permissionPolicy) || !SOURCE_VALUES.scopePolicy.includes(source.scopePolicy)) return false;
   if (source.permissionPolicy === "rep-p-location" && (actor.permissions.dp?.view !== true || actor.permissions.dp?.timeRecording?.readLocation !== true)) return false;
   if (source.permissionPolicy === "cursor-private") return false;
+  if (source.permissionPolicy === "payroll-finance-review" && actor.viewAs) return false;
   if (actor.isDefaultAdmin) return true;
   switch (source.permissionPolicy) {
     case "admissions": return hasFormalizationPermission(actor.permissions, "view");
@@ -39,6 +40,8 @@ export function canViewPersonSource(actor: ServerUserContext, source: Source): b
     case "requests": return actor.permissions.dp?.requests?.view === true;
     case "vacations": return actor.permissions.dp?.vacation?.viewAll === true;
     case "terminations": return actor.permissions.dp?.collaborators?.terminate === true;
+    case "payroll-finance-review": return actor.permissions.financial?.view === true && actor.permissions.financial?.expenses?.view === true && actor.permissions.financial?.personnelCosts?.view === true
+      && actor.permissions.dp?.timeClosure?.close === true && actor.permissions.dp?.requests?.review === true && resolveUnitAccess(actor.userDoc).allUnits;
     case "financial-admin": return false;
     case "financial-counterparty": return actor.permissions.financial?.view === true
       && actor.permissions.financial?.expenses?.view === true
@@ -47,6 +50,8 @@ export function canViewPersonSource(actor: ServerUserContext, source: Source): b
     case "audit-global": return actor.permissions.dashboard?.audit === true && resolveUnitAccess(actor.userDoc).allUnits;
     case "integrations": return hasFormalizationPermission(actor.permissions, "onboarding.manage");
     case "privacy": return true;
+    case "service-provider-admin": return actor.permissions.dp?.timeClosure?.close === true
+      && actor.permissions.dp?.requests?.review === true && resolveUnitAccess(actor.userDoc).allUnits;
     default: { const unknown: never = source.permissionPolicy; void unknown; return false; }
   }
 }
@@ -181,7 +186,7 @@ function invalid(code: string) { return new AppError({ code, kind: "VALIDATION",
 
 export async function preparePersonInventory(actor: ServerUserContext, ref: SubjectRef) {
   subjectKey(ref);
-  const anchorSource = sourceById(ref.namespace === "main.users" ? "accounts" : ref.namespace === "main.entities" ? "entity-persons" : ref.namespace === "hr.employees" ? "employees" : ref.namespace === "hr.onboardingPersons" ? "onboarding-persons" : "candidates");
+  const anchorSource = sourceById(ref.namespace === "main.providerMembers" ? "provider-members" : ref.namespace === "main.entities" ? "entity-persons" : ref.namespace === "main.users" ? "accounts" : ref.namespace === "hr.employees" ? "employees" : ref.namespace === "hr.onboardingPersons" ? "onboarding-persons" : "candidates");
   // Privacy visibility does not authorize discovering identities or their equivalents.
   // Deny before any lookup so existing and missing IDs have the same response.
   if (!anchorSource || !canViewPersonSource(actor, anchorSource)) throw new AppError({ code: "PERSON_ANCHOR_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem permissão para consultar este cadastro." });
@@ -207,7 +212,8 @@ export async function preparePersonInventory(actor: ServerUserContext, ref: Subj
       continue;
     }
     visibleRefs.push(candidate);
-    const anchor = candidate.namespace === "main.users" ? await dbAdmin.collection("users").doc(candidate.id).get()
+    const anchor = candidate.namespace === "main.providerMembers" ? await dbAdmin.collection("providerMembers").doc(candidate.id).get()
+      : candidate.namespace === "main.users" ? await dbAdmin.collection("users").doc(candidate.id).get()
       : candidate.namespace === "main.entities" ? await dbAdmin.collection("entities").doc(candidate.id).get()
       : candidate.namespace === "hr.employees" ? await hrDbAdmin.collection("employees").doc(candidate.id).get()
         : await hrDbAdmin.collection("candidates").doc(candidate.id).get();
@@ -222,7 +228,7 @@ export async function preparePersonInventory(actor: ServerUserContext, ref: Subj
   resolution.refs = visibleRefs;
   const userRef = resolution.refs.find((candidate) => candidate.namespace === "main.users");
   const user = userRef ? await dbAdmin.collection("users").doc(userRef.id).get() : null;
-  if (!actor.isDefaultAdmin && !user?.exists && ref.namespace !== "hr.onboardingPersons" && ref.namespace !== "main.entities") throw new AppError({ code: "PERSON_SCOPE_UNCONFIRMED", kind: "AUTHORIZATION" });
+  if (!actor.isDefaultAdmin && !user?.exists && ref.namespace !== "hr.onboardingPersons" && ref.namespace !== "main.providerMembers" && ref.namespace !== "main.entities") throw new AppError({ code: "PERSON_SCOPE_UNCONFIRMED", kind: "AUTHORIZATION" });
   if (user?.exists) {
     if (!matchesPersonWorkspace(user.data(), actor.workspace_id, true)) throw new AppError({ code: "PERSON_WORKSPACE_FORBIDDEN", kind: "AUTHORIZATION" });
     if (!canAccessUserByUnit(actor.userDoc, user.data() ?? {}, { isDefaultAdmin: actor.isDefaultAdmin })) {

@@ -330,6 +330,15 @@ export function contractualRelationshipOnDate(history: EmploymentHistory, user: 
   return resolution.period.employmentRelationshipType;
 }
 
+/** Resolve o vínculo publicado do lote com as mesmas sobreposições contratuais e operacionais da consulta individual. */
+export function resolveRosterEmploymentOnDate(history: EmploymentHistory, user: Record<string, unknown>, date: string) {
+  const scheduled = user.scheduledContractChange as { id?: string } | undefined;
+  return withOperationalTimeline(
+    withContractualTimeline(resolveEmploymentReference(history, date), user.contractualDataPeriods, date, scheduled?.id),
+    user.operationalUnitPeriods, date, typeof user.operationalUnitCutoverDate === 'string' ? user.operationalUnitCutoverDate : undefined,
+  );
+}
+
 /** Resolução interna sem autorização de UI; destinada a serviços server-only que já autenticaram o titular. */
 export async function resolveEmploymentReferenceForSystem(params: {
   workspaceId: string; userId: string; date: string; database?: FirebaseFirestore.Firestore;

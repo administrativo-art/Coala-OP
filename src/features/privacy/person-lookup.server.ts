@@ -17,6 +17,7 @@ const employee = (snapshot: FirebaseFirestore.DocumentSnapshot) => snapshot.exis
 } : null;
 
 export const firestorePersonLookup: PersonLookup = {
+  async providerMember(id) { const row = await dbAdmin.collection("providerMembers").doc(id).get(); return row.exists ? { id: row.id } : null; },
   async entity(id) {
     const row = await dbAdmin.collection("entities").doc(id).get();
     return row.exists ? { id: row.id, type: row.get("type"), workspaceId: row.get("workspaceId") } : null;

@@ -665,3 +665,16 @@ api,src/app/api/jobs/acquirer-fees/auto/route.ts,,docs/engineering/flows/stone-s
 function,functions/src/acquirer-fee-auto-jobs.ts,acquirerFeeAutoRecognition,docs/engineering/flows/stone-sales-review.md,onSchedule diario 05:40 America/Belem; chama a rota de reconhecimento automatico; deploy nao confirmado.
 api,src/app/api/financial/month-closing/route.ts,,docs/engineering/flows/month-closing.md,Leitura do fechamento mensal por competencia com secureRoute; somente leitura.
 api,src/app/api/dp/schedules/manual-journey/route.ts,,docs/engineering/flows/dp-schedules.md,Salva em conjunto os trechos de uma jornada manual no rascunho com controle de versao por escala.
+api,src/app/api/dp/time-recording/day-corrections/route.ts,,docs/engineering/flows/dp-time-recording.md,GET pedidos de ajuste e tratamentos do proprio titular no mes; POST pedido proprio com justificativa (inclusao desconsideracao ou correcao) validando vinculo batida alvo e competencia aberta; nunca altera a ARP.
+api,src/app/api/dp/service-providers/route.ts,,docs/engineering/access-and-privacy.md,Acesso individual de prestador com sessao propria e concessoes revogaveis.
+api,src/app/api/service-portal/login/route.ts,,docs/engineering/access-and-privacy.md,Acesso individual de prestador com sessao propria e concessoes revogaveis.
+api,src/app/api/service-portal/activate/route.ts,,docs/engineering/access-and-privacy.md,Acesso individual de prestador com sessao propria e concessoes revogaveis.
+api,src/app/api/service-portal/session/route.ts,,docs/engineering/access-and-privacy.md,Acesso individual de prestador com sessao propria e concessoes revogaveis.
+api,src/app/api/service-portal/logout/route.ts,,docs/engineering/access-and-privacy.md,Acesso individual de prestador com sessao propria e concessoes revogaveis.
+page,src/app/prestadores/page.tsx,,docs/engineering/access-and-privacy.md,Portal proprio de prestadores sem providers internos.
+page,src/app/prestadores/ativar/page.tsx,,docs/engineering/access-and-privacy.md,Portal proprio de prestadores sem providers internos.
+api,src/app/api/dp/service-providers/closures/route.ts,,docs/engineering/service-provider-access.md,Conferencia e liberacao explicita do fechamento individual para uma concessao do contador.
+api,src/app/api/service-portal/closures/route.ts,,docs/engineering/service-provider-access.md,Consulta e abertura auditada de fechamento individual e download protegido do contracheque selecionado.
+api,src/app/api/dp/time-recording/payslip-reconciliation/route.ts,,docs/engineering/flows/dp-time-recording.md,Conferencia RH de eventos do contracheque contra entrega imutavel com revisao fechamento todas unidades documento exato e bloqueio de assinatura.
+api,src/app/api/dp/time-recording/closing-progress/route.ts,,docs/engineering/flows/dp-time-recording.md,Acompanhamento DP limitado por competencia sem extrato ou PDF por pessoa e sem escrita.
+api,src/app/api/dp/time-recording/payroll-finance/route.ts,,docs/engineering/flows/dp-time-recording.md,Conferencia documental com permissao RH e financeira de titulos existentes sem criar lancamento ou pagamento.
