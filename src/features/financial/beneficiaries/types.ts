@@ -21,6 +21,7 @@ export type ProtectedPaymentDestination = {
 
 export type SupplierPaymentProfile = {
   entityId: string;
+  workspaceId?: string;
   active: boolean;
   paymentMethod: PaymentMethod;
   pixKeyType?: PixKeyType;
@@ -69,6 +70,7 @@ export type BeneficiarySnapshot = {
   name: string;
   document: string;
   documentHash?: string;
+  destinationHash?: string;
   paymentMethod: PaymentMethod;
   pixKeyType?: PixKeyType;
   maskedPaymentDestination: string;

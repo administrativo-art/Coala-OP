@@ -81,6 +81,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { financialDb } from "@/lib/firebase-financial";
+import { WORKSPACE_ID } from "@/lib/workspace";
+import { expenseBillingIdentity, expenseHasProtectedSupplierSource, expenseSupplierFields, expenseSupplierIdentity } from "@/features/financial/lib/expense-supplier-identity";
+import { maskBrazilianDocument, validBrazilianTaxId } from "@/features/financial/beneficiaries/normalization";
+import type { Entity } from "@/types";
 
 type InstallmentPreview = {
   number: number;
@@ -385,26 +389,28 @@ function QuickAddEntityDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onCreated: (name: string) => void;
+  onCreated: (entity: Pick<Entity, "id" | "name" | "type" | "document">) => void;
 }) {
   const { addEntity } = useEntities();
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
+  const [document, setDocument] = useState("");
   const [type, setType] = useState<"pessoa_fisica" | "pessoa_juridica">("pessoa_juridica");
 
   async function handleSave() {
-    if (!name.trim()) return;
+    if (!name.trim() || !validBrazilianTaxId(document) || (type === "pessoa_fisica" ? document.replace(/\D/g, "").length !== 11 : document.replace(/\D/g, "").length !== 14)) return;
     setSaving(true);
     try {
-      await addEntity({
+      const id = await addEntity({
         name: name.trim(),
         type,
-        document: "",
+        document: document.trim(),
         address: { street: "", number: "", neighborhood: "", city: "", state: "", zipCode: "" },
       });
-      onCreated(name.trim());
+      onCreated({ id, name: name.trim(), type, document: document.trim() });
       setName("");
+      setDocument("");
       setType("pessoa_juridica");
       onClose();
     } catch {
@@ -443,10 +449,16 @@ function QuickAddEntityDialog({
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-1.5">
+            <FormLabel>{type === "pessoa_fisica" ? "CPF" : "CNPJ"}</FormLabel>
+            <Input value={document} onChange={(event) => setDocument(event.target.value)} inputMode="numeric" autoComplete="off" placeholder="Documento do cadastro" />
+            {document && !validBrazilianTaxId(document) ? <p className="text-xs text-ds-danger">Informe um documento válido.</p> : null}
+          </div>
+          {type === "pessoa_juridica" ? <p className="text-xs text-muted-foreground">Empresas exigem endereço completo no cadastro. Use o cadastro de entidades para incluir uma nova empresa.</p> : null}
         </div>
         <DialogFooter>
           <Button variant="ds-ghost" size="md" type="button" onClick={onClose} disabled={saving}>Cancelar</Button>
-          <Button variant="primary-modal" size="md" type="button" onClick={() => void handleSave()} disabled={saving || !name.trim()}>
+          <Button variant="primary-modal" size="md" type="button" onClick={() => void handleSave()} disabled={saving || !name.trim() || !validBrazilianTaxId(document)}>
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Salvar
           </Button>
@@ -489,6 +501,13 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   const [importTransactionData, setImportTransactionData] = useState<any | null>(null);
   const [sourceSettlement, setSourceSettlement] = useState<SourceSettlement | null>(null);
   const [inboxBillingIdentity, setInboxBillingIdentity] = useState<FinancialInboxBillingIdentity | null>(null);
+  const [loadedBillingIdentity, setLoadedBillingIdentity] = useState<Record<string, unknown> | null>(null);
+  const [loadedProtectedSource, setLoadedProtectedSource] = useState(false);
+  const [loadedSupplierId, setLoadedSupplierId] = useState<string | null>(null);
+  const [supplierEntityId, setSupplierEntityId] = useState<string | null>(null);
+  const [newSupplierEntity, setNewSupplierEntity] = useState<Pick<Entity, "id" | "name" | "type" | "document"> | null>(null);
+  const [loadedSupplierEntity, setLoadedSupplierEntity] = useState<Pick<Entity, "id" | "name" | "type" | "document"> | null>(null);
+  const [expenseUnitId, setExpenseUnitId] = useState("");
   const [accountPlanOpen, setAccountPlanOpen] = useState(false);
   const [accountPlanSearch, setAccountPlanSearch] = useState("");
   const [descriptionFocused, setDescriptionFocused] = useState(false);
@@ -563,8 +582,10 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
         const creationSuggestion = message?.creationSuggestion || {};
         const billingIdentity = classification.billingIdentity as FinancialInboxBillingIdentity | null | undefined;
         setInboxBillingIdentity(billingIdentity ?? null);
+        setLoadedSupplierId(null);
         form.setValue("description", String(creationSuggestion.description || message?.subject || "Cobrança recebida"), { shouldValidate: true });
         form.setValue("aliases", [String(message?.subject || "").trim()].filter(Boolean), { shouldValidate: true });
+        setSupplierEntityId(null);
         form.setValue("supplier", String(classification.supplierName || message?.from || ""), { shouldValidate: true });
         const identityNotes = [
           billingIdentity?.customerAccount ? `Conta do cliente: ${billingIdentity.customerAccount}` : null,
@@ -1260,6 +1281,8 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
           rateioEffectiveFrom: startOfMonth(transactionDate || new Date()),
           rateioFirstMonthMode: "full",
         });
+        setSupplierEntityId(null);
+        setExpenseUnitId("");
         setImportTransactionData({ id: snapshot.id, ...data });
       } catch (error) {
         console.error(error);
@@ -1314,6 +1337,17 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
         }
 
         setSourceSettlement(data.sourceSettlement ?? null);
+        setLoadedProtectedSource(expenseHasProtectedSupplierSource(data));
+        setLoadedSupplierId(typeof data.supplierId === "string" ? data.supplierId : null);
+        setSupplierEntityId(typeof data.supplierId === "string" ? data.supplierId : null);
+        const storedDocument = String(data.billingIdentity?.supplierTaxId ?? "");
+        setLoadedSupplierEntity(typeof data.supplierId === "string" && validBrazilianTaxId(storedDocument) ? {
+          id: data.supplierId, name: String(data.supplier ?? ""),
+          type: storedDocument.replace(/\D/g, "").length === 11 ? "pessoa_fisica" : "pessoa_juridica",
+          document: storedDocument,
+        } : null);
+        setExpenseUnitId(typeof data.unitId === "string" ? data.unitId : "");
+        setLoadedBillingIdentity(data.billingIdentity && typeof data.billingIdentity === "object" ? data.billingIdentity : null);
         const nextOpenCompetence = startOfMonth(addMonths(new Date(), 1));
         const storedPolicy = data.rateioPolicy as ExpenseRateioPolicy | undefined;
         const loadedApportionments = (storedPolicy?.participants || data.apportionments || [
@@ -1605,6 +1639,16 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   }
 
   function buildExpensePayload(values: ExpenseFormValues) {
+    const protectedSource = Boolean(inboxMessageId || loadedProtectedSource);
+    const supplierIdentity = expenseSupplierIdentity(
+      [...entities, ...(newSupplierEntity ? [newSupplierEntity] : []), ...(loadedSupplierEntity ? [loadedSupplierEntity] : [])],
+      supplierEntityId,
+    );
+    if (!protectedSource && supplierEntityId && !supplierIdentity.supplierId) {
+      throw new Error("O cadastro selecionado precisa de CPF/CNPJ válido. Corrija-o ou volte ao texto livre.");
+    }
+    const supplierFields = expenseSupplierFields(supplierIdentity, loadedSupplierId,
+      loadedBillingIdentity, inboxBillingIdentity, protectedSource);
     const account = (accounts || []).find((item: any) => item.id === values.accountPlan);
     const installmentsToSave = buildInstallmentsFromValues(values);
     const competenceDate = values.competenceDate ? Timestamp.fromDate(values.competenceDate) : null;
@@ -1673,6 +1717,10 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
       description: values.description || "",
       aliases: [...new Set((values.aliases || []).map((alias) => alias.trim()).filter(Boolean))],
       supplier: values.supplier ?? "",
+      supplierId: supplierFields.supplierId,
+      unitId: expenseUnitId || null,
+      workspaceId: WORKSPACE_ID,
+      billingIdentity: supplierFields.billingIdentity,
       notes: values.notes ?? "",
       totalValue: values.totalValue || 0,
       competenceDate,
@@ -1722,7 +1770,6 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
       ...(inboxMessageId ? {
         originModule: "financial_inbox",
         financialInboxMessageId: inboxMessageId,
-        ...(inboxBillingIdentity ? { billingIdentity: inboxBillingIdentity } : {}),
       } : {}),
       recurrenceFirstDueDate:
         values.paymentMethod === "recurring" && values.recurrenceFirstDueDate
@@ -1957,7 +2004,12 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
             sharedPatch.personAllocations = editPayload.personAllocations;
           }
           if (dirtyFields.description) sharedPatch.description = editPayload.description;
-          if (dirtyFields.supplier) sharedPatch.supplier = editPayload.supplier;
+          if (dirtyFields.supplier && !expenseHasProtectedSupplierSource(existing)) {
+            sharedPatch.supplier = editPayload.supplier;
+            sharedPatch.supplierId = editPayload.supplierId;
+            sharedPatch.billingIdentity = expenseBillingIdentity(existing.billingIdentity ?? null, null,
+              editPayload.billingIdentity.supplierTaxId, false);
+          }
           if (dirtyFields.notes) sharedPatch.notes = editPayload.notes;
           const plannedPaymentChanged =
             !!dirtyFields.plannedPaymentMethodType ||
@@ -2437,6 +2489,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                                     <Button
                                       variant="outline"
                                       role="combobox"
+                                      disabled={Boolean(inboxMessageId || loadedProtectedSource)}
                                       aria-expanded={supplierOpen}
                                       className={cn("flex-1 justify-between font-normal", !field.value && "text-muted-foreground")}
                                     >
@@ -2453,6 +2506,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                                       onChange={(event) => {
                                         const nextValue = event.target.value;
                                         setSupplierSearch(nextValue);
+                                        setSupplierEntityId(null);
                                         field.onChange(nextValue);
                                       }}
                                     />
@@ -2469,7 +2523,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                                                 <p className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Entidades</p>
                                                 {filteredEntities.map((entity) => {
                                                   const label = entity.fantasyName || entity.name;
-                                                  const isSelected = field.value === label;
+                                                  const isSelected = supplierEntityId === entity.id;
                                                   return (
                                                     <button
                                                       key={entity.id}
@@ -2480,11 +2534,12 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                                                       )}
                                                       onClick={() => {
                                                         field.onChange(label);
+                                                        setSupplierEntityId(entity.id);
                                                         setSupplierSearch(label);
                                                         setSupplierOpen(false);
                                                       }}
                                                     >
-                                                      <span className="truncate">{label}</span>
+                                                      <span className="min-w-0"><span className="block truncate">{label}</span><span className="block text-xs text-muted-foreground">{maskBrazilianDocument(entity.document)} · {entity.id}</span></span>
                                                       {isSelected && <Check className="ml-auto h-4 w-4 shrink-0 text-primary" />}
                                                     </button>
                                                   );
@@ -2507,6 +2562,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                                                       )}
                                                       onClick={() => {
                                                         field.onChange(label);
+                                                        setSupplierEntityId(null);
                                                         setSupplierSearch(label);
                                                         setSupplierOpen(false);
                                                       }}
@@ -2529,14 +2585,28 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                                   </div>
                                 </PopoverContent>
                               </Popover>
-                              <Button type="button" variant="outline" size="icon" className="shrink-0" onClick={() => setQuickAddOpen(true)}>
+                              <Button type="button" variant="outline" size="icon" className="shrink-0" disabled={Boolean(inboxMessageId || loadedProtectedSource)} onClick={() => setQuickAddOpen(true)}>
                                 <Plus className="h-4 w-4" />
                               </Button>
                             </div>
+                            {inboxMessageId || loadedProtectedSource ? <p className="text-xs text-muted-foreground">Fornecedor e documento fiscal mantidos conforme a origem desta despesa.</p> : supplierEntityId ? <p className="text-xs text-muted-foreground" data-supplier-id={supplierEntityId}>Cadastro selecionado: {field.value}. Documento: {maskBrazilianDocument((newSupplierEntity?.id === supplierEntityId ? newSupplierEntity : entities.find((entity) => entity.id === supplierEntityId) || loadedSupplierEntity)?.document)}.</p> : <p className="text-xs text-muted-foreground">Texto livre não vincula um cadastro e não habilita a solicitação Pix.</p>}
+                            {!inboxMessageId && !loadedProtectedSource && supplierEntityId && !expenseSupplierIdentity([...entities, ...(newSupplierEntity ? [newSupplierEntity] : []), ...(loadedSupplierEntity ? [loadedSupplierEntity] : [])], supplierEntityId).supplierId ? <p className="text-xs text-ds-danger">O cadastro precisa ter CPF/CNPJ válido para vincular a despesa.</p> : null}
                             <FormMessage />
                           </FormItem>
                         )}
                       />
+
+                      <div className="space-y-2">
+                        <FormLabel>Unidade ou quiosque da despesa</FormLabel>
+                        <Select value={expenseUnitId || "_none"} onValueChange={(value) => setExpenseUnitId(value === "_none" ? "" : value)}>
+                          <SelectTrigger><SelectValue placeholder="Selecione a unidade real" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_none">Sem unidade vinculada</SelectItem>
+                            {units.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">Para solicitar Pix a pessoa física, selecione o quiosque da obrigação.</p>
+                      </div>
 
                       <div className="grid gap-4 md:grid-cols-2">
                         <FormField
@@ -3707,7 +3777,12 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
           </DialogContent>
         </Dialog>
 
-        <QuickAddEntityDialog open={quickAddOpen} onClose={() => setQuickAddOpen(false)} onCreated={(name) => form.setValue("supplier", name)} />
+        <QuickAddEntityDialog open={quickAddOpen} onClose={() => setQuickAddOpen(false)} onCreated={(entity) => {
+          setNewSupplierEntity(entity);
+          setSupplierEntityId(entity.id);
+          setSupplierSearch(entity.name);
+          form.setValue("supplier", entity.name, { shouldDirty: true, shouldValidate: true });
+        }} />
       </form>
     </Form>
   );

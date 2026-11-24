@@ -40,6 +40,9 @@ export function canViewPersonSource(actor: ServerUserContext, source: Source): b
     case "vacations": return actor.permissions.dp?.vacation?.viewAll === true;
     case "terminations": return actor.permissions.dp?.collaborators?.terminate === true;
     case "financial-admin": return false;
+    case "financial-counterparty": return actor.permissions.financial?.view === true
+      && actor.permissions.financial?.expenses?.view === true
+      && actor.permissions.financial?.paymentRequests?.view === true;
     case "financial": return actor.permissions.financial?.view === true && actor.permissions.financial?.personnelCosts?.view === true && (source.collection !== "bankPaymentRequests" || actor.permissions.financial?.paymentRequests?.view === true);
     case "audit-global": return actor.permissions.dashboard?.audit === true && resolveUnitAccess(actor.userDoc).allUnits;
     case "integrations": return hasFormalizationPermission(actor.permissions, "onboarding.manage");
@@ -55,6 +58,8 @@ export function canViewPersonRecord(actor: ServerUserContext, source: Source, da
     if (native !== actor.workspace_id || !matchesPersonWorkspace(data, actor.workspace_id, true)) return false;
     data = { ...data, workspaceId: native };
   }
+  if (source.namespace === "main.entities" && source.id !== "entity-persons" && source.id !== "supplier-payment-profile-entity-persons"
+    && !matchesPersonWorkspace(data, actor.workspace_id)) return false;
   // candidateId also holds manual/PJ routing aliases. Check origin before admin bypass.
   if (source.id === "onboarding-candidates" && (!data || onboardingOrigin(data) !== "recruitment")) return false;
   if (!canViewPersonSource(actor, source) || !matchesPersonWorkspace(data, actor.workspace_id, source.scopePolicy !== "finance-workspace")) return false;
@@ -75,6 +80,17 @@ export function canViewPersonRecord(actor: ServerUserContext, source: Source, da
 }
 /** Classification rows carry a receipt ID, not a copy of its execution unit. */
 export async function canViewPersonSourceRow(actor: ServerUserContext, source: Source, doc: FirebaseFirestore.QueryDocumentSnapshot) {
+  if (source.id === "financial-entity-person-pix-requests") {
+    const data = doc.data();
+    const expenseId = data.expenseId;
+    if (data.sourceType !== "expense_supplier_pix" || data.beneficiaryReference?.sourceType !== "entity"
+      || typeof expenseId !== "string" || !expenseId || data.sourceId !== expenseId
+      || !matchesPersonWorkspace(data, actor.workspace_id)) return false;
+    const expense = await financialDbAdmin.collection("expenses").doc(expenseId).get();
+    return expense.exists && expense.get("supplierId") === data.beneficiaryReference.sourceId
+      && canViewPersonRecord(actor, source, { ...data, unitId: expense.get("unitId"),
+        workspaceId: expense.get("workspaceId"), workspace_id: expense.get("workspace_id") });
+  }
   if (isPersonSourceGroup(source)) {
     // Collection group: reject any same-named subcollection outside the declared parent, then
     // require the parent's own workspace (subcollection rows carry none). Missing workspace denies.
@@ -99,10 +115,15 @@ function invalid(code: string) { return new AppError({ code, kind: "VALIDATION",
 
 export async function preparePersonInventory(actor: ServerUserContext, ref: SubjectRef) {
   subjectKey(ref);
-  const anchorSource = sourceById(ref.namespace === "main.users" ? "accounts" : ref.namespace === "hr.employees" ? "employees" : ref.namespace === "hr.onboardingPersons" ? "onboarding-persons" : "candidates");
+  const anchorSource = sourceById(ref.namespace === "main.users" ? "accounts" : ref.namespace === "main.entities" ? "entity-persons" : ref.namespace === "hr.employees" ? "employees" : ref.namespace === "hr.onboardingPersons" ? "onboarding-persons" : "candidates");
   // Privacy visibility does not authorize discovering identities or their equivalents.
   // Deny before any lookup so existing and missing IDs have the same response.
   if (!anchorSource || !canViewPersonSource(actor, anchorSource)) throw new AppError({ code: "PERSON_ANCHOR_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem permissão para consultar este cadastro." });
+  if (ref.namespace === "main.entities") {
+    const entity = await dbAdmin.collection("entities").doc(ref.id).get();
+    if (!entity.exists || entity.get("type") !== "pessoa_fisica" || !matchesPersonWorkspace(entity.data(), actor.workspace_id))
+      throw new AppError({ code: "PERSON_SCOPE_UNCONFIRMED", kind: "AUTHORIZATION" });
+  }
   if (ref.namespace === "hr.onboardingPersons") {
     const owned = await firestorePersonLookup.onboardingPerson?.(ref.id);
     if (!owned || !canViewPersonRecord(actor, anchorSource, owned.process)) throw new AppError({ code: "PERSON_SCOPE_UNCONFIRMED", kind: "AUTHORIZATION" });
@@ -121,6 +142,7 @@ export async function preparePersonInventory(actor: ServerUserContext, ref: Subj
     }
     visibleRefs.push(candidate);
     const anchor = candidate.namespace === "main.users" ? await dbAdmin.collection("users").doc(candidate.id).get()
+      : candidate.namespace === "main.entities" ? await dbAdmin.collection("entities").doc(candidate.id).get()
       : candidate.namespace === "hr.employees" ? await hrDbAdmin.collection("employees").doc(candidate.id).get()
         : await hrDbAdmin.collection("candidates").doc(candidate.id).get();
     if (!matchesPersonWorkspace(anchor.data(), actor.workspace_id, true)) throw new AppError({ code: "PERSON_WORKSPACE_FORBIDDEN", kind: "AUTHORIZATION" });
@@ -134,7 +156,7 @@ export async function preparePersonInventory(actor: ServerUserContext, ref: Subj
   resolution.refs = visibleRefs;
   const userRef = resolution.refs.find((candidate) => candidate.namespace === "main.users");
   const user = userRef ? await dbAdmin.collection("users").doc(userRef.id).get() : null;
-  if (!actor.isDefaultAdmin && !user?.exists && ref.namespace !== "hr.onboardingPersons") throw new AppError({ code: "PERSON_SCOPE_UNCONFIRMED", kind: "AUTHORIZATION" });
+  if (!actor.isDefaultAdmin && !user?.exists && ref.namespace !== "hr.onboardingPersons" && ref.namespace !== "main.entities") throw new AppError({ code: "PERSON_SCOPE_UNCONFIRMED", kind: "AUTHORIZATION" });
   if (user?.exists) {
     if (!matchesPersonWorkspace(user.data(), actor.workspace_id, true)) throw new AppError({ code: "PERSON_WORKSPACE_FORBIDDEN", kind: "AUTHORIZATION" });
     if (!canAccessUserByUnit(actor.userDoc, user.data() ?? {}, { isDefaultAdmin: actor.isDefaultAdmin })) {
@@ -182,8 +204,11 @@ export async function collectPersonSource(params: {
   try {
     if (source.field === "__name__") {
       const snapshot = await db.collection(source.collection).doc(value).get();
-      if (snapshot.exists && !matchesPersonWorkspace(snapshot.data(), actor.workspace_id, true)) throw new AppError({ code: "PERSON_WORKSPACE_FORBIDDEN", kind: "AUTHORIZATION" });
-      return { source, status: "complete" as const, items: snapshot.exists ? [referenceItem(snapshot, source)] : [], nextCursor: null, conflicts: prepared.resolution.conflicts };
+      if (snapshot.exists && !matchesPersonWorkspace(snapshot.data(), actor.workspace_id, source.id === "supplier-payment-profile-entity-persons" || source.namespace !== "main.entities")) throw new AppError({ code: "PERSON_WORKSPACE_FORBIDDEN", kind: "AUTHORIZATION" });
+      const allowed = snapshot.exists && (source.id === "entity-persons" ? snapshot.get("type") === "pessoa_fisica"
+        : source.id === "supplier-payment-profile-entity-persons" ? snapshot.get("entityId") === value
+        : true);
+      return { source, status: "complete" as const, items: allowed ? [referenceItem(snapshot, source)] : [], nextCursor: null, conflicts: prepared.resolution.conflicts };
     }
     const group = isPersonSourceGroup(source);
     const storedCursor = params.cursor ? await readPersonCursor(params.cursor, actor, sourceId, ref, limit) : null;
@@ -196,6 +221,7 @@ export async function collectPersonSource(params: {
     if (source.field !== "__parent__") query = source.namespace === "subjectKeys" ? query.where(source.field, "array-contains-any", prepared.resolution.refs.map(subjectKey)) : query.where(source.field, "==", value);
     if (source.scopePolicy === "finance-workspace") query = query.where(source.id === "financial-source-settlement-updaters" ? "source.workspaceId" : "workspaceId", "==", actor.workspace_id);
     if (source.id.startsWith("financial-") && source.id.endsWith("-payments")) query = query.where("beneficiaryReference.sourceType", "==", "employee").where("sourceType", "==", source.id.split("-")[1]);
+    // The entity reference is exact; source type and expense linkage are checked per row.
     if (source.id === "financial-vacation-expenses") query = query.where("sourceType", "==", "vacation");
     if (source.id === "asset-custody") query = query.where("toHolder.holderType", "==", "employee");
     if (source.id === "asset-former-custody") query = query.where("fromHolder.holderType", "==", "employee");
@@ -203,14 +229,15 @@ export async function collectPersonSource(params: {
     // Use native single-unit predicates when the operator's complete scope fits one query.
     // All-units adjustment authorization still needs row checks for every unitIds member.
     const units = resolveUnitAccess(actor.userDoc, { isDefaultAdmin: actor.isDefaultAdmin });
-    const unitField = source.scopePolicy === "receipt-execution-unit" ? "snapshot.executionUnitId" : source.scopePolicy === "execution-unit" ? "executionUnitId" : source.scopePolicy === "record-workspace-unit" ? "unitId" : null;
+    const unitField = source.id === "financial-entity-person-pix-requests" ? null
+      : source.scopePolicy === "receipt-execution-unit" ? "snapshot.executionUnitId" : source.scopePolicy === "execution-unit" ? "executionUnitId" : source.scopePolicy === "record-workspace-unit" ? "unitId" : null;
     if (unitField && !units.allUnits && units.unitIds.length > 0 && units.unitIds.length <= 30) query = query.where(unitField, "in", units.unitIds);
     query = query.orderBy(FieldPath.documentId());
     let position = cursorId;
     let reads = 0, queries = 0, denied = 0, eof = false;
     const items: ReturnType<typeof referenceItem>[] = [];
     while (reads < PERSON_SOURCE_READ_BUDGET && queries < PERSON_SOURCE_QUERY_BUDGET && items.length < limit) {
-      const costPerRow = source.scopePolicy === "classification-receipt" || group ? 2 : 1;
+      const costPerRow = source.scopePolicy === "classification-receipt" || group || source.id === "financial-entity-person-pix-requests" ? 2 : 1;
       const batchSize = Math.min(Math.floor((PERSON_SOURCE_READ_BUDGET - reads) / costPerRow), Math.max(20, limit));
       if (!batchSize) break;
       const pageQuery = position ? query.startAfter(group ? db.doc(position) : position) : query;
@@ -219,7 +246,7 @@ export async function collectPersonSource(params: {
       let processed = 0;
       for (const doc of snapshot.docs) {
         position = group ? doc.ref.path : doc.id; processed++;
-        if (source.scopePolicy === "classification-receipt" || group) reads++; // reserve the parent proof conservatively
+        if (source.scopePolicy === "classification-receipt" || group || source.id === "financial-entity-person-pix-requests") reads++; // reserve the related record proof conservatively
         // Same-named subcollection of another module: never exposed and not a scope denial (cursor still advances).
         if (group && !ownedGroupParent(source, doc.ref)) continue;
         if (await canViewPersonSourceRow(actor, source, doc)) items.push(referenceItem(doc, source)); else denied++;

@@ -2,13 +2,18 @@ import { createHash } from "node:crypto";
 import { readSubjectRef, subjectKey } from "./person-subject";
 
 type Data = Record<string, unknown>;
+// HR signature bindings predate entity counterparties. Keep this consumer's
+// accepted origins frozen even when the shared person parser adds namespaces.
+const SIGNATURE_PERSON_NAMESPACES: ReadonlySet<string> = new Set([
+  "main.users", "hr.employees", "hr.candidates", "hr.onboardingPersons",
+]);
 export function validatedPersonKeys(value: unknown): string[] {
   if (!Array.isArray(value) || value.length > 100) throw new Error("Referências pessoais históricas inválidas.");
   return [...new Set(value.map((key) => {
     if (typeof key !== "string") throw new Error("Referência pessoal histórica inválida.");
     const split = key.indexOf(":");
     const ref = readSubjectRef({ namespace: key.slice(0, split), id: key.slice(split + 1) });
-    if (!ref) throw new Error("Referência pessoal histórica inválida.");
+    if (!ref || !SIGNATURE_PERSON_NAMESPACES.has(ref.namespace)) throw new Error("Referência pessoal histórica inválida.");
     return subjectKey(ref);
   }))];
 }
