@@ -36,7 +36,7 @@ type AnchorDefinition = {
 const ANCHORS: Record<string, AnchorDefinition[]> = {
   "system-admission-employment-probation-contract": [
     { page: 1, phrase: "CONTRATO DE TRABALHO A TÍTULO DE EXPERIÊNCIA" },
-    { page: 3, phrase: "E por estarem de pleno acordo" },
+    { page: 4, phrase: "E, por estarem de pleno acordo" },
   ],
   "system-admission-hours-bank-agreement": [
     { page: 1, phrase: "ACORDO INDIVIDUAL DE BANCO DE HORAS" },
@@ -45,8 +45,9 @@ const ANCHORS: Record<string, AnchorDefinition[]> = {
   "system-admission-lgpd-awareness-term": [
     { page: 1, phrase: "TERMO DE CIÊNCIA SOBRE O TRATAMENTO DE DADOS PESSOAIS" },
     { page: 4, phrase: "3-A. Localização no registro de ponto e durante a jornada" },
-    { page: 5, phrase: "Ciência e fundamento" },
-    { page: 10, phrase: "compreende que a assinatura registra ciência" },
+    { page: 5, phrase: "3-B. Acompanhamento da localização durante a jornada" },
+    { page: 6, phrase: "3-C. Metas, desempenho e premiação" },
+    { page: 12, phrase: "compreende que a assinatura registra ciência" },
   ],
   "system-admission-image-voice-consent": [
     { page: 1, phrase: "TERMO DE CONSENTIMENTO PARA USO DE IMAGEM E VOZ" },
