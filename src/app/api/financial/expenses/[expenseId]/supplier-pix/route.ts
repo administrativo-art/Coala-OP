@@ -11,6 +11,7 @@ import { secureRoute } from "@/lib/security/secure-route.server";
 import { financialCompetenceMonthSchema } from "@/features/financial/lib/expense-accounting-contract";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { canAccessUnit } from "@/lib/unit-access";
+import { loadPurchasePixSource } from "@/features/financial/payment-requests/purchase-supplier-pix.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,13 +22,20 @@ const inputSchema = z.object({
   supplierEntityId: idSchema,
   amountCents: z.number().int().positive().max(100_000_000),
   replacementOf: idSchema.optional(),
+  purchaseBeneficiaryIndication: z.object({
+    confirmed: z.literal(true),
+    reason: z.string().trim().min(10).max(500),
+    evidence: z.string().trim().min(10).max(500),
+    invoiceAccessKey: z.string().regex(/^\d{44}$/),
+  }).strict().optional(),
   confirmation: z.object({
     beneficiaryDocument: z.string().regex(/^\d{14}$/),
     competenceMonth: financialCompetenceMonthSchema,
     previousPaidRequestId: idSchema,
     allowExistingBoleto: z.boolean(),
   }).strict().optional(),
-}).strict().refine(input => !input.confirmation || !input.replacementOf);
+}).strict().refine(input => !input.confirmation || !input.replacementOf)
+  .refine(input => !input.purchaseBeneficiaryIndication || (!input.confirmation && !input.replacementOf));
 type Input = z.infer<typeof inputSchema>;
 type Resource = { expenseId: string };
 
@@ -61,6 +69,10 @@ const enforcer = defineSecurityEnforcer<NextRequest, Context, unknown, ServerUse
       && (actor.permissions.registration?.entities?.edit !== true || permission?.expenses?.create !== true)) {
       throw new AppError({ code: "EXPENSE_SUPPLIER_PIX_CONFIRMATION_FORBIDDEN", kind: "AUTHORIZATION" });
     }
+    if (input.data.purchaseBeneficiaryIndication && !actor.isDefaultAdmin
+      && (actor.permissions.registration?.entities?.edit !== true || permission?.expenses?.create !== true)) {
+      throw new AppError({ code: "EXPENSE_SUPPLIER_PIX_INDICATION_FORBIDDEN", kind: "AUTHORIZATION" });
+    }
     const expense = await financialDbAdmin.collection("expenses").doc(expenseId.data).get();
     if (!expense.exists) throw new AppError({ code: "EXPENSE_SUPPLIER_PIX_NOT_FOUND", kind: "NOT_FOUND" });
     const legacyForecast = input.data.confirmation && !expense.get("workspaceId")
@@ -69,7 +81,10 @@ const enforcer = defineSecurityEnforcer<NextRequest, Context, unknown, ServerUse
     if (actor.workspace_id !== WORKSPACE_ID || (expense.get("workspaceId") !== actor.workspace_id && !legacyForecast)) {
       throw new AppError({ code: "EXPENSE_SUPPLIER_PIX_SCOPE", kind: "AUTHORIZATION" });
     }
-    if (!canAccessUnit(actor.userDoc, String(expense.get("unitId") ?? ""), { isDefaultAdmin: actor.isDefaultAdmin })) {
+    const source = !expense.get("unitId") && expense.get("originModule") === "purchasing" && expense.get("purchaseOrderId")
+      ? await loadPurchasePixSource(String(expense.get("purchaseOrderId"))) : null;
+    const unitId = String(expense.get("unitId") ?? source?.order.destinationKioskId ?? "");
+    if (!canAccessUnit(actor.userDoc, unitId, { isDefaultAdmin: actor.isDefaultAdmin })) {
       throw new AppError({ code: "EXPENSE_SUPPLIER_PIX_UNIT_SCOPE", kind: "AUTHORIZATION" });
     }
     return { actor, input: input.data, resource: { expenseId: expenseId.data } };
@@ -79,6 +94,7 @@ const enforcer = defineSecurityEnforcer<NextRequest, Context, unknown, ServerUse
 export const POST = secureRoute({ contract, enforcer }, async ({ security }) => {
   const { actor, input, resource } = security;
   const result = await prepareExpenseSupplierPix(resource.expenseId, input.supplierEntityId, input.amountCents, WORKSPACE_ID,
-    { uid: actor.decoded.uid, email: actor.decoded.email, name: actor.userDoc.username }, input.confirmation, input.replacementOf);
+    { uid: actor.decoded.uid, email: actor.decoded.email, name: actor.userDoc.username }, input.confirmation, input.replacementOf,
+    undefined, undefined, input.purchaseBeneficiaryIndication);
   return NextResponse.json({ request: result }, { headers: { "Cache-Control": "private, no-store" } });
 });

@@ -79,15 +79,81 @@ export function canViewPersonRecord(actor: ServerUserContext, source: Source, da
   }
 }
 /** Classification rows carry a receipt ID, not a copy of its execution unit. */
+function coherentPurchasePixExpense(expense: FirebaseFirestore.DocumentData | undefined) {
+  const indication = expense?.purchasePixIndication;
+  return expense?.originModule === "purchasing" && expense.purchaseExpenseRole === "goods"
+    && typeof expense.purchaseOrderId === "string" && Boolean(expense.purchaseOrderId)
+    && typeof expense.supplierId === "string" && Boolean(expense.supplierId)
+    && typeof expense.unitId === "string" && Boolean(expense.unitId)
+    && typeof indication?.beneficiaryEntityId === "string" && Boolean(indication.beneficiaryEntityId)
+    && indication.beneficiaryEntityId !== expense.supplierId
+    && indication.purchaseOrderId === expense.purchaseOrderId
+    && indication.supplierEntityId === expense.supplierId
+    && indication.unitId === expense.unitId
+    && indication.supplierTaxId === expense.billingIdentity?.supplierTaxId
+    && indication.invoiceAccessKey === expense.purchaseInvoiceAccessKey
+    && /^\d{44}$/.test(indication.invoiceAccessKey)
+    && indication.amountCents === Math.round(Number(expense.totalValue) * 100)
+    && typeof indication.orderFingerprint === "string" && Boolean(indication.orderFingerprint)
+    && typeof indication.confirmedBy === "string" && Boolean(indication.confirmedBy)
+    && typeof indication.confirmedAt === "string" && Boolean(indication.confirmedAt)
+    && typeof indication.reason === "string" && indication.reason.length >= 10
+    && typeof indication.evidence === "string" && indication.evidence.length >= 10;
+}
+
+function coherentPurchasePixIndication(request: FirebaseFirestore.DocumentData, expense: FirebaseFirestore.DocumentData | undefined) {
+  if (!coherentPurchasePixExpense(expense) || request.sourceType !== "expense_supplier_pix"
+    || request.beneficiaryReference?.sourceType !== "entity"
+    || request.workspaceId !== expense?.workspaceId
+    || request.expenseId !== request.sourceId
+    || request.beneficiaryReference.sourceId !== expense?.purchasePixIndication?.beneficiaryEntityId) return false;
+  const indication = request.purchasePixIndication;
+  const saved = expense!.purchasePixIndication;
+  const source = request.purchasePixSource;
+  if (!indication || !source || !request.expenseId || request.purchasePixIndication?.confirmedBy !== saved.confirmedBy) return false;
+  for (const field of ["purchaseOrderId", "supplierEntityId", "supplierTaxId", "beneficiaryEntityId",
+    "unitId", "amountCents", "invoiceAccessKey", "orderFingerprint", "reason", "evidence", "confirmedBy", "confirmedAt"]) {
+    if (indication[field] !== saved[field]) return false;
+  }
+  return source.purchaseOrderId === saved.purchaseOrderId && source.supplierEntityId === saved.supplierEntityId
+    && source.supplierTaxId === saved.supplierTaxId && source.unitId === saved.unitId
+    && source.amountCents === saved.amountCents && source.orderFingerprint === saved.orderFingerprint
+    && Math.round(Number(request.amount) * 100) === saved.amountCents;
+}
+
 export async function canViewPersonSourceRow(actor: ServerUserContext, source: Source, doc: FirebaseFirestore.QueryDocumentSnapshot) {
-  if (source.id === "financial-entity-person-pix-requests") {
+  if (source.id === "financial-entity-person-pix-requests" || source.id === "financial-purchase-pix-request-confirmers") {
     const data = doc.data();
     const expenseId = data.expenseId;
     if (data.sourceType !== "expense_supplier_pix" || data.beneficiaryReference?.sourceType !== "entity"
       || typeof expenseId !== "string" || !expenseId || data.sourceId !== expenseId
       || !matchesPersonWorkspace(data, actor.workspace_id)) return false;
     const expense = await financialDbAdmin.collection("expenses").doc(expenseId).get();
-    return expense.exists && expense.get("supplierId") === data.beneficiaryReference.sourceId
+    const indicated = coherentPurchasePixIndication(data, expense.data());
+    return expense.exists && matchesPersonWorkspace(expense.data(), actor.workspace_id)
+      && (expense.get("supplierId") === data.beneficiaryReference.sourceId || indicated)
+      && (source.id !== "financial-purchase-pix-request-confirmers" || indicated)
+      && canViewPersonRecord(actor, source, { ...data, unitId: expense.get("unitId"),
+        workspaceId: expense.get("workspaceId"), workspace_id: expense.get("workspace_id") });
+  }
+  if (source.id === "financial-purchase-pix-receivers" || source.id === "financial-purchase-pix-expense-confirmers") {
+    const data = doc.data();
+    return coherentPurchasePixExpense(data)
+      && canViewPersonRecord(actor, source, { ...data, id: doc.id });
+  }
+  if (source.id === "financial-purchase-pix-event-confirmers") {
+    const parent = ownedGroupParent(source, doc.ref);
+    if (!parent) return false;
+    const request = await parent.get();
+    const data = request.data();
+    const expenseId = data?.expenseId;
+    if (!data || doc.get("type") !== "PAYMENT_REQUEST_CREATED"
+      || !matchesPersonWorkspace(data, actor.workspace_id)
+      || typeof expenseId !== "string" || !expenseId
+      || doc.get("purchasePixIndication.confirmedBy") !== data.purchasePixIndication?.confirmedBy) return false;
+    const expense = await financialDbAdmin.collection("expenses").doc(expenseId).get();
+    return coherentPurchasePixIndication(data, expense.data())
+      && doc.get("purchasePixIndication.confirmedAt") === data.purchasePixIndication?.confirmedAt
       && canViewPersonRecord(actor, source, { ...data, unitId: expense.get("unitId"),
         workspaceId: expense.get("workspaceId"), workspace_id: expense.get("workspace_id") });
   }
@@ -229,7 +295,8 @@ export async function collectPersonSource(params: {
     // Use native single-unit predicates when the operator's complete scope fits one query.
     // All-units adjustment authorization still needs row checks for every unitIds member.
     const units = resolveUnitAccess(actor.userDoc, { isDefaultAdmin: actor.isDefaultAdmin });
-    const unitField = source.id === "financial-entity-person-pix-requests" ? null
+    const unitField = ["financial-entity-person-pix-requests", "financial-purchase-pix-request-confirmers",
+      "financial-purchase-pix-event-confirmers"].includes(source.id) ? null
       : source.scopePolicy === "receipt-execution-unit" ? "snapshot.executionUnitId" : source.scopePolicy === "execution-unit" ? "executionUnitId" : source.scopePolicy === "record-workspace-unit" ? "unitId" : null;
     if (unitField && !units.allUnits && units.unitIds.length > 0 && units.unitIds.length <= 30) query = query.where(unitField, "in", units.unitIds);
     query = query.orderBy(FieldPath.documentId());
@@ -237,7 +304,8 @@ export async function collectPersonSource(params: {
     let reads = 0, queries = 0, denied = 0, eof = false;
     const items: ReturnType<typeof referenceItem>[] = [];
     while (reads < PERSON_SOURCE_READ_BUDGET && queries < PERSON_SOURCE_QUERY_BUDGET && items.length < limit) {
-      const costPerRow = source.scopePolicy === "classification-receipt" || group || source.id === "financial-entity-person-pix-requests" ? 2 : 1;
+      const costPerRow = source.id === "financial-purchase-pix-event-confirmers" ? 3
+        : source.scopePolicy === "classification-receipt" || group || ["financial-entity-person-pix-requests", "financial-purchase-pix-request-confirmers"].includes(source.id) ? 2 : 1;
       const batchSize = Math.min(Math.floor((PERSON_SOURCE_READ_BUDGET - reads) / costPerRow), Math.max(20, limit));
       if (!batchSize) break;
       const pageQuery = position ? query.startAfter(group ? db.doc(position) : position) : query;
@@ -246,7 +314,7 @@ export async function collectPersonSource(params: {
       let processed = 0;
       for (const doc of snapshot.docs) {
         position = group ? doc.ref.path : doc.id; processed++;
-        if (source.scopePolicy === "classification-receipt" || group || source.id === "financial-entity-person-pix-requests") reads++; // reserve the related record proof conservatively
+        reads += costPerRow - 1; // reserve related record reads conservatively
         // Same-named subcollection of another module: never exposed and not a scope denial (cursor still advances).
         if (group && !ownedGroupParent(source, doc.ref)) continue;
         if (await canViewPersonSourceRow(actor, source, doc)) items.push(referenceItem(doc, source)); else denied++;

@@ -18,7 +18,7 @@ const purchaseItemSchema = z.object({
   operationalCategoryName: z.string().max(200).nullable().optional(),
   itemDestination: z.enum(["stock", "asset", "uniform"]).optional(),
   unit: z.string().trim().min(1).max(40),
-  purchaseUnitType: z.enum(["content", "package"]).optional(),
+  purchaseUnitType: z.enum(["content", "logistic"]).optional(),
   purchaseUnitLabel: z.string().trim().min(1).max(80).optional(),
   quantityOrdered: z.number().finite().positive().max(10_000_000),
   unitPriceOrdered: z.number().finite().positive().max(10_000_000),
@@ -31,28 +31,40 @@ const purchaseItemSchema = z.object({
 export const purchaseRegistrationSchema = z.object({
   supplierId: id,
   supplierName: z.string().trim().min(2).max(200),
+  externalOrderNumber: z.string().trim().min(1).max(80).optional(),
   destinationKioskId: id.optional(),
   receiptMode: z.literal("future_delivery"),
-  paymentMethod: z.literal("boleto"),
-  paymentCondition: z.literal("installments"),
+  paymentMethod: z.enum(["boleto", "pix"]),
+  paymentCondition: z.enum(["installments", "cash"]),
   paymentDueDate: isoDate,
-  installmentsCount: z.number().int().min(2).max(100),
-  installmentDueDates: z.array(isoDate).min(2).max(100),
+  installmentsCount: z.number().int().min(1).max(100).optional(),
+  installmentDueDates: z.array(isoDate).max(100).optional(),
   estimatedReceiptDate: isoDate,
   accountPlanId: id,
   accountPlanName: z.string().trim().min(1).max(200),
   resultCenterId: id.optional(),
   resultCenterName: z.string().trim().min(1).max(200).optional(),
-  deliveryFee: z.literal(0),
+  deliveryFee: money,
+  freightPaymentMode: z.enum(["included_with_goods", "separate"]).optional(),
+  freightAccountPlanId: id.optional(),
+  freightAccountPlanName: z.string().trim().min(1).max(200).optional(),
+  freightSupplierId: id.nullable().optional(),
+  freightSupplierName: z.string().trim().min(2).max(200).nullable().optional(),
   notes: z.string().trim().min(1).max(1000),
   expectedTotalCents: z.number().int().positive().max(100_000_000),
   items: z.array(purchaseItemSchema).min(1).max(100),
 }).strict().superRefine((value, context) => {
-  if (value.installmentsCount !== value.installmentDueDates.length) {
+  if (value.paymentCondition === "installments"
+    ? value.paymentMethod !== "boleto" || !value.installmentsCount || value.installmentsCount < 2 || value.installmentsCount !== value.installmentDueDates?.length
+    : value.paymentMethod !== "pix" || (value.installmentsCount ?? 1) !== 1 || (value.installmentDueDates?.length ?? 0) !== 0) {
     context.addIssue({ code: "custom", path: ["installmentDueDates"], message: "A quantidade de vencimentos deve corresponder às parcelas." });
   }
+  if (value.deliveryFee > 0 && (!value.freightAccountPlanId || !value.freightPaymentMode
+    || value.freightPaymentMode === "separate" && !value.freightSupplierName)) {
+    context.addIssue({ code: "custom", path: ["deliveryFee"], message: "Frete exige conta, forma de pagamento e favorecido." });
+  }
   const totalCents = Math.round(value.items.reduce((sum, item) =>
-    sum + item.quantityOrdered * item.unitPriceOrdered - (item.discountOrdered ?? 0), 0) * 100);
+    sum + item.quantityOrdered * item.unitPriceOrdered - (item.discountOrdered ?? 0), value.deliveryFee) * 100);
   if (totalCents !== value.expectedTotalCents) {
     context.addIssue({ code: "custom", path: ["items"], message: "A soma dos itens difere do total confirmado." });
   }
@@ -64,10 +76,11 @@ export const purchaseFiscalSchema = z.object({
   invoiceAccessKey: z.string().transform((value) => value.replace(/\D/g, "")).pipe(z.string().regex(/^\d{44}$/)),
   issuedAt: isoDate,
   authorizationProtocol: z.string().trim().min(1).max(80),
-  supplierDocument: z.string().transform((value) => value.replace(/\D/g, "")).pipe(z.string().regex(/^\d{14}$/)),
-  recipientDocument: z.string().transform((value) => value.replace(/\D/g, "")).pipe(z.string().regex(/^\d{14}$/)),
+  supplierDocument: z.string().transform((value) => value.replace(/\D/g, "")).pipe(z.string().regex(/^\d{14}$/).refine(validBrazilianTaxId)),
+  recipientDocument: z.string().transform((value) => value.replace(/\D/g, "")).pipe(z.string().regex(/^\d{14}$/).refine(validBrazilianTaxId)),
   totalCents: z.number().int().positive().max(100_000_000),
-}).strict();
+}).strict().refine((value) => value.invoiceAccessKey.slice(6, 20) === value.supplierDocument,
+  { path: ["invoiceAccessKey"], message: "O emitente da chave não corresponde ao fornecedor da nota." });
 
 export const supplierEntitySchema = z.object({
   type: z.enum(["pessoa_fisica", "pessoa_juridica"]),
@@ -107,6 +120,8 @@ export function purchaseFiscalPatch(input: PurchaseFiscal) {
     fiscal: {
       series: input.invoiceSeries,
       issuedAt: input.issuedAt,
+      protocol: input.authorizationProtocol,
+      issuerCnpj: input.supplierDocument,
       authorizationProtocol: input.authorizationProtocol,
       supplierDocument: input.supplierDocument,
       recipientDocument: input.recipientDocument,
@@ -117,12 +132,26 @@ export function purchaseFiscalPatch(input: PurchaseFiscal) {
 
 export function assertPurchaseSnapshot(order: Record<string, unknown>, input: PurchaseRegistration) {
   if (order.supplierId !== input.supplierId) throw new PaymentCliError("O pedido retornado pertence a outro fornecedor.");
-  if (order.paymentMethod !== "boleto" || order.paymentCondition !== "installments") {
-    throw new PaymentCliError("O pedido retornado não preservou boleto parcelado.");
+  if (order.paymentMethod !== input.paymentMethod || order.paymentCondition !== input.paymentCondition) {
+    throw new PaymentCliError("O pedido retornado não preservou a forma de pagamento.");
   }
-  if (Number(order.installmentsCount) !== input.installmentsCount
-    || JSON.stringify(order.installmentDueDates) !== JSON.stringify(input.installmentDueDates)) {
+  if (Number(order.installmentsCount) !== (input.installmentsCount ?? 1)
+    || (input.paymentCondition === "installments" && JSON.stringify(order.installmentDueDates) !== JSON.stringify(input.installmentDueDates))) {
     throw new PaymentCliError("O pedido retornado não preservou os vencimentos confirmados.");
+  }
+  if (order.paymentDueDate !== input.paymentDueDate || order.estimatedReceiptDate !== input.estimatedReceiptDate
+    || (input.externalOrderNumber && order.externalOrderNumber !== input.externalOrderNumber)
+    || (input.resultCenterId && order.resultCenterId !== input.resultCenterId)
+    || (input.freightPaymentMode && order.freightPaymentMode !== input.freightPaymentMode)
+    || (input.freightAccountPlanId && order.freightAccountPlanId !== input.freightAccountPlanId)
+    || (input.freightSupplierId && order.freightSupplierId !== input.freightSupplierId)
+    || (input.freightSupplierName && order.freightSupplierName !== input.freightSupplierName)) {
+    throw new PaymentCliError("O pedido retornado não preservou vencimento ou componentes financeiros.");
+  }
+  if (order.destinationKioskId !== input.destinationKioskId
+    || Math.round(Number(order.deliveryFee ?? 0) * 100) !== Math.round(input.deliveryFee * 100)
+    ) {
+    throw new PaymentCliError("O pedido retornado não preservou unidade ou frete.");
   }
   if (Math.round(Number(order.totalEstimated) * 100) !== input.expectedTotalCents) {
     throw new PaymentCliError("O pedido retornado não preservou o total confirmado.");

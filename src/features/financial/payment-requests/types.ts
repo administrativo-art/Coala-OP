@@ -154,6 +154,8 @@ export type PixBankPaymentRequest = BankPaymentRequestBase & {
     previousPaidRequestId: string;
     replacedBoletoHash?: string;
   };
+  purchasePixIndication?: import("./purchase-supplier-pix.server").PurchasePixIndication;
+  purchasePixSource?: import("./purchase-supplier-pix.server").PurchasePixSourceSnapshot;
   status: Exclude<BankPaymentRequestStatus, "awaiting_statement">;
 };
 
