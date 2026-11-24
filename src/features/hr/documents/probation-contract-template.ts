@@ -193,3 +193,15 @@ export const PROBATION_CONTRACT_V4_VARIABLES = [
 
 export const PROBATION_CONTRACT_V4_FIELD_MAPPING =
   PROBATION_CONTRACT_V3_FIELD_MAPPING;
+
+/** v5: mesmos campos da v4; só alinha os nomes do Termo LGPD e do Regulamento de Metas e Prêmios. */
+export const PROBATION_CONTRACT_V5_SOURCE =
+  "docs/modelos-documentos/admissionais/01-contrato-experiencia-v5.docx";
+
+export const PROBATION_CONTRACT_V5_HASH =
+  "ad01e3984787d49a212622d4480b5abb0a551d822f284e364fab3220229970df";
+
+export const PROBATION_CONTRACT_V5_VARIABLES = PROBATION_CONTRACT_V4_VARIABLES;
+
+export const PROBATION_CONTRACT_V5_FIELD_MAPPING =
+  PROBATION_CONTRACT_V4_FIELD_MAPPING;

@@ -38,20 +38,37 @@ e `d3271e2414a25867637c8412c76a9c767fba626d3c1fdcfeffc8cd64c93b5ce1`,
 respectivamente. A versão 1 do termo e a declaração de IR foram publicadas
 em 10/11/2026; a versão 2 do termo aguarda a publicação desta correção.
 
-Atualização local de 27/10/2026: o termo LGPD passa à versão 5, com a seção
-3-A aprovada sobre localização no ponto e acompanhamento entre unidades.
-A v4 permanece preservada. A v5 está preparada no código e ainda não foi
-publicada; o estado publicado acima descreve o kit anterior. Documentos já
-gerados ou assinados não são reescritos. Para colaboradores que já receberam
-o termo anterior, a comunicação complementar/aditivo será um documento próprio.
+Atualização local de 02/11/2026: o termo LGPD passa à versão 6. A v6 parte
+da v5 e acrescenta as seções 3-B (acompanhamento da localização durante a
+jornada, somente em aparelho fornecido pela empresa, conforme decisão de 24/11/2026, e gestão de aparelhos empresariais) e
+3-C (metas, desempenho e premiação), além de dados de aplicativos e aparelhos,
+desbloqueio biométrico sem armazenamento pela empresa, serviços de IA, telas
+internas e acesso de suporte somente leitura. A v5 entrou no catálogo em
+28/10/2026 e permanece preservada, como as anteriores; a v6 ainda não foi
+publicada. Documentos já gerados ou assinados não são reescritos. Para
+colaboradores que já receberam o termo anterior, a comunicação
+complementar/aditivo será um documento próprio.
+
+Na mesma data, revisões somente de texto geradas por rotina temporária já encerrada, com hashes fixos: o contrato
+de experiência v5 cita os títulos exatos do Termo de Ciência sobre o
+Tratamento de Dados Pessoais e do Regulamento de Metas e Prêmios por
+Desempenho (a v4 citava "Regulamento de Bonificação"); o regulamento v4
+parte da v2 e acrescenta à cláusula 5 a apuração pelos sistemas internos e o
+pedido de demonstração e revisão ao Departamento Pessoal, como prevê a seção
+3-C do termo LGPD v6. O número 3 do regulamento foi pulado porque
+`05-metas-premios-v3.docx` já existe como variante não catalogada de julho.
+Contrato, regulamento e LGPD tiveram o golden atualizado no conversor oficial em 24/11/2026: 4, 2 e 13 páginas, respectivamente, com inspeção visual de todas as páginas.
+
+Histórico de 27/10/2026: a v5 acrescentou à v4 a seção 3-A sobre localização no
+ponto e acompanhamento entre unidades.
 
 | Ordem | Arquivo operacional | SHA-256 | Assinatura |
 |---:|---|---|---|
-| 1 | `01-contrato-experiencia-v4.docx` | `081e850ded830aef5911c34754ca549313074681be63e7f4f9b204888bedd91f` | Pacote |
+| 1 | `01-contrato-experiencia-v5.docx` | `ad01e3984787d49a212622d4480b5abb0a551d822f284e364fab3220229970df` | Pacote |
 | 2 | `02-banco-horas-v2.docx` | `cff1a19adbca0847db5337182e503340edeb590b8786a238c6249be957fe0b32` | Pacote |
-| 3 | `03-termo-lgpd-v5.docx` | `0dd7f0309096dd7e7a938d8789fcb297c1a25b78f56f22ee135ae3be0edb2ba2` | Pacote |
+| 3 | `03-termo-lgpd-v6.docx` | `163eeb3601b5a8c632ef83e34a28dee1451483a2b91052aeced944b63b6c8e53` | Pacote |
 | 4 | `04-imagem-voz-v4.docx` | `a266bbf3ffa1e4e3fa06108b57f5755879151a1af4e99497ac099d27856d9a0a` | Pacote; autorização facultativa |
-| 5 | `05-metas-premios-v2.docx` | `a5662e341eb06b40f01a6db049db18411b94d2bd1d0f74595909eb5ff6624745` | Pacote |
+| 5 | `05-metas-premios-v4.docx` | `bb6c2c80561cbd2aa76d5dc62ffb29945b0bdf2751b561b5fcfcb7588a09857f` | Pacote |
 | 6A | `06-vale-transporte-solicitacao-v2.docx` | `cd643a4caf7c088e98af1dc6908cac7d2005163a795f323df1fcd8450fca53bb` | Pacote |
 | 6B | `06-vale-transporte-renuncia-v2.docx` | `3ea7e9e3ddbfa2a4ffefe780efbd03677984131e4fdf3ca8437aa81fc3a1a6de` | Pacote |
 | 7 | `07-confidencialidade-v2.docx` | `56306e646b241ab3b0bb93c804dc3cf549a833efb583bf990c9a18c8ba275f80` | Pacote |
@@ -84,9 +101,15 @@ A consulta foi somente de leitura, sem alterar documentos ou permissões.
 
 ## Geração e composição
 
-O script `scripts/prepare-lgpd-v5.py` reproduz a v5 a partir da v4 com hash
-fixo e insere somente a seção 3-A antes da seção 4. Os demais componentes do
-DOCX e os cinco campos parametrizados existentes são preservados. As dez
+A v6 foi preparada a partir da v5 com hashes fixos de entrada e saída,
+preservando a formatação e os componentes opacos do DOCX. A revisão de
+24/11/2026 limita o acompanhamento durante a jornada aos aparelhos fornecidos
+pela empresa, cadastrados e autorizados como empresariais; exclui aparelhos
+pessoais. Os testes conferem o hash catalogado e a preservação do texto
+anterior fora das alterações identificadas. As rotinas temporárias de montagem
+foram encerradas após a geração; as fontes DOCX versionadas são canônicas.
+O canário executado em 24/11/2026 usa o conversor oficial; o golden agora corresponde à v6 (13 páginas), ao contrato v5 (4 páginas) e às metas v4 (2 páginas). Documentos já gerados e versões anteriores ficam preservados.
+Os componentes opacos do DOCX e os cinco campos parametrizados existentes são preservados. As dez
 páginas da matriz v5 foram renderizadas e inspecionadas; os testes do catálogo
 validam hash, posição da cláusula e preservação integral do conteúdo anterior.
 A atualização documental não ativa coleta, não concede acesso a coordenadas
