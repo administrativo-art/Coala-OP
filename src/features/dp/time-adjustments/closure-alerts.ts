@@ -5,6 +5,7 @@ export const alertLabels: Partial<Record<DayIncident, string>> = {
   odd: 'Número ímpar de batidas',
   missing_break: 'Intervalo sem registro completo',
   short_break: 'Intervalo abaixo do previsto',
+  coverage_early_exit: 'Saída antes do fim da cobertura',
 };
 
 export type ClosureAlert = {

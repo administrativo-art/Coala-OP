@@ -208,6 +208,8 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
       overnight: raw.overnight,
       plannedMinutes: pieces.length ? pieces.reduce((total, item) => total + (plannedMinutesOf(item) ?? 0), 0) : plannedMinutesOf(raw),
       referenceMinutes: raw.referenceMinutes, toleranceMinutes: raw.toleranceMinutes, journeyId: raw.journeyId,
+      // Dia manual prevalece sobre a política de cobertura.
+      ...(raw.coverage === true && !pieces.length ? { coverage: true } : {}),
     } : null;
     const markings = [
       ...datedMarkings.filter((item) => item.bankWorkDate === date && !discarded.has(`${item.nsr}|${item.markedAt}`)).map((item) => item.markedAt),

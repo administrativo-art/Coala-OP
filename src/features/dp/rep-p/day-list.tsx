@@ -19,10 +19,13 @@ export const INCIDENTS: Record<DayIncident, { label: string; detail: string; ico
   missing: { label: "Dia sem batidas", detail: "Nenhuma batida num dia de escala. Se houve motivo, justifique com uma ausência.", icon: TimerOff },
   odd: { label: "Número ímpar de batidas", detail: "O dia tem número ímpar de batidas: um período ficou sem fechamento.", icon: AlertTriangle },
   missing_break: { label: "Jornada sem intervalo classificado", detail: "A jornada foi finalizada sem um início e uma volta de intervalo. As batidas permanecem válidas e o dia segue para conferência.", icon: Coffee },
-  late_exit: { label: "Saída após o previsto", detail: "Última batida depois do horário da escala além da tolerância da jornada.", icon: Clock3 },
-  short_break: { label: "Intervalo menor que o previsto", detail: "Intervalo abaixo do previsto além da tolerância da jornada, ou pausa menor que o mínimo (aviso de conferência).", icon: Coffee },
+  late_exit: { label: "Saída após o previsto", detail: "Última batida depois do horário da escala além da tolerância da jornada. Na política de cobertura, só quando o trabalhado passa da carga da jornada.", icon: Clock3 },
+  late_start: { label: "Entrada após o previsto", detail: "Primeira batida depois do início do turno além da tolerância da jornada.", icon: Clock3 },
+  early_exit: { label: "Saída antes do previsto", detail: "Última batida antes do fim do turno além da tolerância da jornada.", icon: Clock3 },
+  coverage_early_exit: { label: "Saída antes do fim da cobertura", detail: "Na política de cobertura, o turno é a cobertura mínima da unidade: sair antes do fim deixa o quiosque descoberto.", icon: AlertTriangle },
+  short_break: { label: "Intervalo menor que o previsto", detail: "Intervalo abaixo do previsto, ou pausa menor que o mínimo. A tolerância da jornada não vale para o intervalo. Acima de 6h trabalhadas, o mínimo é 1h.", icon: Coffee },
   other_unit: { label: "Batida em outra unidade", detail: "Batida feita numa unidade diferente da escala. Não foi bloqueada; o DP confere a troca.", icon: MapPin },
-  long_break: { label: "Intervalo maior que o previsto", detail: "Intervalo acima do previsto além da tolerância da jornada (aviso de conferência).", icon: Coffee },
+  long_break: { label: "Intervalo maior que o previsto", detail: "Intervalo acima do previsto (aviso de conferência). A tolerância da jornada não vale para o intervalo.", icon: Coffee },
 };
 
 export const durationLabel = (minutes: number, signed = false) => {
@@ -34,7 +37,20 @@ export const durationLabel = (minutes: number, signed = false) => {
 /** Memória específica da ocorrência; complementa a explicação geral sem alterar a prévia. */
 export function incidentFact(day: DayView, incident: DayIncident, unitNames: Map<string, string> = new Map()) {
   const work = day.shift?.type === "work" ? day.shift : null;
-  const plannedBreak = plannedBreakMinutesOf(work);
+  // O intervalo comparado pode ser 1h na política de cobertura acima de 6h trabalhadas.
+  const plannedBreak = day.expectedBreakMinutes ?? plannedBreakMinutesOf(work);
+  if (incident === "late_exit" && day.extendUntil && day.markings.length) {
+    return `Pode estender até ${day.extendUntil} · trabalhado ${durationLabel(day.workedMinutes)} · passou da carga da jornada.`;
+  }
+  if ((incident === "early_exit" || incident === "coverage_early_exit") && work?.endTime && day.markings.length) {
+    return `Fim do turno ${work.endTime} · saída ${fiscalClock(day.markings.at(-1)!.markedAt)}.`;
+  }
+  if (incident === "late_start" && work?.startTime && day.markings.length) {
+    return `Início do turno ${work.startTime} · entrada ${fiscalClock(day.markings[0].markedAt)}.`;
+  }
+  if (incident === "short_break" && day.extendUntil && plannedBreak >= 60) {
+    return `Trabalhado ${durationLabel(day.workedMinutes)}: acima de 6h o intervalo mínimo é 1h${work?.breakSplit === "multiple" ? "" : " numa pausa só"} · realizado ${durationLabel(day.breakMinutes ?? 0)}.`;
+  }
   if (incident === "late_exit" && work?.endTime && day.markings.length) {
     const actual = fiscalClock(day.markings.at(-1)!.markedAt);
     const difference = day.deviation?.edge === "end" ? day.deviation.minutes : null;
@@ -123,6 +139,7 @@ export function DayCard({ day, today, selected, reviewing = false, onOpen }: { d
         {work ? (
           <span className="block text-xs text-ds-ink-muted">
             Previsto {work.startTime}–{work.endTime}
+            {day.extendUntil ? <> · pode estender até {day.extendUntil}</> : null}
             {day.deviation ? <span className="text-ds-caution"> · {day.deviation.edge === "end" ? "saída" : "entrada"} registrada {fiscalClock(day.markings[day.deviation.edge === "end" ? day.markings.length - 1 : 0].markedAt)}</span> : null}
           </span>
         ) : null}

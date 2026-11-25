@@ -27,7 +27,12 @@ export type BankShift = {
   /** Duração líquida prevista do turno (sem o intervalo). */
   plannedMinutes: number | null;
   referenceMinutes: number | null; toleranceMinutes: number | null; journeyId: string | null;
+  /** Política de jornada de cobertura congelada no turno: a saída é comparada com início + carga + 1h. */
+  coverage?: boolean;
 };
+
+/** Mesmo limite do Registro de ponto (`day-model.ts`): início + carga da jornada + 1h de intervalo. */
+export const COVERAGE_BREAK_MINUTES = 60;
 export type BankAbsence = { id: string; typeName: string; effect: DPAbsenceType['workdayEffect']; unit: 'day' | 'hour'; startDate: string; endDate: string; minutes: number | null };
 export type BankPolicy = Pick<DPOvertimePolicy, 'id' | 'version' | 'categories' | 'timeBank' | 'dailyOvertimeLimitMinutes' | 'weeklyOvertimeLimitMinutes'>;
 export type BankDayInput = { date: string; shift: BankShift | null; markings: string[]; absences: BankAbsence[]; holiday: boolean; policy: BankPolicy | null };
@@ -199,7 +204,11 @@ export function computeBankDay(input: BankDayInput): BankDay {
   const tolerance = Math.min(shift!.toleranceMinutes ?? 0, 2 * MARKING_TOLERANCE_LIMIT);
   if (markings.length && shift!.startTime && shift!.endTime && tolerance > 0) {
     const early = clockMinutes(shift!.startTime) - localMinutes(markings[0]);
-    const late = localMinutes(markings[markings.length - 1]) - clockMinutes(shift!.endTime);
+    // Na cobertura, ficar até completar a carga é esperado: a tolerância da saída compara com o limite de extensão.
+    const coverageEnd = shift!.coverage && !shift!.overnight && shift!.referenceMinutes && shift!.plannedMinutes !== null
+      && shift!.referenceMinutes > shift!.plannedMinutes
+      ? clockMinutes(shift!.startTime) + shift!.referenceMinutes + COVERAGE_BREAK_MINUTES : null;
+    const late = localMinutes(markings[markings.length - 1]) - (coverageEnd ?? clockMinutes(shift!.endTime));
     if (Math.abs(early) <= MARKING_TOLERANCE_LIMIT && Math.abs(late) <= MARKING_TOLERANCE_LIMIT && Math.abs(early) + Math.abs(late) <= tolerance) {
       considered = worked - early - late;
       day.toleranceApplied = early !== 0 || late !== 0;

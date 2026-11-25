@@ -83,3 +83,33 @@ describe('Aviso de intervalo na faixa de registro', () => {
     assert.equal(status?.level, 'danger');
   });
 });
+
+describe('Aviso de intervalo sem tolerância e na Política de jornada de cobertura (25/11/2026)', () => {
+  const fixed: DayShift = { type: 'work', startTime: '09:00', endTime: '15:15', shiftName: 'CS - 01 AT | Manhã', unitName: null,
+    breakType: 'fixed', breakStart: '12:00', breakEnd: '12:15', breakDurationMinutes: 15, breakWindowStart: null, breakWindowEnd: null,
+    expectedPunches: 4, toleranceMinutes: 5 };
+
+  it('a tolerância da jornada não vale no intervalo: 18 min de 15 já é aviso grave', () => {
+    const status = breakStatus(fixed, marks('09:00', '12:00', '12:18'), at('12:20'));
+    assert.equal(status?.level, 'danger');
+    assert.equal(status?.detail, 'O intervalo não tem tolerância.');
+  });
+
+  it('na cobertura, até 1h de pausa é permitido e o aviso orienta quem vai estender', () => {
+    const coverage = { ...fixed, coverage: true, referenceMinutes: 480 };
+    const during = breakStatus(coverage, marks('09:00', '12:00'), at('12:20'));
+    assert.notEqual(during?.level, 'danger');
+    assert.match(during?.detail ?? '', /Vai estender além de 6h\? Faça 1h de intervalo numa pausa só\./);
+    assert.notEqual(breakStatus(coverage, marks('09:00', '12:00', '13:00'), at('13:05'))?.level, 'danger');
+    assert.equal(breakStatus(coverage, marks('09:00', '12:00', '13:05'), at('13:06'))?.level, 'danger');
+  });
+
+  it('cobertura sem carga maior que o turno, noturna ou em dia manual não muda o aviso', () => {
+    for (const shift of [{ ...fixed, coverage: true, referenceMinutes: 360 }, { ...fixed, coverage: true, referenceMinutes: 480, overnight: true },
+      { ...fixed, coverage: true, referenceMinutes: 480, manualOrder: 1 }]) {
+      const status = breakStatus(shift, marks('09:00', '12:00'), at('12:20'));
+      assert.equal(status?.level, 'danger');
+      assert.doesNotMatch(status?.detail ?? '', /Vai estender/);
+    }
+  });
+});

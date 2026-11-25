@@ -40,7 +40,7 @@ Assim, 6h trabalhadas num turno de 6h aparecem como 0:00 na tela do dia e −2h 
 4. **O limite é exibido com 1h de intervalo:** "Turno 09:00–15:15 · pode estender até HH:MM". HH:MM é o início do turno + carga da jornada + 1h. A ocorrência de saída além do limite é calculada pelos **minutos trabalhados**, que não podem passar da carga da jornada + tolerância. O horário exibido serve de referência para a colaboradora.
 5. **Intervalo pelo tempo trabalhado** (só com cobertura ativa; decisão de 25/11/2026):
    - até 6h trabalhadas, vale o intervalo do turno (15 min);
-   - acima de 6h, o intervalo esperado é **fixo em 1h**, com a tolerância da jornada.
+   - acima de 6h, o intervalo esperado é **fixo em 1h**, sem tolerância (a tolerância vale só no início e no fim da jornada).
    - Não há intervalo acima de 2h nem justificativa para ele (item removido).
    - Ocorrências: "passou de 6h com intervalo menor que 1h" (grave) e "intervalo maior que o previsto" (a existente, agora comparada com 1h).
 6. **Entrada e saída mínima** continuam presas ao turno. Sair antes do fim do turno fica a conferir (proposta; confirmar).
@@ -63,6 +63,10 @@ Assim, 6h trabalhadas num turno de 6h aparecem como 0:00 na tela do dia e −2h 
 - **Offline no Coala Go:** dias fechados vêm do servidor. O estado "em curso" de hoje (horas até agora, em intervalo desde) continua local para funcionar sem rede e passa a seguir o mesmo contrato. Definir o que aparece sem rede para dias anteriores (último resultado guardado).
 
 - **P1 — turnos já publicados (Doc Brown, 25/11/2026):** a decisão de cobertura é congelada na escrita do turno. Os 172 turnos de dezembro publicados antes da política não têm `coverage`. Ordem: (1) publicar a jornada com a política (nova versão, porque a atual está publicada); (2) regravar ou republicar os turnos de quem entra na política. O passo (2) é escrita em produção: script com ensaio e cópia de segurança, só com autorização do programador.
+
+- **P2 — valor do intervalo suprimido (Doc Brown, etapa 4):** hoje o intervalo suprimido (>6h com <1h) vira `short_break`, entra nos alertas do fechamento e trava a folha da pessoa em "Confira o intervalo e seu efeito na folha" (`breakReviewDates`). Faltam: minutos suprimidos visíveis no alerta do fechamento, o caminho para liberar a folha depois de conferido (hoje o texto manda reabrir a competência) e a natureza/valor do pagamento (art. 71 §4º; pergunta ao advogado). O fechamento só aceita quatro naturezas de lançamento, então o evento indenizatório exige natureza nova no pipeline de folha.
+- **Condição de P1:** não regravar os turnos de dezembro com a cobertura antes de o Coala Go usar o contrato central (etapa 6); até lá o app orienta o intervalo pela regra antiga.
+- **Efeito imediato da regra v2:** sem tolerância no intervalo, competências abertas (novembro) podem ganhar alertas `short_break` novos no fechamento.
 
 ## 5. Ordem de execução
 

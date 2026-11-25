@@ -39,6 +39,8 @@ export type DayShift = {
   toleranceMinutes?: number | null;
   /** Política de jornada de cobertura, congelada na escrita do turno. */
   coverage?: boolean;
+  /** Carga da jornada no dia (referência do banco); a cobertura estende o dia até ela. */
+  referenceMinutes?: number | null;
 };
 
 export type DayMarking = { receiptId: string; markedAt: string; nsr: number; executionUnitId: string; receiptStatus: "available" | "pending";
@@ -56,7 +58,8 @@ export type DayTreatment = { type: "discard" | "inclusion"; workDate: string; ad
 
 export type DayAbsence = { id: string; typeName: string; status: string; startDate: string; endDate: string; approvedByInaction?: boolean };
 
-export type DayIncident = "missing" | "odd" | "missing_break" | "late_exit" | "short_break" | "long_break" | "other_unit";
+export type DayIncident = "missing" | "odd" | "missing_break" | "late_exit" | "short_break" | "long_break" | "other_unit"
+  | "late_start" | "early_exit" | "coverage_early_exit";
 
 export type DayView = {
   date: string;
@@ -77,7 +80,32 @@ export type DayView = {
   balanceMinutes: number | null;
   /** Desvio da saída (ou da entrada) acima da tolerância da jornada, em minutos com sinal. */
   deviation: { edge: "start" | "end"; minutes: number } | null;
+  /**
+   * Política de jornada de cobertura: até quando a pessoa pode estender o dia (início + carga + 1h de intervalo).
+   * Só informativo; a ocorrência usa os minutos trabalhados. Null fora da política.
+   */
+  extendUntil?: string | null;
+  /** Intervalo esperado efetivamente usado na comparação (o do turno, ou 1h na cobertura acima de 6h). */
+  expectedBreakMinutes?: number | null;
 };
+
+/** Acima de 6h trabalhadas, o intervalo mínimo é 1h (CLT art. 71); até 6h vale o do turno. */
+export const COVERAGE_LONG_DAY_MINUTES = 360;
+export const COVERAGE_LONG_DAY_BREAK_MINUTES = 60;
+
+function clockOf(minutes: number) {
+  const value = ((minutes % 1440) + 1440) % 1440;
+  return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+}
+
+/** Dia na Política de jornada de cobertura: turno de trabalho comum, com carga conhecida maior que o turno. */
+export function coverageOf(shift: DayShift | null, manualSegments: DayShift[]) {
+  if (!shift || shift.type !== "work" || !shift.coverage || shift.overnight || manualSegments.length) return null;
+  const reference = shift.referenceMinutes ?? null;
+  const planned = plannedWorkMinutesOf(shift);
+  if (!shift.startTime || reference === null || planned === null || reference <= planned) return null;
+  return { reference, planned, extendUntil: clockOf(minutesOf(shift.startTime) + reference + COVERAGE_LONG_DAY_BREAK_MINUTES) };
+}
 
 /** Tolerância única do dia, cadastrada na jornada (decisão do programador): vale para desvios, intervalo e saldo. */
 export function toleranceOf(shift: DayShift | null) {
@@ -175,6 +203,7 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
   const tolerance = toleranceOf(shift);
   const incidents: DayIncident[] = [];
   let deviation: DayView["deviation"] = null;
+  const coverage = coverageOf(shift, manualSegments);
 
   // Jornada que atravessa a meia-noite tem batidas em dois dias civis: sem tratamento, só o total é mostrado.
   if (shift?.overnight) {
@@ -186,20 +215,33 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
   if (shift && !manualSegments.length && markings.length >= 2 && markings.length % 2 === 0 && shift.startTime && shift.endTime) {
     const endDiff = minutesOf(fiscalClock(markings[markings.length - 1].markedAt)) - minutesOf(shift.endTime);
     const startDiff = minutesOf(fiscalClock(markings[0].markedAt)) - minutesOf(shift.startTime);
-    if (Math.abs(endDiff) > tolerance) deviation = { edge: "end", minutes: endDiff };
+    // Tolerância só no início e no fim da jornada (decisão de 25/11/2026). Na cobertura, ficar além do turno até
+    // completar a carga é esperado: a saída tardia conta pelos minutos trabalhados acima da carga.
+    const lateBeyondCoverage = coverage ? worked > coverage.reference + tolerance : endDiff > tolerance;
+    const endDeviates = endDiff < -tolerance || (coverage ? lateBeyondCoverage : endDiff > tolerance);
+    if (endDeviates) deviation = { edge: "end", minutes: coverage && endDiff > 0 ? worked - coverage.reference : endDiff };
     else if (Math.abs(startDiff) > tolerance) deviation = { edge: "start", minutes: startDiff };
-    if (endDiff > tolerance) incidents.push("late_exit");
+    if (lateBeyondCoverage) incidents.push("late_exit");
+    if (startDiff > tolerance) incidents.push("late_start");
+    if (endDiff < -tolerance) incidents.push(coverage ? "coverage_early_exit" : "early_exit");
   }
-  const expectedBreakValue = plannedBreakMinutesOf(shift);
+  // Na cobertura, acima de 6h trabalhadas o intervalo esperado é 1h; até 6h, o do turno.
+  const longCoverageDay = Boolean(coverage) && worked > COVERAGE_LONG_DAY_MINUTES;
+  const expectedBreakValue = longCoverageDay ? COVERAGE_LONG_DAY_BREAK_MINUTES : plannedBreakMinutesOf(shift);
   const expectedBreak = expectedBreakValue > 0 ? expectedBreakValue : null;
   const classificationsComplete = markings.length > 0 && markings.every((marking) => marking.classification?.purpose);
   const journeyEnded = markings.at(-1)?.classification?.purpose === "journey_end";
   const hasBreakStart = markings.some((marking) => marking.classification?.purpose === "break_start");
   const hasBreakEnd = markings.some((marking) => marking.classification?.purpose === "break_end");
   if (shift && expectedBreak && classificationsComplete && journeyEnded && (!hasBreakStart || !hasBreakEnd)) incidents.push("missing_break");
+  // Intervalo nunca usa a tolerância da jornada (decisão de 25/11/2026).
   if (breakMinutes !== null && expectedBreak) {
-    if (breakMinutes < expectedBreak - tolerance) incidents.push("short_break");
-    if (breakMinutes > expectedBreak + tolerance) incidents.push("long_break");
+    // Sem fracionamento no cadastro do turno, a 1h da cobertura precisa ser uma pausa só.
+    const counted = longCoverageDay && shift?.breakSplit !== "multiple" ? Math.max(0, ...pauseLengths(markings)) : breakMinutes;
+    if (counted < expectedBreak) incidents.push("short_break");
+    if (breakMinutes > expectedBreak) incidents.push("long_break");
+  } else if (longCoverageDay && expectedBreak && breakMinutes === null && markings.length % 2 === 0) {
+    incidents.push("short_break");
   }
   if (shift?.breakMinPauseMinutes && pauseLengths(markings).some((length) => length < shift.breakMinPauseMinutes!)) {
     if (!incidents.includes("short_break")) incidents.push("short_break");
@@ -209,10 +251,15 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
   if (shift?.unitId && shift.executionUnitPolicy !== "free" && markings.some((marking) => !scheduledUnits.has(marking.executionUnitId))) {
     incidents.push("other_unit");
   }
-  const difference = past && shift && !absence && markings.length % 2 === 0 && plannedWorkMinutes !== null ? worked - plannedWorkMinutes : null;
+  const comparable = past && shift && !absence && markings.length % 2 === 0 && plannedWorkMinutes !== null;
+  // Na cobertura, entre o turno e a carga não há saldo no dia (o banco compara com a carga).
+  const difference = !comparable ? null
+    : coverage ? (worked < coverage.planned ? worked - coverage.planned : Math.max(0, worked - coverage.reference))
+    : worked - plannedWorkMinutes!;
   const balanceMinutes = difference === null ? null : Math.abs(difference) <= tolerance ? 0 : difference;
   return { date: input.date, shift: input.shift, manualSegments, markings, allMarkings, absence, incidents, workedMinutes: worked, breakMinutes,
-    plannedWorkMinutes, nightMinutes, balanceMinutes, deviation };
+    plannedWorkMinutes, nightMinutes, balanceMinutes, deviation, extendUntil: coverage?.extendUntil ?? null,
+    expectedBreakMinutes: expectedBreak };
 }
 
 export function monthDates(month: string) {
@@ -236,4 +283,5 @@ export function buildMonthView(input: { month: string; today: string; shifts: (D
 
 export const INCIDENT_SEVERITY: Record<DayIncident, "danger" | "warn"> = {
   missing: "danger", odd: "danger", missing_break: "danger", short_break: "danger", late_exit: "warn", long_break: "warn", other_unit: "warn",
+  late_start: "warn", early_exit: "warn", coverage_early_exit: "danger",
 };

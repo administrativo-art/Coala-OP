@@ -3879,7 +3879,7 @@ export type DPJourney = {
   useDefinedShiftWhenShorter?: boolean;
   /**
    * Tolerância única da jornada, em minutos (art. 58 §1º da CLT: até 10 por dia): diferença do dia dentro dela não vira
-   * débito nem crédito, e é a mesma margem dos avisos de intervalo. Ausente em jornadas anteriores = sem tolerância.
+   * débito nem crédito. Vale só no início e no fim da jornada, nunca no intervalo (25/11/2026). Ausente = sem tolerância.
    */
   toleranceMinutes?: number;
   /**
