@@ -32,3 +32,13 @@ export async function readHrJsonResponse<T>(response: Response, fallbackError: s
 
   return payload as T;
 }
+
+/** Mensagem de erro de uma resposta de RH em qualquer dos dois formatos: texto legado ou envelope `{ error: { message } }`. */
+export function hrErrorMessage(payload: unknown, fallback: string): string {
+  const raw = payload && typeof payload === 'object' && 'error' in payload ? (payload as { error?: unknown }).error : null;
+  if (typeof raw === 'string' && raw.trim()) return raw;
+  if (raw && typeof raw === 'object' && 'message' in raw && typeof (raw as { message?: unknown }).message === 'string') {
+    return (raw as { message: string }).message;
+  }
+  return fallback;
+}

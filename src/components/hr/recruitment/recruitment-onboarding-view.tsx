@@ -38,6 +38,7 @@ import { UserPlus, Mail, FileText, Calendar, Clock, CheckCircle2, XCircle, Arrow
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { SignatureParticipantCard } from '@/components/hr/recruitment/signature-participant-card';
 import { apiFetch, candidateInitials, ErrorLine, PUBLIC_RECRUITMENT_URL } from './recruitment-shared';
+import { hrErrorMessage } from '@/features/hr/lib/client-response';
 
 const SignaturePlacementEditor = dynamic(
   () => import('@/components/hr/recruitment/signature-placement-editor'),
@@ -2555,8 +2556,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
         { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' }
       );
       if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || 'Prévia indisponível.');
+        throw new Error(hrErrorMessage(await response.json().catch(() => ({})), 'Prévia indisponível.'));
       }
       const url = URL.createObjectURL(await response.blob());
       if (previewWindow) previewWindow.location.href = url;
@@ -2590,8 +2590,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
         }
       );
       if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || 'Pacote completo indisponível.');
+        throw new Error(hrErrorMessage(await response.json().catch(() => ({})), 'Pacote completo indisponível.'));
       }
       const url = URL.createObjectURL(await response.blob());
       if (previewWindow) previewWindow.location.href = url;
@@ -2617,8 +2616,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
         { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' }
       );
       if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || 'Pacote indisponível.');
+        throw new Error(hrErrorMessage(await response.json().catch(() => ({})), 'Pacote indisponível.'));
       }
       const url = URL.createObjectURL(await response.blob());
       if (previewWindow) previewWindow.location.href = url;

@@ -48,15 +48,15 @@ test("trata o kit como unidade com revisão única e prévia completa", () => {
 test("prévia autenticada entrega o PDF gerado inline", () => {
   assert.match(componentSource, /download=preview/);
   assert.match(routeSource, /document\.get\("generatedPdfStoragePath"\)/);
-  assert.match(routeSource, /preview \? "inline" : "attachment"/);
-  assert.match(routeSource, /signed \|\| preview/);
+  assert.match(routeSource, /download === "preview"\) return pdf\(buffer, `\$\{document\.get\("documentName"\) \?\? "Documento gerado"\}\.pdf`, "inline"\)/);
+  assert.match(routeSource, /download === "signed"\) return pdf\(buffer, `\$\{document\.get\("documentName"\) \?\? "Documento assinado"\}\.pdf`, "attachment"\)/);
 });
 
 test("prévia do pacote completo usa POST autenticado e PDF inline", () => {
   assert.match(componentSource, /body: JSON\.stringify\(\{ action: 'preview_bundle' \}\)/);
   assert.match(componentSource, /signatureScope !== 'independent'/);
   assert.match(routeSource, /previewAdmissionBundle/);
-  assert.match(routeSource, /Content-Disposition": `inline/);
+  assert.match(routeSource, /pdf\(preview\.buffer, preview\.fileName, "inline"\)/);
 });
 
 test("acompanha o kit enviado em um único card", () => {
