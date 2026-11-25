@@ -46,7 +46,7 @@ export { vacationWorkflowDailyAlerts } from './vacation-alerts.js';
 export { weeklyRevenueGoalsEmail } from './weekly-revenue-goals-email.js';
 export { monthlyRevenueClosingEmail } from './monthly-revenue-closing-email.js';
 export { onScheduleGoalEligibilityChange } from './schedule-goals.js';
-export { absenceTacitApprovalJob, automaticAbsenceJob, operationalFollowUpJob, repPReceiptRetryJob, systemNoticesDailyMonitor, timeClosingOverdueJob } from './system-notice-jobs.js';
+export { absenceTacitApprovalJob, automaticAbsenceJob, operationalFollowUpJob, repPReceiptRetryJob, systemNoticesDailyMonitor, timeClosingOverdueJob, timeReviewDailyJob } from './system-notice-jobs.js';
 export { repPAvailabilityAlertRelay } from './rep-p-availability.js';
 export { recalculateMinimumStock } from './stock-min-recalc-schedule.js';
 export { weeklyMatrixRestockEmail } from './weekly-matrix-restock-email.js';

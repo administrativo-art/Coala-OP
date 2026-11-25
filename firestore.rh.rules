@@ -212,6 +212,8 @@ service cloud.firestore {
 
     // Tratamento do ponto (PTRP): pedidos de ajuste e tratamentos só pelas APIs autenticadas; o original segue na ARP.
     match /ptrp_adjustmentRequests/{id} { allow read, write: if false; }
+    // Revisão antecipada do ponto: só o servidor (Admin SDK) lê e grava.
+    match /dp_timeReviewRequests/{id} { allow read, write: if false; }
     match /ptrp_markingClassifications/{id} { allow read, write: if false; }
     match /ptrp_treatments/{id} { allow read, write: if false; }
     match /ptrp_dayCorrectionEvents/{id} { allow read, write: if false; }

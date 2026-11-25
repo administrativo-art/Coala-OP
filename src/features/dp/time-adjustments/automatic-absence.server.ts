@@ -19,7 +19,7 @@ import { AppError } from '@/lib/observability/app-error';
 import { resolveOperationalResponsibility, responsibilityScopeKey } from '@/features/dp/responsibility-coverage/service.server';
 
 import { ADJUSTMENTS, CLOSURES, closureKey } from './service.server';
-import { adjustmentRestoresAutomaticAbsence, automaticAbsenceDeadline } from './automatic-absence-core';
+import { adjustmentRestoresAutomaticAbsence, automaticAbsenceDayDeadline } from './automatic-absence-core';
 
 export const AUTOMATIC_ABSENCES = 'ptrp_automaticAbsences';
 const AUTOMATIC_ABSENCE_AUDIT = 'ptrp_automaticAbsenceAudit';
@@ -305,10 +305,9 @@ export async function registerOverdueAutomaticAbsences(workspaceId: string, opti
     const timeZone = unit && isBrazilTimeZone(unit.get('timeZone')) ? unit.get('timeZone') as string : DEFAULT_ZONE;
     const sameDayShifts = shifts.filter((candidate) => candidate.shift.userId === uid && candidate.shift.date === date
       && candidate.shift.type === 'work' && hasPublishedScheduleVersion(candidate.schedule.data() ?? {}));
-    const deadline = sameDayShifts.map(({ shift: candidate }) => isWindowlessFlexibleShift(candidate)
-      ? automaticAbsenceDeadline(date, '00:00', '23:59', false, timeZone)
-      : automaticAbsenceDeadline(date, String(candidate.startTime), String(candidate.endTime), candidate.overnight === true, timeZone))
-      .sort((a, b) => b.dueAt.localeCompare(a.dueAt))[0];
+    const deadline = automaticAbsenceDayDeadline(date, sameDayShifts.map(({ shift: candidate }) => ({
+      startTime: String(candidate.startTime), endTime: String(candidate.endTime), overnight: candidate.overnight === true,
+      windowless: isWindowlessFlexibleShift(candidate) })), timeZone)!;
     if (Date.parse(deadline.dueAt) > now.getTime()) { stats.notDue += 1; continue; }
     const id = automaticAbsenceId(workspaceId, uid, date);
     if (processed.has(id)) continue;

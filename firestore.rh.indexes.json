@@ -1,5 +1,7 @@
 {
   "indexes": [
+    {"collectionGroup":"dp_timeReviewRequests","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"employeeUid","order":"ASCENDING"},{"fieldPath":"date","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_timeReviewRequests","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"date","order":"ASCENDING"}]},
     {"collectionGroup":"repP_events","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"establishmentId","order":"ASCENDING"},{"fieldPath":"recordedDate","order":"ASCENDING"},{"fieldPath":"nsr","order":"ASCENDING"}]},
     {"collectionGroup":"repP_receipts","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"employeeId","order":"ASCENDING"},{"fieldPath":"recordedDate","order":"ASCENDING"}]},
     {"collectionGroup":"repP_receipts","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"establishmentId","order":"ASCENDING"},{"fieldPath":"recordedDate","order":"ASCENDING"}]},

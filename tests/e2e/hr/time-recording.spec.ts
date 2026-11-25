@@ -30,6 +30,10 @@ test('Registro de ponto separa a consulta pessoal da conferência administrativa
     executionUnits: [{ id: 'unit-e2e', name: 'Unidade E2E', employer: true, timeZone: 'America/Belem', locationPolicy: { mode: 'disabled', revision: 0 } }],
     officialClock: { available: true, instant: `${today}T12:00:00.000Z`, timeZone: 'America/Belem' },
   }) }));
+  // A tela própria lê o mês numa só rota (contrato central do dia). Sem `monthDays`, a tela usa o cálculo local de reserva.
+  await page.route('**/api/dp/time-recording/month-view?*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+    schedule: { month, shifts: [shift], truncated: false }, history: { markings: [marking], truncated: false },
+    absences: [], absencesUnavailable: false, adjustments: [], treatments: [], reviewRequests: [] }) }));
   await page.route('**/api/dp/time-recording/month?*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ month, shifts: [shift], truncated: false }) }));
   await page.route('**/api/dp/time-recording/markings?*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ startDate: `${month}-01`, endDate: today, markings: [marking], truncated: false }) }));
   await page.route('**/api/dp/time-recording/adjustments?*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adjustments: [], treatments: [] }) }));

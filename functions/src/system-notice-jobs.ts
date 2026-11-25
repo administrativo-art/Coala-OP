@@ -134,6 +134,29 @@ export const operationalFollowUpJob = onSchedule({
   if (result.processed || result.failed) console.log('[operationalFollowUpJob] Concluída.', result);
 });
 
+/**
+ * Revisão antecipada do ponto, 08:00 de São Luís: pede revisão dos dias de ontem com erro grave e reavalia os
+ * pedidos abertos; sábado manda o lembrete da semana e dia 1º o resumo do mês. Só avisa; a rota é idempotente.
+ */
+export const timeReviewDailyJob = onSchedule({
+  schedule: '0 8 * * *',
+  timeZone: 'America/Fortaleza',
+  retryCount: 1,
+  timeoutSeconds: 300,
+  memory: '256MiB',
+  maxInstances: 1,
+  secrets: [jobSecret],
+}, async () => {
+  const response = await fetch(new URL('/api/jobs/dp/time-recording/review-requests', jobUrl.value()), {
+    method: 'POST', headers: { Authorization: `Bearer ${jobSecret.value()}`, 'Content-Type': 'application/json' }, body: '{}',
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Revisão antecipada do ponto respondeu HTTP ${response.status}: ${detail.slice(0, 300)}`);
+  }
+  console.log('[timeReviewDailyJob] Concluída.', await response.json());
+});
+
 /** Dia escalado sem batida nem solicitação: registra falta injustificada 24 h após o fim do turno. */
 export const automaticAbsenceJob = onSchedule({
   schedule: '35 * * * *',

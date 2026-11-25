@@ -19,6 +19,7 @@ import { SidePanel } from "@/components/patterns/side-panel";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
+import type { DPReviewReason, TimeReviewView } from "@/features/dp/time-review/core";
 import type { MonthDays } from "./month-days";
 import { buildMonthView, INCIDENT_SEVERITY, type DayAbsence, type DayMarking, type DayShift, type DayView } from "./day-model";
 import { DAY_GRID, DayCard, type ClassificationActions, type ReceiptActions } from "./day-list";
@@ -43,6 +44,7 @@ type EmployeeMonthPayload = {
   unitNames: Record<string, string>;
   /** Contrato central do dia; ausente em respostas de versões anteriores do servidor. */
   monthDays?: MonthDays;
+  reviewRequests?: TimeReviewView[];
 };
 type OwnMonthPayload = {
   schedule: MonthPayload;
@@ -51,7 +53,9 @@ type OwnMonthPayload = {
   absencesUnavailable: boolean;
   adjustments: AdjustmentView[];
   treatments: TreatmentView[];
-  monthDays: MonthDays;
+  /** Ausente só em resposta de servidor anterior ao contrato central (reserva: cálculo local). */
+  monthDays?: MonthDays;
+  reviewRequests?: TimeReviewView[];
 };
 
 export type TimeRecordingView = "records" | "adjustments" | "time-bank" | "mirrors";
@@ -108,6 +112,7 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records", embe
   const [adjustments, setAdjustments] = useState<AdjustmentView[]>([]);
   const [treatments, setTreatments] = useState<TreatmentView[]>([]);
   const [serverDays, setServerDays] = useState<MonthDays | null>(null);
+  const [reviewRequests, setReviewRequests] = useState<TimeReviewView[]>([]);
   // Uma só verdade para "hoje": a do servidor (fuso do negócio), que também calculou os dias. A data do aparelho
   // fica só como reserva antes da primeira leitura ou com servidor anterior ao contrato.
   const today = serverDays?.today ?? deviceToday;
@@ -153,6 +158,7 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records", embe
           setAdjustments(payload.adjustments);
           setTreatments(payload.treatments);
           setServerDays(payload.monthDays?.month === month ? payload.monthDays : null);
+          setReviewRequests(payload.reviewRequests ?? []);
         })
         .catch((error) => { if (!cancelled) setLoadError(errorMessageOf(error, "Não foi possível carregar o mês.")); })
         .finally(() => { if (!cancelled) setLoading(false); });
@@ -168,7 +174,8 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records", embe
         setAbsencesUnavailable(payload.absencesUnavailable);
         setAdjustments(payload.adjustments);
         setTreatments(payload.treatments);
-        setServerDays(payload.monthDays.month === month ? payload.monthDays : null);
+        setServerDays(payload.monthDays?.month === month ? payload.monthDays : null);
+        setReviewRequests(payload.reviewRequests ?? []);
       })
       .catch((error) => { if (!cancelled) setLoadError(errorMessageOf(error, "Não foi possível carregar o mês.")); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -210,13 +217,28 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records", embe
     : options?.executionUnits.map((unit) => [unit.id, unit.name]) ?? []), [employeeUnitNames, options, readOnly]);
 
   const adjustmentDates = useMemo(() => new Set(adjustments.filter((item) => item.status === "in_review").map((item) => item.workDate)), [adjustments]);
+  // Revisão antecipada: pedidos abertos do mês (da rotina diária ou do DP).
+  const openReviewDates = useMemo(() => new Set(reviewRequests.filter((item) => item.status === "open").map((item) => item.date)), [reviewRequests]);
+  const reviewByDate = useMemo(() => new Map(reviewRequests.map((item) => [item.date, item])), [reviewRequests]);
+  const markReviewed = useCallback(async (id: string) => {
+    const result = await request<{ id: string; status: "reviewed"; reviewedAt: string }>(`/api/dp/time-recording/review-requests/${id}`,
+      { method: "POST", json: { action: "reviewed" }, fallbackError: "Não foi possível confirmar a revisão." });
+    setReviewRequests((current) => current.map((item) => item.id === id ? { ...item, status: result.status, reviewedAt: result.reviewedAt } : item));
+  }, [request]);
+  const requestReview = useCallback(async (date: string, reason: DPReviewReason) => {
+    if (!employeeUid) return;
+    const result = await request<{ request: TimeReviewView }>(`/api/dp/time-recording/employees/${encodeURIComponent(employeeUid)}/review-requests`,
+      { method: "POST", json: { date, reason }, fallbackError: "Não foi possível pedir a revisão." });
+    setReviewRequests((current) => [...current.filter((item) => item.date !== date), result.request]);
+  }, [employeeUid, request]);
   const matches = useCallback((day: DayView) => {
+    if (filter === "to_review") return openReviewDates.has(day.date);
     if (filter === "marks") return day.markings.length > 0;
     if (filter === "alert") return day.incidents.length > 0;
     if (filter === "review") return adjustmentDates.has(day.date);
     if (filter === "absence") return day.absence !== null;
     return true;
-  }, [filter, adjustmentDates]);
+  }, [filter, adjustmentDates, openReviewDates]);
   const past = days.filter((day) => day.date <= today);
   const future = days.filter((day) => day.date > today);
   // Hoje primeiro e os dias anteriores em seguida, agrupados por semana (domingo a sábado).
@@ -235,7 +257,7 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records", embe
   const inReview = adjustments.filter((item) => item.status === "in_review").length;
   const registered = days.reduce((sum, day) => sum + day.workedMinutes, 0);
   const balance = days.reduce((sum, day) => sum + (day.balanceMinutes ?? 0), 0);
-  const filterLabel = ({ marks: "Dias com batida", alert: "A conferir", review: "Ajuste em análise", absence: "Com ausência" } as Record<string, string>)[filter] ?? null;
+  const filterLabel = ({ marks: "Dias com batida", alert: "A conferir", review: "Ajuste em análise", absence: "Com ausência", to_review: "Para revisar" } as Record<string, string>)[filter] ?? null;
   const OPEN_ABSENCE = ["submitted", "in_review", "adjustments_requested"];
   const toTreat = adjustments.filter((item) => item.status === "in_review").length + absences.filter((item) => OPEN_ABSENCE.includes(item.status)).length;
   const finalized = adjustments.filter((item) => item.status !== "in_review").length + absences.filter((item) => !OPEN_ABSENCE.includes(item.status)).length;
@@ -422,6 +444,17 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records", embe
             <AdjustmentsHistory adjustments={adjustments} onOpen={setReportId} onOpenDay={(date) => setOpenDate(date)} />
           ) : (
             <>
+              {openReviewDates.size ? (
+                <div className="flex flex-wrap items-center gap-3 rounded-ds-btn-lg border border-ds-info-border bg-ds-info-bg px-4 py-2.5">
+                  <p className="min-w-0 flex-1 text-sm text-ds-ink-2">
+                    <strong className="text-ds-ink">{openReviewDates.size} {openReviewDates.size === 1 ? "dia" : "dias"} {readOnly ? "com revisão pedida" : "para revisar"}</strong>
+                    {readOnly ? " à colaboradora neste mês." : " neste mês. Confira as batidas e peça correção se houver erro."}
+                  </p>
+                  <Button type="button" variant="ds-secondary" size="sm" onClick={() => setFilter(filter === "to_review" ? "all" : "to_review")}>
+                    {filter === "to_review" ? "Mostrar todos" : "Ver dias"}
+                  </Button>
+                </div>
+              ) : null}
               {/* Contagens que filtram a lista; clicar de novo limpa. */}
               {embedded ? (() => {
                 const pending = days.filter((day) => dayNeedsTreatment(day, adjustments, today)).length;
@@ -547,6 +580,9 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records", embe
         onChanged={() => setReloadKey((current) => current + 1)} /> : null}
       <DayDetailPanel day={openDate ? days.find((day) => day.date === openDate) ?? (openDate === today ? todayView : null) : null}
         employeeUid={employeeUid ?? firebaseUser?.uid ?? ""}
+        review={openDate ? reviewByDate.get(openDate) ?? null : null}
+        onMarkReviewed={readOnly ? undefined : markReviewed}
+        onRequestReview={readOnly && employeeUid ? requestReview : undefined}
         days={days} today={today} unitNames={unitNames} receipts={readOnly ? null : receipts} classifications={readOnly ? null : classifications}
         onClose={() => setOpenDate(null)} onNavigate={setOpenDate}
         onRequestAbsence={(date) => { setOpenDate(null); setAbsenceDate(date); }}

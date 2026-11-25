@@ -47,6 +47,8 @@ Unidade: **pedido de revisão** por pessoa e dia, com ID determinístico (pessoa
 2. Criar "Saída antes do previsto" e "Entrada após o previsto" (leves; a saída antecipada é grave para quem está na política de cobertura).
 3. Jurídico (Doc Brown): a revisão/confirmação "Está correto" tem efeito fiscal ou apenas organizacional? Proposta: apenas organizacional, sem tocar batida, NSR, AFD ou espelho.
 
+**Pendência jurídica (Doc Brown, 25/11/2026):** aviso e push em dia de folga, férias ou afastamento podem ser lidos como tempo à disposição (art. 4º da CLT) ou sobreaviso (Súmula 428 do TST). Hoje os textos são informativos, sem imperativo nem prazo ("a revisão pode ser feita em horário de trabalho"), e o dia 1º não tem prazo nem bloqueio. Pergunta ao advogado: (a) manter como está, (b) só sino em dia sem turno, ou (c) enviar só no horário do turno. **Condição de rollout:** não ativar `timeReviewDailyJob` em produção antes da resposta. Recomendação do especialista: (b) ou (c).
+
 ## 6. Ordem de execução
 
 **Dependência:** as rotinas D+1, semanal e do dia 1º precisam das ocorrências calculadas no servidor. Elas consomem o contrato central do dia da etapa 2 do [plano de turno de cobertura](plano-turno-de-cobertura.md), sem criar outro cálculo.

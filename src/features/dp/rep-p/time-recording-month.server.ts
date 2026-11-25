@@ -6,12 +6,13 @@ import { AppError } from '@/lib/observability/app-error';
 import { reportSystemError } from '@/lib/observability/reporter';
 
 import type { AbsenceRequestRecord } from '@/features/dp/absences/requests/workflow-types';
-import { listOwnAdjustments } from '@/features/dp/time-adjustments/service.server';
+import { listAdjustmentsOfPerson, listOwnAdjustments } from '@/features/dp/time-adjustments/service.server';
+import { listReviewRequestsOfPerson } from '@/features/dp/time-review/read.server';
 import type { DayAbsence } from './day-model';
 import { assembleMonthDays, businessToday, monthAbsencesOf } from './month-days';
-import { readOwnRepPMonth } from './own-month.server';
+import { readOwnRepPMonth, readRepPMonthOfPerson } from './own-month.server';
 import { repPOwnMonthSchema } from './schemas';
-import { listOwnRepPMarkings } from './service.server';
+import { listOwnRepPMarkings, listRepPMarkingsOfPerson } from './service.server';
 
 export const MONTH_ABSENCE_LIMIT = 200;
 
@@ -58,7 +59,7 @@ export async function readOwnTimeRecordingMonth(context: ServerUserContext, raw:
     reportSystemError({ error, source: 'rep-p', operation, code, kind: 'TRANSIENT_EXTERNAL', severity: 'medium', isTerminal: false,
       metadata: { month } });
   };
-  const [schedule, history, adjustmentPayload, absenceResult] = await Promise.all([
+  const [schedule, history, adjustmentPayload, absenceResult, reviewRequests] = await Promise.all([
     readOwnRepPMonth(context, { month }),
     startDate <= today ? listOwnRepPMarkings(context, { startDate, endDate: historyEnd }) : Promise.resolve({ markings: [], truncated: false }),
     listOwnAdjustments(context, { month })
@@ -68,6 +69,8 @@ export async function readOwnTimeRecordingMonth(context: ServerUserContext, raw:
         partial('read-own-month-absences', 'REP_P_MONTH_ABSENCES_UNAVAILABLE')(error);
         return { ok: false as const, absences: [] as DayAbsence[] };
       }),
+    listReviewRequestsOfPerson(context.workspace_id, context.decoded.uid, month)
+      .catch((error) => { partial('read-own-month-review-requests', 'REP_P_MONTH_REVIEW_REQUESTS_UNAVAILABLE')(error); return []; }),
   ]);
   const absences = absenceResult.absences;
   return {
@@ -75,9 +78,33 @@ export async function readOwnTimeRecordingMonth(context: ServerUserContext, raw:
     history,
     absences,
     absencesUnavailable: !absenceResult.ok,
+    reviewRequests,
     adjustments: adjustmentPayload.adjustments,
     treatments: adjustmentPayload.treatments,
     monthDays: assembleMonthDays({ month, today, shifts: schedule.shifts, markings: history.markings, absences,
       treatments: adjustmentPayload.treatments }),
+  };
+}
+
+/**
+ * Mês de uma pessoa para rotinas do servidor (revisão antecipada): as mesmas leituras e o mesmo contrato central
+ * da tela própria, sem o contexto de quem está logado. O chamador responde pela autorização.
+ */
+export async function readPersonMonthDays(input: { workspaceId: string; uid: string; hrEmployeeId?: string | null; month: string; today: string }) {
+  const { startDate, endDate } = monthBounds(input.month);
+  const historyEnd = endDate < input.today ? endDate : input.today;
+  const [schedule, history, adjustmentPayload, absences] = await Promise.all([
+    readRepPMonthOfPerson([input.uid, input.hrEmployeeId], input.month, {},
+      { automaticAbsence: { workspaceId: input.workspaceId, uid: input.uid } }),
+    startDate <= input.today
+      ? listRepPMarkingsOfPerson(input.workspaceId, input.uid, { startDate, endDate: historyEnd })
+      : Promise.resolve({ markings: [], truncated: false }),
+    listAdjustmentsOfPerson(input.workspaceId, input.uid, { month: input.month }),
+    readMonthAbsencesOfPerson(input.workspaceId, input.uid, input.month),
+  ]);
+  return {
+    adjustments: adjustmentPayload.adjustments,
+    monthDays: assembleMonthDays({ month: input.month, today: input.today, shifts: schedule.shifts, markings: history.markings,
+      absences, treatments: adjustmentPayload.treatments }),
   };
 }

@@ -147,3 +147,20 @@ test('day correction separates its subject, request author and historical actors
   assert.equal(sourceById('day-correction-actors')?.role, 'actor');
   assert.equal(sourceById('user-notification-owners')?.field, 'ownerUid');
 });
+
+test('pedidos de revisão antecipada: titular e ator separados, descobertos pelas unidades do dia', () => {
+  const subject = sourceById('time-review-subjects')!;
+  const requester = sourceById('time-review-requesters')!;
+  assert.equal(subject.collection, 'dp_timeReviewRequests');
+  assert.equal(subject.field, 'employeeUid');
+  assert.equal(subject.role, 'subject');
+  assert.equal(requester.field, 'requestedBy');
+  assert.equal(requester.role, 'actor');
+  const actor = { isDefaultAdmin: false, workspace_id: 'w', userDoc: { unitAccessScope: 'selected', unitAccessUnitIds: ['A'] },
+    permissions: { dp: { timeRecording: { view: true } } } } as Parameters<typeof canViewPersonRecord>[0];
+  for (const source of [subject, requester]) {
+    assert.equal(canViewPersonRecord(actor, source, { workspaceId: 'w', unitIds: ['A'] }), true);
+    assert.equal(canViewPersonRecord(actor, source, { workspaceId: 'w', unitIds: ['B'] }), false);
+    assert.equal(canViewPersonRecord(actor, source, { workspaceId: 'other', unitIds: ['A'] }), false);
+  }
+});

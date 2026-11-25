@@ -487,7 +487,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/time-recording/page.tsx`](../../src/app/dashboard/collaborator/time-recording/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/time-recording/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/time-recording/page.tsx), [`src/app/dashboard/dp/fechamento/page.tsx`](../../src/app/dashboard/dp/fechamento/page.tsx).
 
-Arquivos locais percorridos: 97.
+Arquivos locais percorridos: 99.
 
 Chamadas candidatas encontradas:
 
@@ -515,6 +515,7 @@ Chamadas candidatas encontradas:
 - `/api/dp/time-recording/payroll-finance` — interface [`src/features/dp/time-adjustments/payroll-finance-panel.tsx`](../../src/features/dp/time-adjustments/payroll-finance-panel.tsx); rota candidata [`src/app/api/dp/time-recording/payroll-finance/route.ts`](../../src/app/api/dp/time-recording/payroll-finance/route.ts)
 - `/api/dp/time-recording/payslip-reconciliation` — interface [`src/features/dp/time-adjustments/payroll-finance-panel.tsx`](../../src/features/dp/time-adjustments/payroll-finance-panel.tsx); rota candidata [`src/app/api/dp/time-recording/payslip-reconciliation/route.ts`](../../src/app/api/dp/time-recording/payslip-reconciliation/route.ts)
 - `/api/dp/time-recording/receipts/` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/receipts/[receiptId]/route.ts`](../../src/app/api/dp/time-recording/receipts/%5BreceiptId%5D/route.ts)
+- `/api/dp/time-recording/review-requests/` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/review-requests/[requestId]/route.ts`](../../src/app/api/dp/time-recording/review-requests/%5BrequestId%5D/route.ts)
 - `/api/dp/time-recording/time-bank` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/time-bank/route.ts`](../../src/app/api/dp/time-recording/time-bank/route.ts)
 - `/api/financial/inbox/` — interface [`src/features/dp/time-adjustments/payroll-finance-panel.tsx`](../../src/features/dp/time-adjustments/payroll-finance-panel.tsx); rota candidata [`src/app/api/financial/inbox/[id]/route.ts`](../../src/app/api/financial/inbox/%5Bid%5D/route.ts)
 

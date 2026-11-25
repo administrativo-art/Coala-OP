@@ -16,6 +16,7 @@ import { readRepPMonthOfPerson } from './own-month.server';
 import { LOCATION_ACCESS_AUDIT } from './location-access.server';
 import { assembleMonthDays, businessToday } from './month-days';
 import { readMonthAbsencesOfPerson } from './time-recording-month.server';
+import { listReviewRequestsOfPerson } from '@/features/dp/time-review/read.server';
 import { listRepPMarkingsOfPerson } from './service.server';
 
 export { canReadEmployeeTimeRecording } from './employee-time-access.server';
@@ -67,7 +68,7 @@ export async function readEmployeeTimeRecordingMonth(context: ServerUserContext,
   const endDate = `${month}-${String(new Date(Date.UTC(year, monthNumber, 0)).getUTCDate()).padStart(2, '0')}`;
   const identifiers = [employeeUid, typeof employee.get('hrEmployeeId') === 'string' ? String(employee.get('hrEmployeeId')) : null];
 
-  const [schedule, history, adjustmentPayload, absences] = await Promise.all([
+  const [schedule, history, adjustmentPayload, absences, reviewRequests] = await Promise.all([
     readRepPMonthOfPerson(identifiers, month),
     listRepPMarkingsOfPerson(context.workspace_id, employeeUid, { startDate, endDate }, {}, {
       // Localização exige concessão expressa, além da consulta do ponto e do acesso à unidade da batida.
@@ -76,6 +77,7 @@ export async function readEmployeeTimeRecordingMonth(context: ServerUserContext,
     }),
     listAdjustmentsOfPerson(context.workspace_id, employeeUid, { month }),
     readMonthAbsencesOfPerson(context.workspace_id, employeeUid, month),
+    listReviewRequestsOfPerson(context.workspace_id, employeeUid, month),
   ]);
 
   // A evidência existe somente quando a política vigente na batida autorizou a coleta. Ela é a decisão
@@ -94,6 +96,7 @@ export async function readEmployeeTimeRecordingMonth(context: ServerUserContext,
     absences,
     adjustments: adjustmentPayload.adjustments,
     treatments: adjustmentPayload.treatments,
+    reviewRequests,
     unitNames: Object.fromEntries(units.filter((unit) => unit.exists).map((unit) => [unit.id, String(unit.get('name') ?? 'Unidade')])),
     // Contrato central do dia: montado com os mesmos dados acima, sem leitura extra.
     monthDays: assembleMonthDays({ month, today: injected.today ?? businessToday(), shifts: schedule.shifts,

@@ -208,6 +208,8 @@ Classificação do catálogo `main/profiles` (23/11/2026): os dois leitores de a
 
 As justificativas de alerta grave do fechamento em RH (`dp_timeClosureAlertReviews`) são localizáveis pelo identificador do colaborador (`employeeUid`) e do revisor (`by`). A política exige acesso ao fechamento e às unidades registradas na ocorrência. A consulta de inventário registra a existência da fonte sem reproduzir o texto da justificativa.
 
+Os pedidos de revisão antecipada do ponto em RH (`dp_timeReviewRequests`, 25/11/2026) são localizáveis pela titular em `employeeUid` (`time-review-subjects`) e pelo ator do pedido manual do DP em `requestedBy` (`time-review-requesters`), ambos no namespace `main.users`, sob `workspaceId` e `unitIds` do dia. Titular e ator ficam separados; a rotina grava `requestedBy: null`. O documento guarda só data, códigos de ocorrência, motivo da lista e estado; não guarda batida, horário nem texto livre. Leitura e escrita só pelo servidor (regra `deny`).
+
 
 Devolução de dia (23/11/2026): `ptrp_dayCorrections` fica no banco RH, com titular `employeeUid` em `main.users`, solicitante `requestedBy` separado e atores históricos em `actorKeys`. As três fontes têm consulta live e usam a permissão do fechamento e todas as unidades congeladas no pedido. Motivo, resposta e IDs de ajustes permanecem no histórico. O registro `user-notification-owners` consulta `userNotifications.ownerUid` no banco principal, exige acesso de privacidade e mantém o workspace da notificação. A coleção de devoluções é privada ao Admin SDK e segue a retenção da fonte de tratamento de ponto. A consulta ao documento de competência existente é somente leitura e foi delimitada em `dynamicCollectionReaders`.
 
