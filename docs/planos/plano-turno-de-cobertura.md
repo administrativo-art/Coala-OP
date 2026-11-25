@@ -62,6 +62,8 @@ Assim, 6h trabalhadas num turno de 6h aparecem como 0:00 na tela do dia e −2h 
 - **Saída antes do fim do turno:** ocorrência a conferir ou livre.
 - **Offline no Coala Go:** dias fechados vêm do servidor. O estado "em curso" de hoje (horas até agora, em intervalo desde) continua local para funcionar sem rede e passa a seguir o mesmo contrato. Definir o que aparece sem rede para dias anteriores (último resultado guardado).
 
+- **P1 — turnos já publicados (Doc Brown, 25/11/2026):** a decisão de cobertura é congelada na escrita do turno. Os 172 turnos de dezembro publicados antes da política não têm `coverage`. Ordem: (1) publicar a jornada com a política (nova versão, porque a atual está publicada); (2) regravar ou republicar os turnos de quem entra na política. O passo (2) é escrita em produção: script com ensaio e cópia de segurança, só com autorização do programador.
+
 ## 5. Ordem de execução
 
 1. Revisão de Doc Brown das decisões 4–6 e da zeragem; registro no chamado em `.ai-work/development-technology/<id>/`.

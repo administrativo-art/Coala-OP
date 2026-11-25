@@ -1,5 +1,6 @@
 import { operationalUnitsOnDate, validateOperationalPeriods } from '@/lib/operational-unit-periods';
 import type { DPJourney, DPShiftDefinition } from '@/types';
+import { dpCoverageDecision } from './dp-coverage-policy';
 import type { DPJourneyResolvedBy } from './dp-journey-resolution';
 
 type ShiftDefinitionSource = Partial<DPShiftDefinition> & { id: string };
@@ -52,6 +53,7 @@ export function buildDPShiftReference(params: {
   const { user, journey, resolvedBy, definition } = params;
   const employerUnitId = stringOrNull(user.employerUnitId);
   const employerCnpj = stringOrNull(user.employerCnpj);
+  const coverage = dpCoverageDecision(journey, { jobRoleId: user.jobRoleId, jobFunctionIds: user.jobFunctionIds });
   return {
     schemaVersion: 1 as const,
     source: 'dp_schedule_write' as const,
@@ -102,8 +104,14 @@ export function buildDPShiftReference(params: {
       useDefinedShiftWhenShorter: journey.useDefinedShiftWhenShorter ?? null,
       toleranceMinutes: journey.toleranceMinutes ?? null,
       allowedShiftDefinitionIds: [...(journey.allowedShiftDefinitionIds ?? [])],
+      // Só aparece quando cadastrada, para não mudar a forma das referências já congeladas.
+      ...(journey.coveragePolicy ? { coveragePolicy: { jobRoleIds: [...journey.coveragePolicy.jobRoleIds],
+        jobFunctionIds: [...journey.coveragePolicy.jobFunctionIds] } } : {}),
     },
     shiftDefinition: buildShiftDefinitionReference(definition),
+    // Política de jornada de cobertura decidida na escrita, pelo cargo e funções capturados acima; ausente quando
+    // não se aplica, para não mudar a forma das referências já congeladas.
+    ...(coverage ? { coverage } : {}),
   };
 }
 

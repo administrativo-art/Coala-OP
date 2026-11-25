@@ -49,6 +49,8 @@ export type RepPOwnScheduledShift = {
   /** Versão da jornada do turno e a carga dela no dia (referência do banco de horas); null sem jornada resolvida. */
   journeyId: string | null;
   referenceMinutes: number | null;
+  /** Turno de quem está na Política de jornada de cobertura, decidido na escrita do turno. */
+  coverage?: boolean;
 };
 
 export type RepPOwnMonth = {
@@ -220,6 +222,8 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       toleranceMinutes: toleranceByJourney.get(text(doc.get('journeyResolution.journeyId')) ?? '') ?? null,
       journeyId: journeyById.has(text(doc.get('journeyResolution.journeyId')) ?? '') ? text(doc.get('journeyResolution.journeyId')) : null,
       referenceMinutes: journeyReferenceMinutes(journeyOf(journeyById.get(text(doc.get('journeyResolution.journeyId')) ?? '')), String(doc.get('date'))),
+      // Política de jornada de cobertura congelada na escrita do turno; nunca relida do cadastro atual.
+      ...(doc.get('journeyResolution.coverage.applies') === true ? { coverage: true } : {}),
     };
   });
   const automaticDates = new Set(automaticAbsences?.docs.filter((doc) => doc.get('status') === 'active').map((doc) => String(doc.get('workDate'))) ?? []);

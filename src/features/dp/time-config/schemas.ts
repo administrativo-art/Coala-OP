@@ -97,6 +97,10 @@ const journeyFieldsObjectSchema = z.object({
   expectedBreakMinutes: z.number().int().min(0).max(480).optional(),
   useDefinedShiftWhenShorter: z.boolean().optional(),
   toleranceMinutes: z.number().int().min(0, 'A tolerância não pode ser negativa.').max(10, 'A tolerância vai até 10 minutos por dia (art. 58 §1º da CLT).').optional(),
+  coveragePolicy: z.object({
+    jobRoleIds: z.array(idSchema).max(50),
+    jobFunctionIds: z.array(idSchema).max(50),
+  }).strict().optional(),
   allowedShiftDefinitionIds: z.array(idSchema).max(100).optional(),
   applicability: applicabilitySchema,
   validFrom: dateSchema,
@@ -145,6 +149,7 @@ const journeyUpdateDataSchema = journeyFieldsObjectSchema.partial().extend({
   description: journeyFieldsObjectSchema.shape.description.nullable(),
   allowedShiftDefinitionIds: journeyFieldsObjectSchema.shape.allowedShiftDefinitionIds.nullable(),
   toleranceMinutes: journeyFieldsObjectSchema.shape.toleranceMinutes.nullable(),
+  coveragePolicy: journeyFieldsObjectSchema.shape.coveragePolicy.nullable(),
   validTo: journeyFieldsObjectSchema.shape.validTo.nullable(),
 }).refine((value) => Object.keys(value).length > 0);
 export const updateJourneySchema = z.discriminatedUnion('action', [

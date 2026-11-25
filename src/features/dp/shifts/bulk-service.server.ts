@@ -1,4 +1,5 @@
 import 'server-only';
+import { coverageResolutionField } from '@/lib/dp-coverage-policy';
 
 import { FieldValue, Timestamp, type DocumentReference, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 
@@ -462,6 +463,7 @@ export async function applyWorkShiftBulkChange(params: {
             validationMode: resolvedJourney.journey.scaleValidation?.mode ?? 'consecutive_days',
             maxConsecutiveWorkDays: resolvedJourney.journey.weeklyRest?.maxConsecutiveWorkDays ?? 6,
             resolvedAt: now,
+            ...coverageResolutionField(reference ?? {}),
           };
         }
       }
@@ -808,6 +810,7 @@ async function applyWorkShiftBulkCreate(params: {
             validationMode: journeyResolution.journey.scaleValidation?.mode ?? 'consecutive_days',
             maxConsecutiveWorkDays: journeyResolution.journey.weeklyRest?.maxConsecutiveWorkDays ?? 6,
             resolvedAt: now,
+            ...coverageResolutionField(reference),
           },
           referenceRevisionId: referenceRef.id,
           updatedAt: now,

@@ -37,6 +37,8 @@ export type DayShift = {
   breakMinPauseMinutes?: number | null;
   /** Tolerância única da jornada do dia (minutos); ausente = sem tolerância. */
   toleranceMinutes?: number | null;
+  /** Política de jornada de cobertura, congelada na escrita do turno. */
+  coverage?: boolean;
 };
 
 export type DayMarking = { receiptId: string; markedAt: string; nsr: number; executionUnitId: string; receiptStatus: "available" | "pending";

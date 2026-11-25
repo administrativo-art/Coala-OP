@@ -16,7 +16,7 @@ const JOURNEY_LIMIT = 100;
 const JOURNEY_FIELDS = [
   'lineageId', 'version', 'status', 'name', 'weeklyMinutes', 'cycleLengthDays', 'days',
   'regime', 'weeklyRest', 'scaleValidation', 'allowedShiftDefinitionIds', 'applicability',
-  'expectedBreakMinutes', 'useDefinedShiftWhenShorter', 'validFrom', 'validTo',
+  'expectedBreakMinutes', 'useDefinedShiftWhenShorter', 'coveragePolicy', 'validFrom', 'validTo',
 ] as const;
 
 function text(value: unknown) {

@@ -3855,6 +3855,8 @@ export type DPJourneyScaleValidation =
   | { mode: 'consecutive_days' }
   | { mode: 'manual_review' };
 
+export type DPCoveragePolicy = { jobRoleIds: string[]; jobFunctionIds: string[] };
+
 export type DPJourney = {
   id: string;
   lineageId: string;
@@ -3880,6 +3882,12 @@ export type DPJourney = {
    * débito nem crédito, e é a mesma margem dos avisos de intervalo. Ausente em jornadas anteriores = sem tolerância.
    */
   toleranceMinutes?: number;
+  /**
+   * Política de jornada de cobertura: para quem tem um destes cargos ou funções, um turno menor que a carga marca o
+   * início e a cobertura mínima, e a pessoa pode estender até completar a carga. Só vale com
+   * `useDefinedShiftWhenShorter` ligado. Ausente ou vazia = ninguém.
+   */
+  coveragePolicy?: DPCoveragePolicy;
   allowedShiftDefinitionIds?: string[];
   applicability: DPTimeApplicability;
   validFrom: string;
