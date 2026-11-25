@@ -11,7 +11,6 @@ import { BackButton } from "@/components/navigation/back-button";
 import { errorMessageOf } from "@/components/patterns/panel-form";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
-import { listAbsenceRequests } from "@/features/dp/absences/requests/client";
 import { AbsencePreviewPanel } from "@/features/dp/absences/requests/preview-panel";
 import { AdjustmentReport, AdjustmentRequestPanel } from "@/features/dp/time-adjustments/adjustment-panel";
 import { TimeBankCard } from "@/features/dp/time-bank/time-bank-card";
@@ -20,6 +19,7 @@ import { SidePanel } from "@/components/patterns/side-panel";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
+import type { MonthDays } from "./month-days";
 import { buildMonthView, INCIDENT_SEVERITY, type DayAbsence, type DayMarking, type DayShift, type DayView } from "./day-model";
 import { DAY_GRID, DayCard, type ClassificationActions, type ReceiptActions } from "./day-list";
 import { DayDetailPanel } from "./day-detail";
@@ -41,6 +41,17 @@ type EmployeeMonthPayload = {
   adjustments: AdjustmentView[];
   treatments: TreatmentView[];
   unitNames: Record<string, string>;
+  /** Contrato central do dia; ausente em respostas de versões anteriores do servidor. */
+  monthDays?: MonthDays;
+};
+type OwnMonthPayload = {
+  schedule: MonthPayload;
+  history: HistoryPayload;
+  absences: DayAbsence[];
+  absencesUnavailable: boolean;
+  adjustments: AdjustmentView[];
+  treatments: TreatmentView[];
+  monthDays: MonthDays;
 };
 
 export type TimeRecordingView = "records" | "adjustments" | "time-bank" | "mirrors";
@@ -53,8 +64,6 @@ type BankPayload = { policy: { id: string; version: number; name: string; enable
   previewCompetences?: string[] };
 
 const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
-// Ausências da conta "minhas" filtram pela data de início; 40 dias antes do mês pegam as que começaram no mês anterior.
-const ABSENCE_LOOKBACK_DAYS = 40;
 
 function shiftMonth(month: string, delta: number) {
   const [year, value] = month.split("-").map(Number);
@@ -88,10 +97,9 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records", embe
   const [reloadKey, setReloadKey] = useState(0);
   const onRecorded = useCallback(() => setReloadKey((current) => current + 1), []);
   const marking = useRepPMarking({ onRecorded, enabled: !readOnly });
-  const { today, request, fetchReceiptFile, options, setLastMarking } = marking;
-  const currentMonth = today.slice(0, 7);
+  const { today: deviceToday, request, fetchReceiptFile, options, setLastMarking } = marking;
 
-  const [month, setMonth] = useState(monthProp ?? currentMonth);
+  const [month, setMonth] = useState(monthProp ?? deviceToday.slice(0, 7));
   useEffect(() => { if (monthProp) { setMonth(monthProp); setFilter("all"); setOpenDate(null); } }, [monthProp]);
   const [schedule, setSchedule] = useState<MonthPayload | null>(null);
   const [history, setHistory] = useState<HistoryPayload | null>(null);
@@ -99,6 +107,11 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records", embe
   const [absencesUnavailable, setAbsencesUnavailable] = useState(false);
   const [adjustments, setAdjustments] = useState<AdjustmentView[]>([]);
   const [treatments, setTreatments] = useState<TreatmentView[]>([]);
+  const [serverDays, setServerDays] = useState<MonthDays | null>(null);
+  // Uma só verdade para "hoje": a do servidor (fuso do negócio), que também calculou os dias. A data do aparelho
+  // fica só como reserva antes da primeira leitura ou com servidor anterior ao contrato.
+  const today = serverDays?.today ?? deviceToday;
+  const currentMonth = today.slice(0, 7);
   const [adjustDate, setAdjustDate] = useState<string | null>(null);
   const [reportId, setReportId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,14 +131,12 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records", embe
   const [recordOpen, setRecordOpen] = useState(false);
   const [bank, setBank] = useState<BankPayload | null>(null);
   const [bankUnavailable, setBankUnavailable] = useState(false);
-  const monthStart = `${month}-01`;
   const monthEnd = addDays(`${shiftMonth(month, 1)}-01`, -1);
 
   // Uma leitura por troca de mês ou batida: escala própria, batidas do mês (até hoje) e ausências.
   useEffect(() => {
     if (!firebaseUser) return;
     let cancelled = false;
-    const historyEnd = monthEnd < today ? monthEnd : today;
     setLoading(true);
     setLoadError(null);
     if (employeeUid) {
@@ -141,39 +152,28 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records", embe
           setAbsencesUnavailable(false);
           setAdjustments(payload.adjustments);
           setTreatments(payload.treatments);
+          setServerDays(payload.monthDays?.month === month ? payload.monthDays : null);
         })
         .catch((error) => { if (!cancelled) setLoadError(errorMessageOf(error, "Não foi possível carregar o mês.")); })
         .finally(() => { if (!cancelled) setLoading(false); });
       return () => { cancelled = true; };
     }
-    Promise.all([
-      request<MonthPayload>(`/api/dp/time-recording/month?month=${month}`, { fallbackError: "Não foi possível carregar sua escala." }),
-      monthStart <= today
-        ? request<HistoryPayload>(`/api/dp/time-recording/markings?${new URLSearchParams({ startDate: monthStart, endDate: historyEnd })}`,
-          { fallbackError: "Não foi possível carregar as batidas." })
-        : Promise.resolve({ markings: [], truncated: false }),
-      listAbsenceRequests(firebaseUser, "mine", undefined, { startDate: addDays(monthStart, -ABSENCE_LOOKBACK_DAYS), endDate: monthEnd })
-        .then((result) => ({ ok: true as const, result }), () => ({ ok: false as const, result: null })),
-      request<{ adjustments: AdjustmentView[]; treatments: TreatmentView[] }>(`/api/dp/time-recording/adjustments?month=${month}`,
-        { fallbackError: "Não foi possível carregar os ajustes." }).catch(() => ({ adjustments: [], treatments: [] })),
-    ]).then(([monthPayload, historyPayload, absencePayload, adjustmentPayload]) => {
-      setAdjustments(adjustmentPayload.adjustments);
-      setTreatments(adjustmentPayload.treatments);
-      if (cancelled) return;
-      setSchedule(monthPayload);
-      setHistory(historyPayload);
-      setAbsencesUnavailable(!absencePayload.ok);
-      setAbsences((absencePayload.result?.requests ?? [])
-        .filter((item) => item.input.startDate <= monthEnd && item.input.endDate >= monthStart && !["draft", "cancelled", "rejected"].includes(item.status))
-        .map((item) => ({ id: item.id, typeName: item.typeName, status: item.status, startDate: item.input.startDate, endDate: item.input.endDate,
-          approvedByInaction: item.approvedByInaction })));
-    }).catch((error) => {
-      if (!cancelled) setLoadError(errorMessageOf(error, "Não foi possível carregar o mês."));
-    }).finally(() => {
-      if (!cancelled) setLoading(false);
-    });
+    // Uma leitura só: escala, batidas, ajustes, ausências e o contrato central do dia, montados no servidor.
+    request<OwnMonthPayload>(`/api/dp/time-recording/month-view?month=${month}`, { fallbackError: "Não foi possível carregar o mês." })
+      .then((payload) => {
+        if (cancelled) return;
+        setSchedule(payload.schedule);
+        setHistory(payload.history);
+        setAbsences(payload.absences);
+        setAbsencesUnavailable(payload.absencesUnavailable);
+        setAdjustments(payload.adjustments);
+        setTreatments(payload.treatments);
+        setServerDays(payload.monthDays.month === month ? payload.monthDays : null);
+      })
+      .catch((error) => { if (!cancelled) setLoadError(errorMessageOf(error, "Não foi possível carregar o mês.")); })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [employeeUid, firebaseUser, month, monthStart, monthEnd, today, request, reloadKey]);
+  }, [employeeUid, firebaseUser, month, request, reloadKey]);
 
   // Extrato do banco no ciclo do mês aberto: alimenta o cartão "Banco de horas" e a política aplicada em cada dia.
   // Uma leitura por troca de mês ou batida, a mesma que o cartão do banco já fazia.
@@ -189,9 +189,11 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records", embe
     return () => { cancelled = true; };
   }, [employeeUid, firebaseUser, monthEnd, today, request, reloadKey]);
 
-  const days = useMemo(() => buildMonthView({
+  // Contrato central: os dias vêm calculados do servidor e a tela só exibe. O cálculo local fica apenas como
+  // reserva para resposta de servidor anterior ao contrato (publicação em andamento).
+  const days = useMemo(() => (serverDays?.month === month ? serverDays.days : null) ?? buildMonthView({
     month, today, shifts: schedule?.shifts ?? [], markings: history?.markings ?? [], absences, treatments,
-  }), [month, today, schedule, history, absences, treatments]);
+  }), [serverDays, month, today, schedule, history, absences, treatments]);
   // A faixa de registro mostra sempre o dia de hoje, mesmo navegando por outros meses.
   const [todaySnapshot, setTodaySnapshot] = useState<DayView | null>(null);
   useEffect(() => {
