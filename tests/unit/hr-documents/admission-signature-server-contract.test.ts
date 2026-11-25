@@ -72,11 +72,12 @@ test("ações individuais são idempotentes, autorizadas e preservam o kit indiv
     new URL("../../../src/app/api/hr/onboarding/[id]/signature-documents/route.ts", import.meta.url),
     "utf8",
   );
-  assert.match(routeSource, /admissionSignatureParticipantActionSchema\.safeParse\(body\)/);
+  // Rota em secureRoute (25/11/2026): o corpo é validado pelo mesmo schema, estrito, dentro da união de ações.
+  assert.match(routeSource, /admissionSignatureParticipantActionSchema\.options\.map\(\(option\) => option\.strict\(\)\)/);
   assert.match(routeSource, /"resend_participant"/);
   assert.match(routeSource, /"create_signature_link"/);
   assert.match(routeSource, /"replace_participant_email"/);
-  assert.match(routeSource, /\? "signatures\.send"/);
+  assert.match(routeSource, /"replace_participant_email"\]\.includes\(name\)\) return "signatures\.send"/);
   assert.match(source, /collection\("participantActions"\)\.doc\(params\.actionRequestId\)/);
   assert.match(source, /participantActionLease/);
   assert.match(source, /status: "executing"/);

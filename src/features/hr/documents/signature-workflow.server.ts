@@ -1580,7 +1580,9 @@ type AdmissionParticipantActionType =
   | "create_signature_link"
   | "replace_participant_email";
 
-export class ParticipantActionUserError extends Error {}
+// Definida no módulo leve de ações para que o tratamento de erro da rota não carregue este serviço.
+export { ParticipantActionUserError } from "./admission-signature-actions";
+import { ParticipantActionUserError } from "./admission-signature-actions";
 
 type AdmissionParticipantActionClaim = {
   actionRef: FirebaseFirestore.DocumentReference;

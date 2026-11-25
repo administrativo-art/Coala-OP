@@ -21,3 +21,6 @@ export const admissionSignatureParticipantActionSchema = z.discriminatedUnion("a
 export type AdmissionSignatureParticipantAction = z.infer<
   typeof admissionSignatureParticipantActionSchema
 >;
+
+/** Erro de regra numa ação sobre signatário, com mensagem própria para a tela. */
+export class ParticipantActionUserError extends Error {}
