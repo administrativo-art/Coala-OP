@@ -39,7 +39,11 @@ data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = 
     val offlineIssue: String? = null, val offlineReady: Boolean = false,
     val monthDataAvailable: Boolean = false,
     val journeyTrackingActive: Boolean = false, val journeyClosurePromptDate: String? = null,
-    val closedJourneyDate: String? = null, val dayLoad: DayLoad = DayLoad.PENDING)
+    val closedJourneyDate: String? = null, val dayLoad: DayLoad = DayLoad.PENDING,
+    /** Dias calculados no servidor (contrato central) e pedidos de revisão do mês; vazios se a leitura falhar. */
+    val serverDays: Map<String, ServerDay> = emptyMap(), val reviewRequests: List<ReviewRequest> = emptyList(),
+    /** "Hoje" do servidor (fuso do negócio), a mesma referência dos dias calculados. */
+    val serverToday: String? = null)
 /** Whether today's punches and shift are known: a punch is never suggested or confirmed over an unread day. */
 enum class DayLoad { PENDING, READ, UNREAD }
 /** The attempt the screen resends as is: its purpose and unit cannot change, and the time is when it was first tried. */
@@ -200,6 +204,12 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         mutable.update { it.copy(bank = bank, bankDate = workDate) }
     }
     fun month(month: YearMonth) = serverRun { readMonth(month) }
+    /** "Revisei este dia": confirmação organizacional; não altera batidas nem o espelho. */
+    fun markReviewed(requestId: String) = serverRun("Revisão registrada.") {
+        val result = api.markReviewed(requestId, ReviewAction())
+        mutable.update { current -> current.copy(reviewRequests = current.reviewRequests.map {
+            if (it.id == requestId) it.copy(status = result.status, reviewedAt = result.reviewedAt) else it }) }
+    }
     fun selectAuxiliaryMonth(month: YearMonth) { mutable.update { it.copy(month = month) } }
     /** Back from the background: only the options and the official reading, so the clock and the block are current. */
     fun retryOfflineAuthorization() { appAttestation?.retry(); refreshClock() }
@@ -223,6 +233,8 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         val key = month.toString()
         val markings = api.markings(start, end); val shifts = api.timeMonth(key); val adjustments = api.adjustments(key)
         val dayCorrections = api.dayCorrections(key)
+        // Contrato central: a falha não impede o mês; o app volta ao cálculo local até a próxima leitura.
+        val view = try { api.monthView(key) } catch (cause: CancellationException) { throw cause } catch (_: Exception) { null }
         mutable.update { current ->
             val date = current.today.toString()
             val segments = TimeRules.manualSegments(shifts.shifts, date)
@@ -231,6 +243,9 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
             else shifts.shifts.firstOrNull { it.date == date && it.type == "work" }?.unitId
             current.copy(month = month, monthDataAvailable = true, markings = markings.markings, truncated = markings.truncated || shifts.truncated, shifts = shifts.shifts,
                 automaticAbsences = shifts.automaticAbsences.toSet(),
+                serverDays = view?.monthDays?.takeIf { it.month == key }?.days?.associateBy { it.date } ?: emptyMap(),
+                reviewRequests = view?.reviewRequests ?: emptyList(),
+                serverToday = view?.monthDays?.takeIf { it.month == key }?.today,
                 adjustments = adjustments.adjustments, treatments = adjustments.treatments, dayCorrections = dayCorrections.items,
                 dayLoad = if (month == YearMonth.from(current.today)) DayLoad.READ else DayLoad.PENDING,
                 // The unit is never chosen by hand: the shift's unit when it is released, otherwise the person's first unit.

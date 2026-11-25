@@ -190,4 +190,22 @@ class ApiContractTest {
             assertEquals("/api/collaborator/requests/shift-swaps/options", server.takeRequest().path)
         }
     }
+
+    @Test fun monthViewDecodesCentralDaysAndReviewRequests() {
+        val body = """{"schedule":{"month":"2026-12","shifts":[]},"history":{"markings":[]},"absences":[],"absencesUnavailable":false,
+            "adjustments":[],"treatments":[],"monthDays":{"month":"2026-12","today":"2026-12-02","algorithmVersion":2,
+            "days":[{"date":"2026-12-01","shift":null,"incidents":["short_break"],"workedMinutes":525,"breakMinutes":15,
+            "balanceMinutes":45,"extendUntil":"18:00","expectedBreakMinutes":60,"markings":[],"allMarkings":[],"absence":null,
+            "plannedWorkMinutes":360,"nightMinutes":0,"deviation":null}]},
+            "reviewRequests":[{"id":"a","date":"2026-12-01","status":"open","origin":"system","reason":null,"reasonLabel":null,
+            "incidents":["short_break"],"createdAt":"2026-12-02T11:00:00.000Z","reviewedAt":null}]}"""
+        val view = json.decodeFromString<OwnMonthView>(body)
+        assertEquals(2, view.monthDays?.algorithmVersion)
+        assertEquals("18:00", view.monthDays?.days?.single()?.extendUntil)
+        assertEquals(listOf("short_break"), view.monthDays?.days?.single()?.incidents)
+        assertEquals("open", view.reviewRequests.single().status)
+        val shift = json.decodeFromString<OwnShift>("""{"date":"2026-12-01","type":"work","coverage":true,"referenceMinutes":480}""")
+        assertTrue(shift.coverage)
+        assertEquals(480, shift.referenceMinutes)
+    }
 }
