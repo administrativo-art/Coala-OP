@@ -156,7 +156,11 @@ test("receipt HTTP controller: permission, injected payment data and invalid IDs
     "@/lib/security/secure-route.server": { secureRoute: ({ enforcer }: any, handler: any) => async (request: Request, context: unknown) => handler({ security: await enforcer.enforce({ request, routeContext: context }) }) },
   });
   const route = load("src/app/api/documents/generated/[id]/payment/route.ts") as Data;
-  const post = (body?: string, id = "receipt-1") => route.POST(new Request("http://localhost/api/documents/generated/receipt-1/payment", { method: "POST", body }), { params: Promise.resolve({ id }) });
+  const post = (body?: string, id = "receipt-1", query = "") => {
+    const url = `http://localhost/api/documents/generated/receipt-1/payment${query}`;
+    const request = Object.assign(new Request(url, { method: "POST", body }), { nextUrl: new URL(url) });
+    return route.POST(request, { params: Promise.resolve({ id }) });
+  };
   for (const privilege of ["view", "create", "authorize", "submit"]) {
     actor = structuredClone(allowed); actor.permissions.financial.paymentRequests[privilege] = false;
     await assert.rejects(post(), { code: "DOCUMENT_RECEIPT_PAYMENT_FORBIDDEN" });
@@ -165,6 +169,7 @@ test("receipt HTTP controller: permission, injected payment data and invalid IDs
   await assert.rejects(post(), { code: "DOCUMENT_RECEIPT_PAYMENT_FORBIDDEN" });
   actor = structuredClone(allowed);
   await assert.rejects(post(JSON.stringify({ amount: 0.01, beneficiary: "other" })), { code: "DOCUMENT_RECEIPT_PAYMENT_BODY_INVALID" });
+  await assert.rejects(post(undefined, "receipt-1", "?amount=0.01"), { code: "DOCUMENT_RECEIPT_PAYMENT_BODY_INVALID" });
   await assert.rejects(post(undefined, "bad/id"), { code: "DOCUMENT_RECEIPT_PAYMENT_ID_INVALID" });
   assert.equal(calls, 0);
   const response = await post();
