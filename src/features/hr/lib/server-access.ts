@@ -81,7 +81,7 @@ export async function assertHrAccess(
   } catch (error) {
     lookupError =
       error instanceof Error ? error.message : "Falha ao validar acesso ao RH.";
-    throw new Error(lookupError);
+    throw new Error(lookupError, { cause: error });
   }
 
   const { decoded, permissions, isDefaultAdmin, profileId, userDoc } = context;
