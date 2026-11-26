@@ -2221,6 +2221,13 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
         method: 'PATCH',
         body: JSON.stringify(body),
       }) as { process?: OnboardingProcess };
+      if (['cancel', 'retry_document_discard'].includes(String(body.action))) {
+        for (let page = 0; page < 10 && payload.process?.documentDiscard?.status === 'pending' && !payload.process.documentDiscard.blockedFiles && !payload.process.documentDiscard.waitingForUploads && !payload.process.documentDiscard.waitingForOperation; page++) {
+          const next = await apiFetch(`/api/hr/onboarding/${processId}`, getToken, { method: 'PATCH', body: JSON.stringify({ action: 'retry_document_discard' }) }) as { process?: OnboardingProcess };
+          if (!next.process) break;
+          payload.process = next.process;
+        }
+      }
       if (payload.process?.currentStage === 'accountant' && ['document_status', 'document_status_bulk'].includes(String(body.action))) {
         setPhaseId('accountant');
       }
@@ -2822,7 +2829,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
         <div className="space-y-4 px-6 py-5">
           <div className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-            <p className="text-xs font-semibold leading-relaxed">O processo sairá da lista ativa, o link público será fechado e o registro ficará disponível em <strong>Encerradas</strong>, somente para consulta.</p>
+            <p className="text-xs font-semibold leading-relaxed">O processo sairá da lista ativa, o link público será fechado e os arquivos da admissão serão apagados definitivamente. O motivo e o resultado da exclusão ficarão em <strong>Encerradas</strong>.</p>
           </div>
           <label className="block">
             <span className="text-sm font-black text-slate-800">Motivo detalhado <span className="text-rose-600">*</span></span>
@@ -2893,6 +2900,8 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3.5">
             <p className="text-xs font-black uppercase tracking-wide text-rose-700">Integração encerrada sem finalização</p>
             <p className="mt-1 whitespace-pre-wrap wrap-break-word text-sm font-semibold leading-relaxed text-rose-950">{selectedProcess.cancelReason ?? 'Motivo não registrado.'}</p>
+            <p className="mt-2 text-xs font-semibold text-rose-800">{selectedProcess.documentDiscard?.status === 'completed' ? 'Arquivos da admissão excluídos definitivamente.' : 'Exclusão de arquivos pendente.'}</p>
+            {canManage && selectedProcess.documentDiscard?.status !== 'completed' ? <button type="button" disabled={updating === `${selectedProcess.id}:retry_document_discard`} onClick={() => void patchProcess(selectedProcess.id, { action: 'retry_document_discard' })} className="mt-2 rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs font-bold text-rose-800">Concluir exclusão dos arquivos</button> : null}
             <p className="mt-2 text-[11px] font-bold text-rose-600">
               {selectedProcess.cancelledAt ? `Encerrada em ${formatOnboardingDate(selectedProcess.cancelledAt)}` : 'Data não registrada'}
               {selectedProcess.cancelledByEmail ? ` · por ${selectedProcess.cancelledByEmail}` : ''}
@@ -3445,6 +3454,8 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                 <div className="min-w-0">
                   <p className="text-xs font-black uppercase tracking-wide text-rose-700">Integração encerrada sem finalização</p>
                   <p className="mt-1 whitespace-pre-wrap wrap-break-word text-sm font-semibold leading-relaxed text-rose-950">{selectedProcess.cancelReason ?? 'Motivo não registrado.'}</p>
+            <p className="mt-2 text-xs font-semibold text-rose-800">{selectedProcess.documentDiscard?.status === 'completed' ? 'Arquivos da admissão excluídos definitivamente.' : 'Exclusão de arquivos pendente.'}</p>
+            {canManage && selectedProcess.documentDiscard?.status !== 'completed' ? <button type="button" disabled={updating === `${selectedProcess.id}:retry_document_discard`} onClick={() => void patchProcess(selectedProcess.id, { action: 'retry_document_discard' })} className="mt-2 rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs font-bold text-rose-800">Concluir exclusão dos arquivos</button> : null}
                   <p className="mt-2 text-[11px] font-bold text-rose-600">
                     {selectedProcess.cancelledAt ? `Encerrada em ${formatOnboardingDate(selectedProcess.cancelledAt)}` : 'Data não registrada'}
                     {selectedProcess.cancelledByEmail ? ` · por ${selectedProcess.cancelledByEmail}` : ''}

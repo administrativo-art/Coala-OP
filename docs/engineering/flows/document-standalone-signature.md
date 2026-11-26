@@ -1,5 +1,8 @@
 # Assinatura avulsa de documento gerado
 
+26/11/2026 — O formato `signed-pdf` é explícito: exige `documents.view` e `signatures.view`; quando a solicitação tem titular histórico, exige entrada RH coerente e autorização atual de pessoa/unidade/tipo documental. `format=pdf` conserva o PDF preparado, com sua autorização anterior. A Gestão separa **PDF preparado** de **PDF assinado**; a pasta solicita apenas o assinado para estados `signed` ou legado `archived` e não oferece essa ação a quem não pode consultar assinaturas. Troca de usuário efetivo invalida lista, requisições e prévia anteriores. Custo do assinado com titular inclui entrada RH, configurações de visibilidade e consultas limitadas de vínculo/unidade.
+
+
 ## Nomenclatura dos novos envios — 02/11/2026
 
 O pacote de fechamento espelho/contracheque também usa RH no título externo, preservando a competência no tipo. O texto interno usado para compor o PDF/manifesto permanece separado e inalterado; bytes e assinatura do empregador não são renomeados/recriados por esta política. Automações de integração usam o setor do catálogo do modelo quando disponível.
@@ -21,9 +24,11 @@ O título no Autentique conserva `|`; o filename substitui caracteres incompatí
 1. [`sendGeneratedDocumentForStandaloneSignature`](../../../src/features/hr/documents/signature-workflow.server.ts) exige status `approved` ou `final`, escopo `independent` e PDF oficial. Resolve signatários das partes, empresa ou colaborador; aceita destinatário explícito e exige e-mails válidos. Reutiliza a solicitação `signature_generated_{generatedDocumentId}` se ela já tiver ID no provedor.
 2. O serviço baixa o PDF do Storage, reserva protocolo, compõe pacote com manifesto e salva PDF pré-assinatura e manifesto. Cria `hrSignatureRequests/{id}` com status `sending`, envia à Autentique e atualiza a solicitação e `generatedDocuments/{id}` para `sent`/`final`. Em falha de envio, registra `failed` na solicitação e propaga o erro. [Fonte](../../../src/features/hr/documents/signature-workflow.server.ts).
 3. O [webhook da Autentique](../../../src/app/api/webhooks/autentique/route.ts) exige segredo e assinatura válidos, rejeita evento já registrado em `hrAutentiqueWebhookEvents`, localiza a solicitação pelo ID do documento no provedor e atualiza seu estado. Em `document.finished` com URL assinada, agenda o arquivamento após a resposta. A reconciliação manual consulta o provedor e também arquiva quando encontra assinatura completa. [Fonte](../../../src/features/hr/documents/signature-workflow.server.ts).
-4. [`archiveAutentiqueSignedDocument`](../../../src/features/hr/documents/signature-workflow.server.ts) baixa o PDF assinado e salva em `signed-documents/generated/{generatedDocumentId}/{signatureRequestId}/signed.pdf`. Se houver colaborador, pode criar `employeeDocuments/{id}` no banco de RH. Atualiza documento gerado e solicitação com hash, localização, status `signed` e data de arquivamento. Retorna o ID já arquivado quando a solicitação o registra.
+4. [`archiveAutentiqueSignedDocument`](../../../src/features/hr/documents/signature-workflow.server.ts) baixa o PDF assinado e salva em `signed-documents/generated/{generatedDocumentId}/{signatureRequestId}/{signedHash}/signed.pdf`. Se houver colaborador, pode criar `employeeDocuments/{id}` no banco de RH. Atualiza documento gerado e solicitação com hash, localização, status `signed` e data de arquivamento. Retorna o ID já arquivado quando a solicitação o registra.
 
 O termo de posse patrimonial reutiliza este percurso com `purpose: asset_custody_term`. A solicitação e o documento do colaborador preservam `sourceAssetId` e `sourceCustodyTransferId`; o webhook e a reconciliação projetam o resultado de volta em `assetCustodyTransfers`. O protocolo desse fluxo é `PAT`, em vez do fallback genérico do assinador avulso.
+
+26/11/2026 — a entrada permanece em **Acervo → Empresa → Documentos gerados** desde a geração, inclusive quando não há titular. Estado `archived` não prova criação de `employeeDocuments`; a pasta usa o registro da origem. A abertura PDF revalida origem congelada, solicitação, referência e hash dos bytes do assinado; falha parcial permanece visível e não retorna o PDF preparado.
 
 ## Dados, acesso e dependências
 

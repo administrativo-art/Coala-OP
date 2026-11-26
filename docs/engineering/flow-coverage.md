@@ -1,3 +1,5 @@
+26/11/2026: pastas do Acervo para gerador central, editor e uploads recebidos a classificar; gerados legados têm projeção sem backfill e PDF assinado canônico com conferência de integridade. `document-central`/`document-generation` permanecem Traçado: alteração local, sem homologação ou publicação de produção. Comandos/resultados no chamado.
+
 03/11/2026: [rastreabilidade por pessoa](document-person-traceability.md) ganhou inventário local por ID/papel, teste integrado em emulador e regra permanente para fontes novas. Privacidade ainda precisa da ação na interface e do censo/export legado; cobertura histórica não foi promovida a verificada.
 03/11/2026: destinação de anexos da caixa separa Cobranças de Fluxos/Histórico/Acervo, mantém Empresa → Financeiro institucional, acrescenta referência privada de NF patrimonial e exclusão por arquivo/EML saneado sob confirmação e guarda de soft delete. `document-central`, `assets` e `financial-inbox` permanecem Traçado até ensaio integrado e homologação externa.
 O ensaio local `tests/integration/document-central.test.mjs` cobre concorrência de análise/descarte, sidecars v1/v2, falhas parciais MIME/Storage e permissões; `tests/e2e/financial/inbox.spec.ts` cobre confirmação, cancelamento, erro/retry e visualização do vínculo no patrimônio. O E2E novo segue em observação no CI, e a homologação externa permanece pendente.
@@ -71,8 +73,8 @@ Classificação atual: **174/174 páginas** — 126 ativas, 6 de navegação, 31
 | `system-notices` | 1 | Traçado | [Avisos do sistema](flows/system-notices.md) — central por permissão e público, rotina diária do certificado/comprovantes/normas; publicação e E2E pendentes |
 | `company-documents` | 2 | Traçado | [Arquivo e acesso](flows/company-documents.md) — percurso complementado; verificação integrada pendente |
 | `consents` | 1 | Traçado | [Imagem e voz](flows/consents.md) — percurso complementado; verificação integrada pendente |
-| `document-generation` | 9 | Traçado | [Geração, leitura e auditoria](flows/document-generation.md), [revisão/finalização](flows/document-review-finalization.md), [assinatura avulsa](flows/document-standalone-signature.md) — verificação integrada pendente |
-| `document-central` | 8 | Traçado | [Acervo, fluxos e histórico](flows/document-central.md) — explorador compartilhado, pasta publicada e biblioteca de modelos; homologação externa pendente |
+| `document-generation` | 10 | Traçado | [Geração, leitura e auditoria](flows/document-generation.md), [revisão/finalização](flows/document-review-finalization.md), [assinatura avulsa](flows/document-standalone-signature.md) — verificação integrada pendente |
+| `document-central` | 9 | Traçado | [Acervo, fluxos e histórico](flows/document-central.md) — explorador compartilhado, pasta publicada e biblioteca de modelos; homologação externa pendente |
 | `document-templates` | 8 | Traçado | [Cadastro e publicação](flows/document-templates.md) — biblioteca acessível pelo Acervo; percurso complementado |
 | `design-guide` | 1 | Traçado | [Guia de design](flows/design-guide.md) — página interna de referência; verificação integrada pendente |
 | `dp-overview` | 1 | Traçado | [Painel DP](flows/dp-overview.md) — percurso complementado; verificação integrada pendente |

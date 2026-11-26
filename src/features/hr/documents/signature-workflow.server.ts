@@ -1,3 +1,4 @@
+import { discardCancelledOnboardingDocuments } from "@/lib/hr/onboarding-document-discard.server";
 import { prepareOnboardingPersonForWrite } from "@/features/privacy/onboarding-person.server";
 import "server-only";
 
@@ -659,11 +660,11 @@ export async function prepareAdmissionSignaturePlacement(params: {
   await Promise.all([
     bucket.file(packagePath).save(composed.buffer, {
       resumable: false,
-      metadata: { contentType: "application/pdf", cacheControl: "private, no-store" },
+      metadata: { contentType: "application/pdf", cacheControl: "private, no-store", metadata: { onboardingId: params.onboardingId } },
     }),
     bucket.file(manifestPath).save(Buffer.from(JSON.stringify(composed.manifest, null, 2)), {
       resumable: false,
-      metadata: { contentType: "application/json", cacheControl: "private, no-store" },
+      metadata: { contentType: "application/json", cacheControl: "private, no-store", metadata: { onboardingId: params.onboardingId } },
     }),
   ]);
   const signers: AdmissionSignatureLayoutSigner[] = [
@@ -2081,11 +2082,11 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
   await Promise.all([
     bucket.file(preSignaturePath).save(composed.buffer, {
       resumable: false,
-      metadata: { contentType: "application/pdf", cacheControl: "private, no-store" },
+      metadata: { contentType: "application/pdf", cacheControl: "private, no-store", metadata: text(generated.get("onboardingId")) ? { onboardingId: String(generated.get("onboardingId")) } : {} },
     }),
     bucket.file(manifestPath).save(Buffer.from(JSON.stringify(composed.manifest, null, 2)), {
       resumable: false,
-      metadata: { contentType: "application/json", cacheControl: "private, no-store" },
+      metadata: { contentType: "application/json", cacheControl: "private, no-store", metadata: text(generated.get("onboardingId")) ? { onboardingId: String(generated.get("onboardingId")) } : {} },
     }),
   ]);
   const now = new Date().toISOString();
@@ -2109,6 +2110,7 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
     status: "sending",
     provider: "autentique",
     generatedDocumentId: params.generatedDocumentId,
+    onboardingId: text(generated.get("onboardingId")),
     sourceGeneratedVersion: generated.get("version") ?? generated.get("templateVersion") ?? null,
     sourceGeneratedHash: generated.get("pdfContentHash") ?? generated.get("docxContentHash") ?? null,
     sourceGeneratedStoragePath: generated.get("pdfStoragePath") ?? generated.get("storagePath") ?? null,
@@ -2424,6 +2426,8 @@ async function createEmployeeSignedDocument(params: {
   };
   await hrDbAdmin.runTransaction(async (transaction) => {
     const current = await transaction.get(reference);
+    const currentProcess = await transaction.get(hrDbAdmin.collection("onboardingProcesses").doc(String(params.workflow.onboardingId)));
+    if (currentProcess.get("status") === "cancelled") throw new Error("A admissão foi encerrada; o documento não pode ser arquivado.");
     if (current.exists) {
       if (current.get("signatureRequestId") !== params.workflow.signatureRequestId || current.get("sourceOnboardingId") !== params.workflow.onboardingId || current.get("employeeId") !== params.employeeId || current.get("contentHash") !== documentData.contentHash || current.get("storagePath") !== params.signedStoragePath || current.get("deletedAt")) throw new Error("O documento existente diverge da assinatura atual.");
       return;
@@ -2457,7 +2461,10 @@ export async function advanceOnboardingAfterSignatures(onboardingId: string) {
   if (currentStage !== "signature" && currentStage !== "signature_preparation") return false;
   const nextStage = nextLegacyStage(process.data, "signature") ?? nextLegacyStage(process.data, currentStage);
   const stageStartedAt = new Date().toISOString();
-  await process.ref.set({
+  return hrDbAdmin.runTransaction(async (tx) => {
+    const current = await tx.get(process.ref);
+    if (current.get("status") === "cancelled" || current.get("currentStage") !== currentStage) return false;
+    tx.set(process.ref, {
     currentStage: nextStage ?? currentStage,
     ...(nextStage && nextStage !== currentStage ? { currentStageStartedAt: stageStartedAt } : {}),
     status: onboardingStatusForStage(nextStage),
@@ -2468,10 +2475,26 @@ export async function advanceOnboardingAfterSignatures(onboardingId: string) {
     },
     updatedAt: stageStartedAt,
   }, { merge: true });
-  return true;
+    return true;
+  });
 }
 
-export async function archiveAutentiqueSignedDocument(params: {
+export async function archiveAutentiqueSignedDocument(params: { signatureRequestId: string; signedUrl: string; signedAt?: string | null; confirmedByEventId?: string | null }) {
+  const request = await hrDbAdmin.collection(REQUEST_COLLECTION).doc(params.signatureRequestId).get();
+  const generatedId = text(request.get("generatedDocumentId"));
+  const onboardingId = text(request.get("onboardingId")) ?? (generatedId ? text((await dbAdmin.collection("generatedDocuments").doc(generatedId).get()).get("onboardingId")) : null);
+  const parent = onboardingId ? hrDbAdmin.collection("onboardingProcesses").doc(onboardingId) : null;
+  if (parent && (await parent.get()).get("status") === "cancelled") return null;
+  try { return await archiveAutentiqueSignedDocumentImpl(params); }
+  finally {
+    if (parent && (await parent.get()).get("status") === "cancelled") {
+      await parent.set({ documentDiscard: { status: "pending" } }, { merge: true });
+      await discardCancelledOnboardingDocuments(parent.id, "system:cancelled-signature-return");
+    }
+  }
+}
+
+async function archiveAutentiqueSignedDocumentImpl(params: {
   signatureRequestId: string;
   signedUrl: string;
   signedAt?: string | null;
@@ -2676,6 +2699,8 @@ export async function archiveAutentiqueSignedDocument(params: {
     await hrDbAdmin.runTransaction(async (transaction) => {
       const currentRequest = await transaction.get(requestRef);
       const currentWorkflows = await transaction.getAll(...workflowRefs);
+      const currentProcess = await transaction.get(process.ref);
+      if (currentProcess.get("status") === "cancelled") throw new Error("A admissão foi encerrada.");
       if (currentRequest.get("archivedDocumentId")) return;
       if (currentRequest.get("providerDocumentId") !== request.get("providerDocumentId") || currentRequest.get("packageHash") !== request.get("packageHash")) throw new Error("A solicitação mudou durante o retorno da assinatura.");
       const currentPlan = planSignedAdmissionArchive(onboardingId, currentWorkflows.map((snapshot) => ({ id: snapshot.id, ...snapshot.data(), status: "signed" })), { ...currentRequest.data(), status: "signed", signedStoragePath, signedHash });
@@ -2744,6 +2769,7 @@ export async function promoteSignedOnboardingDocuments(params: {
   employeeId: string;
 }) {
   const process = await loadProcess(params.onboardingId);
+  if (process.data.status === "cancelled") return [];
   const snapshot = await hrDbAdmin.collection(WORKFLOW_COLLECTION)
     .where("onboardingId", "==", params.onboardingId)
     .limit(30)

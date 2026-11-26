@@ -21,7 +21,7 @@ src/app/dashboard/dp/requests/page.tsx,active,collaborator-requests,
 src/app/dashboard/documents/generator/page.tsx,active,document-generation,
 src/app/dashboard/documents/editor/page.tsx,active,document-generation,Entrada do editor interno com três caminhos: documento em branco, usar um modelo e criar modelo.
 src/app/dashboard/documents/editor/[id]/page.tsx,active,document-generation,Editor interno Tiptap de documento livre (rascunho; prévia timbrada e finalização pelo servidor; Salvar como modelo).
-src/app/dashboard/documents/editor/documents/page.tsx,active,document-generation,Listagem própria dos documentos do editor (filtro Todos/Rascunhos/Finalizados; paginação por cursor; abrir). Fora do Acervo.
+src/app/dashboard/documents/editor/documents/page.tsx,active,document-generation,Listagem própria dos documentos do editor (filtro Todos/Rascunhos/Finalizados; paginação por cursor; abrir). Também acessível pela pasta Documentos do editor no Acervo.
 src/app/dashboard/documents/editor/templates/page.tsx,active,document-generation,Lista de modelos do editor (filtro por situação; usar; publicar e arquivar para revisores).
 src/app/dashboard/documents/editor/templates/[tid]/page.tsx,active,document-generation,Editor interno em modo modelo (salvar versão; prévia de exemplo; publicar para revisores).
 src/app/dashboard/documents/management/page.tsx,navigation,document-templates;document-generation,
@@ -179,3 +179,4 @@ src/app/dashboard/users/inactive/page.tsx,active,people-access,
 src/app/dashboard/users/page.tsx,redirect,people-access,/dashboard/dp/collaborators
 src/app/dashboard/documents/history/page.tsx,active,document-central,Histórico agregado por origem autorizada; diferencia eventos de estados atuais legados.
 src/app/dashboard/documents/generated/manage/page.tsx,active,document-generation,Gestão detalhada de revisão auditoria e assinatura dos documentos gerados.
+src/app/dashboard/documents/archive/page.tsx,active,document-central;document-generation,Pastas paginadas das fontes gerados editor e recebidos a classificar com ACL da origem.

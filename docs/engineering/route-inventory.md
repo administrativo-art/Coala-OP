@@ -42,10 +42,11 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | --- | --- | --- |
 | `dashboard/design` | [page.tsx](../../src/app/dashboard/design/page.tsx) | [design-guide.tsx](../../src/components/design/design-guide.tsx) |
 
-## documents (21)
+## documents (22)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
+| `dashboard/documents/archive` | [page.tsx](../../src/app/dashboard/documents/archive/page.tsx) | [source-archive.tsx](../../src/features/documents/central/source-archive.tsx), [archive-source-folders.ts](../../src/features/documents/central/archive-source-folders.ts) |
 | `dashboard/documents/collaborators` | [page.tsx](../../src/app/dashboard/documents/collaborators/page.tsx) | [collaborator-archive.tsx](../../src/features/documents/central/collaborator-archive.tsx) |
 | `dashboard/documents/company` | [page.tsx](../../src/app/dashboard/documents/company/page.tsx) | Ler a própria página |
 | `dashboard/documents/consents/[employeeId]` | [page.tsx](../../src/app/dashboard/documents/consents/[employeeId]/page.tsx) | [hr-formalization-permissions.ts](../../src/lib/hr-formalization-permissions.ts), [image-voice-consent.ts](../../src/features/hr/consents/image-voice-consent.ts) |
@@ -362,4 +363,4 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/users/inactive` | [page.tsx](../../src/app/dashboard/users/inactive/page.tsx) | [inactive-users-screen.tsx](../../src/components/inactive-users-screen.tsx) |
 | `dashboard/users` | [page.tsx](../../src/app/dashboard/users/page.tsx) | Redireciona para `/dashboard/dp/collaborators` |
 
-Total: **180 páginas** no checkout usado para a geração.
+Total: **181 páginas** no checkout usado para a geração.

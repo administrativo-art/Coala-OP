@@ -323,7 +323,7 @@ export async function generateDocumentFromTemplate(
         await Promise.all([
           bucket.file(existingPdfStoragePath).save(pdfBuffer, {
             resumable: false,
-            metadata: { contentType: "application/pdf", cacheControl: "private, no-store" },
+            metadata: { contentType: "application/pdf", cacheControl: "private, no-store", metadata: params.onboardingId ? { onboardingId: params.onboardingId } : {} },
           }),
           existing.ref.set({
             pdfStoragePath: existingPdfStoragePath,
@@ -380,6 +380,7 @@ export async function generateDocumentFromTemplate(
       contentType:
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       cacheControl: "private, no-store",
+      metadata: params.onboardingId ? { onboardingId: params.onboardingId } : {},
     },
   });
 
@@ -392,7 +393,7 @@ export async function generateDocumentFromTemplate(
     pdfStoragePath = `${folder}/${baseName}.pdf`;
     await bucket.file(pdfStoragePath).save(pdfBuffer, {
       resumable: false,
-      metadata: { contentType: "application/pdf", cacheControl: "private, no-store" },
+      metadata: { contentType: "application/pdf", cacheControl: "private, no-store", metadata: params.onboardingId ? { onboardingId: params.onboardingId } : {} },
     });
   }
 

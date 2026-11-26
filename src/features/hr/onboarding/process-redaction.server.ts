@@ -17,6 +17,9 @@ export function redactOnboardingProcess(
   access: FormalizationAccess,
 ) {
   const result = structuredClone(process) as Record<string, unknown>;
+  delete result.documentDiscardProgress;
+  delete result.documentDiscardLease;
+  delete result.documentDiscardRevision;
   const allowed = (action: Parameters<typeof hasFormalizationPermission>[1]) =>
     hasFormalizationPermission(access.permissions, action, access.isDefaultAdmin);
   const accountantWorkflow = result.accountantWorkflow && typeof result.accountantWorkflow === 'object' && !Array.isArray(result.accountantWorkflow)

@@ -1,3 +1,8 @@
+import { admissionRecordVisibility } from "@/lib/hr/admission-archive-lifecycle.server";
+import { secureRoute } from "@/lib/security/secure-route.server";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { defineSecurityEnforcer } from "@/lib/security/enforcer";
+import { AppError } from "@/lib/observability/app-error";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
@@ -187,9 +192,21 @@ async function saveEmployeeDocument(input: {
   return { id, ...serializedObject(payload) };
 }
 
-export async function GET(request: NextRequest) {
+const listContract = defineSecurityContract({ schemaVersion: 1, id: "hr.employee-documents.list", version: 1, surface: { method: "GET", path: "/api/hr/employee-documents" }, exposure: "authenticated", identity: { kind: "active-user" }, authorization: { kind: "custom", strategy: "hr-employee-document-list" }, resourceScope: { kind: "custom", strategy: "employee-document-person-unit" }, input: { kind: "schema", schema: "hr.employee-documents.query", unknownFields: "reject" }, effects: { mode: "read", audit: "none" }, errorExposure: "sanitized" });
+const listEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, Awaited<ReturnType<typeof assertHrAccess>>, undefined, undefined>({
+  id: "hr-employee-document-list-v1", guarantees: ["authenticated-user", "active-user", "authorization:hr-employee-document-list", "scope:employee-document-person-unit", "input-validated", "fields-allowlisted"],
+  async enforce({ request }) {
+    const actor = await assertHrAccess(request, "view");
+    const q = request.nextUrl.searchParams, employeeId = q.get("employeeId")?.trim();
+    if (!employeeId || employeeId.length > 256 || /[/\\\u0000]/.test(employeeId) || [...q.keys()].some((key) => !["employeeId", "publishedOnly", "cursor", "limit"].includes(key)) || q.has("publishedOnly") && q.get("publishedOnly") !== "1" || q.has("cursor") && !/^[A-Za-z0-9_-]{1,128}$/.test(q.get("cursor")!) || q.has("limit") && !/^(?:[1-9]|[1-9]\d|100)$/.test(q.get("limit")!) || q.get("publishedOnly") !== "1" && (q.has("cursor") || q.has("limit"))) throw new AppError({ code: "EMPLOYEE_DOCUMENT_LIST_INVALID", kind: "VALIDATION", safeMessage: "Consulta documental inválida." });
+    if (actor.permissions.dp?.collaborators?.ownProfileOnly && employeeId !== actor.userDoc.id) throw new AppError({ code: "EMPLOYEE_DOCUMENT_LIST_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Este perfil permite acessar apenas os próprios documentos." });
+    await assertEmployeeUnitAccess(actor, employeeId).catch(() => { throw new AppError({ code: "EMPLOYEE_DOCUMENT_LIST_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Documento indisponível para esta unidade." }); });
+    return { actor, input: undefined, resource: undefined };
+  },
+});
+export const GET = secureRoute({ contract: listContract, enforcer: listEnforcer }, async ({ request, security }) => {
   try {
-    const access = await assertHrAccess(request, "view");
+    const access = security.actor;
     const employeeId = request.nextUrl.searchParams.get("employeeId")?.trim();
     if (!employeeId) return error("Colaborador não informado.");
     const publishedOnly = request.nextUrl.searchParams.get("publishedOnly");
@@ -216,7 +233,9 @@ export async function GET(request: NextRequest) {
     // Aplica a política de sigilo por documento; o usuário só recebe o que pode ver.
     const accessSettings = await loadEmployeeDocumentAccessSettings(access);
     const subject = buildEmployeeDocumentAccessSubject(access, accessSettings, employeeId);
-    const documents = page
+    const visibleAdmission = admissionRecordVisibility();
+    const eligible = (await Promise.all(page.map(async (doc) => await visibleAdmission(doc.data()) ? doc : null))).filter((doc) => doc !== null);
+    const documents = eligible
       .filter((doc) => !doc.get("deletedAt"))
       .filter((doc) => !paged || isPublishedToEmployee(doc.data()))
       .filter((doc) => canAccessDocument(
@@ -240,7 +259,7 @@ export async function GET(request: NextRequest) {
   } catch {
     return error("Não foi possível consultar documentos com este acesso.", 403);
   }
-}
+});
 
 export async function POST(request: NextRequest) {
   try {

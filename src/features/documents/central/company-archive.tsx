@@ -18,6 +18,8 @@ import { COMPANY_DOCUMENT_CATEGORIES } from "@/lib/documents/company-document-ca
 import { COMPANY_DOCUMENT_TYPES, companyIntakeName } from "@/lib/documents/company-document-intake";
 import { TIME_RECORDING_COMPLIANCE_CATEGORY, TIME_RECORDING_COMPLIANCE_FOLDER, TIME_RECORDING_COMPLIANCE_LABEL, TIME_RECORDING_EVIDENCE_SECTIONS, companyDocumentEvidenceSection, companyDocumentFolderCode, companyDocumentNavigationCategory, type CompanyDocumentFolderCode, type TimeRecordingEvidenceSection } from "@/lib/documents/company-document-folders";
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
+import { managesUniformArchive } from "./context-archive-access";
+import { ARCHIVE_SOURCE_FOLDERS, archiveSourceHref, canViewArchiveSource, type ArchiveFolderSource } from "./archive-source-folders";
 
 const CATEGORIES = COMPANY_DOCUMENT_CATEGORIES;
 const UNITS_DATALIST_ID = "company-document-units";
@@ -92,7 +94,7 @@ function nextPendingItemId() {
 /** Aba Empresa do Acervo: pastas e arquivos internos da empresa (sem as pastas dos colaboradores). */
 export function CompanyArchive() {
   const router = useRouter();
-  const { firebaseUser, permissions } = useAuth();
+  const { firebaseUser, permissions, isDefaultAdmin, user } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const [documents, setDocuments] = useState<CompanyDocument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -422,7 +424,7 @@ export function CompanyArchive() {
     return () => window.removeEventListener("popstate", restore);
   }, []);
 
-  if (!canView && !access.models && !access.financial) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar documentos da empresa.</p>;
+  if (!canView && !access.models && !access.financial && !access.generated && !access.editor && !access.contextual) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar documentos da empresa.</p>;
 
   const readyToUploadCount = pendingItems.filter((item) => !item.analyzing && item.title.trim() && item.unitId && item.category && (!COMPANY_DOCUMENT_TYPES.find((type) => type.code === item.documentType)?.reference || item.reference.trim()) && (!item.folderCode || item.evidenceSection)).length;
 
@@ -456,6 +458,10 @@ export function CompanyArchive() {
     const unclassified = folders.findIndex((folder) => folder.id === "A classificar");
     folders.splice(unclassified < 0 ? folders.length : unclassified, 0, { id: "models", name: companyArchiveFolderLabel("Modelos"), open: () => router.push("/dashboard/documents/models") });
   }
+  const sourceFolders = (Object.keys(ARCHIVE_SOURCE_FOLDERS) as ArchiveFolderSource[])
+    .filter((source) => source !== "receipts" && source !== "pilotReceipts" && (source !== "uniforms" || managesUniformArchive({ permissions, isDefaultAdmin, userDoc: user ?? {} })) && canViewArchiveSource(source, permissions, isDefaultAdmin, user ?? {}))
+    .map((source) => ({ id: `source:${source}`, name: ARCHIVE_SOURCE_FOLDERS[source].label, open: () => router.push(archiveSourceHref(source)) }));
+  folders.push(...sourceFolders);
   const fileEntries = (list: CompanyDocument[]): ArchiveEntry[] => list.map((document) => ({
     id: document.id, name: document.title, kind: "file", description: document.standardizedName || document.originalName,
     size: formatSize(document.size), sizeBytes: document.size, modified: document.uploadedAt ? formatDate(document.uploadedAt) : undefined,
@@ -494,7 +500,7 @@ export function CompanyArchive() {
     return results;
   };
   let entries: ArchiveEntry[];
-  if (searching) entries = [...folderMatches(), ...fileEntries(filtered).map((entry, index) => ({ ...entry, location: documentLocation(filtered[index]) }))];
+  if (searching) entries = [...folderMatches(), ...sourceFolders.filter((folder) => matchesArchiveSearch(searchTerms, [folder.name])).map((folder): ArchiveEntry => ({ ...folder, kind: "folder", location: "Empresa" })), ...fileEntries(filtered).map((entry, index) => ({ ...entry, location: documentLocation(filtered[index]) }))];
   else if (categoryFilter === "all") entries = visibleCategories.map((category) => ({ id: "category:" + category, name: companyArchiveFolderLabel(category), kind: "folder", description: `${documents.filter((document) => companyDocumentNavigationCategory(document) === category).length} documentos`, open: () => selectCategory(category) }));
   else if (folderFilter && !sectionFilter) entries = [
     ...TIME_RECORDING_EVIDENCE_SECTIONS.map((section): ArchiveEntry => ({ id: "section:" + section.code, name: section.label, kind: "folder", open: () => selectTimeRecordingFolder(section.code) })),
@@ -507,6 +513,7 @@ export function CompanyArchive() {
   ];
   else entries = fileEntries(filtered);
   if (!searching && categoryFilter === "all" && access.models) entries.push({ id: "models", name: companyArchiveFolderLabel("Modelos"), kind: "folder", description: "Biblioteca de modelos por categoria", open: () => router.push("/dashboard/documents/models") });
+  if (!searching && categoryFilter === "all") entries.push(...sourceFolders.map((folder): ArchiveEntry => ({ ...folder, kind: "folder" })));
   const breadcrumbs = [
     ...(categoryFilter !== "all" ? [{ name: companyArchiveFolderLabel(categoryFilter), open: () => selectCategory(categoryFilter) }] : []),
     ...(folderFilter ? [{ name: TIME_RECORDING_COMPLIANCE_LABEL, open: () => selectTimeRecordingFolder() }] : []),

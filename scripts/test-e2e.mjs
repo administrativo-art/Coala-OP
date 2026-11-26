@@ -81,7 +81,9 @@ const child = spawn(
     "firebase.e2e.json",
     "--only",
     "auth,firestore",
-    process.argv.includes('--person-inventory-partial')
+    process.argv.includes('--archive-folders')
+      ? 'npm run test:e2e:playwright -- tests/e2e/documents/archive.spec.ts --grep "Acervo inclui gerados"'
+      : process.argv.includes('--person-inventory-partial')
       ? 'npm run test:e2e:playwright -- tests/e2e/settings/person-inventory.spec.ts --grep "inventário explicita"'
       : process.argv.includes('--person-inventory')
       ? 'npm run test:e2e:playwright -- tests/e2e/settings/person-inventory.spec.ts'

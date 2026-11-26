@@ -1830,3 +1830,5 @@ export const checklistMarkOverdue = onSchedule(
     console.log(`[checklistMarkOverdue] ${totalMarked} execuções marcadas como overdue.`);
   }
 );
+
+export { onboardingDocumentDiscardRequested, discardLateOnboardingObject, discardLateOnboardingEmployeeDocument, retryOnboardingDocumentDiscard } from "./onboarding-document-discard.js";

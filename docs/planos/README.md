@@ -4,6 +4,7 @@
 
 | Plano | Área |
 | --- | --- |
+| [Garantia de pastas documentais](plano-garantia-pastas-documentais.md) | Acervo, gerados, editor e recebidos a classificar |
 | [Rastreabilidade por pessoa](plano-rastreabilidade-pessoa.md) | Privacidade, Pessoas, documentos e integrações |
 | [Destinação dos arquivos de Cobranças](plano-destinacao-documental-cobrancas.md) | Financeiro, Patrimônio e Documentos |
 | [Armazenamento documental único](plano-armazenamento-documental-unico.md) | PDF assinado compartilhado por Acervo/processo, integridade e limpeza histórica separada |

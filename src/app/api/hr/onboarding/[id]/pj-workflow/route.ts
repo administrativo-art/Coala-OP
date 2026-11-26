@@ -1,3 +1,10 @@
+import { z } from "zod";
+import { secureRoute } from "@/lib/security/secure-route.server";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { defineSecurityEnforcer } from "@/lib/security/enforcer";
+import { AppError } from "@/lib/observability/app-error";
+import { canAccessUnit } from "@/lib/unit-access";
+import { discardCancelledOnboardingDocuments } from "@/lib/hr/onboarding-document-discard.server";
 import { confirmedSubjectKeysForDocument } from "@/features/privacy/person-lookup.server";
 import { subjectKey } from "@/features/privacy/person-subject";
 import { createHash, randomUUID } from 'node:crypto';
@@ -66,11 +73,11 @@ function integrationTemplate(process: Record<string, unknown>) {
 async function loadProcess(id: string) {
   const ref = hrDbAdmin.collection('onboardingProcesses').doc(id);
   const snapshot = await ref.get();
-  if (!snapshot.exists) throw new Error('Integração PJ não encontrada.');
+  if (!snapshot.exists) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Integração PJ não encontrada.' });
   const process = snapshot.data() ?? {};
-  if (process.employmentRelationshipType !== 'pj') throw new Error('Este fluxo está disponível somente para contratação PJ.');
+  if (process.employmentRelationshipType !== 'pj') throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Este fluxo está disponível somente para contratação PJ.' });
   const workflow = workflowFrom(process);
-  if (!workflow) throw new Error('O fluxo PJ desta integração está incompleto.');
+  if (!workflow) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'O fluxo PJ desta integração está incompleto.' });
   return { ref, process, workflow };
 }
 
@@ -81,7 +88,7 @@ async function readStorage(path: string) {
 
 async function downloadSignedPdf(url: string) {
   const response = await fetch(url, { signal: AbortSignal.timeout(30_000), cache: 'no-store' });
-  if (!response.ok) throw new Error(`Não foi possível baixar o contrato assinado (HTTP ${response.status}).`);
+  if (!response.ok) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: `Não foi possível baixar o contrato assinado (HTTP ${response.status}).` });
   return Buffer.from(await response.arrayBuffer());
 }
 
@@ -132,19 +139,36 @@ function validateContractData(data: PjContractData) {
     data.provider.representativeName, data.provider.representativeQualification,
     data.provider.representativeCpf, data.forumCity, data.signatureCity,
   ];
-  if (required.some(value => !value)) throw new Error('Preencha todos os dados do contrato e dos dois representantes.');
+  if (required.some(value => !value)) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Preencha todos os dados do contrato e dos dois representantes.' });
   if (data.contractor.representativeCpf.length !== 11 || data.provider.representativeCpf.length !== 11) {
-    throw new Error('Informe CPF válido para os dois representantes.');
+    throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Informe CPF válido para os dois representantes.' });
   }
 }
 
-export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const access = await assertFormalizationAccess(request, 'onboarding.manage').catch(() => null);
-  if (!access) return error('Sem permissão para acessar o fluxo PJ.', 403);
+const pjBodySchema = z.object({ action: z.string().min(1).max(80), contractorRepresentative: z.unknown().optional(), documentId: z.unknown().optional(), documentIds: z.unknown().optional(), forumCity: z.unknown().optional(), message: z.unknown().optional(), note: z.unknown().optional(), pdvProfileId: z.unknown().optional(), pdvRequired: z.unknown().optional(), pdvUnitId: z.unknown().optional(), profileId: z.unknown().optional(), signatureCity: z.unknown().optional(), status: z.unknown().optional(), unitIds: z.unknown().optional(), userCpf: z.unknown().optional(), userName: z.unknown().optional() }).strict();
+function pjSecurity(method: "GET" | "PATCH") {
+  const contract = defineSecurityContract({ schemaVersion: 1, id: `hr.onboarding.pj.${method.toLowerCase()}`, version: 1, surface: { method, path: "/api/hr/onboarding/[id]/pj-workflow" }, exposure: "authenticated", identity: { kind: "active-user" }, authorization: { kind: "custom", strategy: "pj-onboarding-manage" }, resourceScope: { kind: "custom", strategy: "pj-onboarding-process-unit" }, input: { kind: "schema", schema: "pj-onboarding.input", unknownFields: "reject" }, effects: { mode: method === "GET" ? "read" : "external", audit: method === "GET" ? "none" : "server-authoritative" }, errorExposure: "sanitized" });
+  const enforcer = defineSecurityEnforcer<NextRequest, { params: Promise<{ id: string }> }, unknown, Awaited<ReturnType<typeof assertFormalizationAccess>>, { id: string; body: z.infer<typeof pjBodySchema> | null; asset?: "contract" | "signed_contract" }, Awaited<ReturnType<typeof loadProcess>>>({
+    id: `pj-onboarding-${method.toLowerCase()}-v1`, guarantees: ["authenticated-user", "active-user", "authorization:pj-onboarding-manage", "scope:pj-onboarding-process-unit", "input-validated", "fields-allowlisted", ...(method === "PATCH" ? ["server-authoritative-audit" as const] : [])],
+    async enforce({ request, routeContext }) {
+      const actor = await assertFormalizationAccess(request, "onboarding.manage");
+      const { id } = await routeContext.params;
+      const query = z.object({ asset: z.enum(["contract", "signed_contract"]).optional() }).strict().safeParse(Object.fromEntries(request.nextUrl.searchParams));
+      const parsed = method === "PATCH" ? pjBodySchema.safeParse(await request.json().catch(() => null)) : null;
+      if (!/^[^/\\\u0000]{1,250}$/.test(id) || !query.success || method === "PATCH" && (!parsed?.success || request.nextUrl.searchParams.size)) throw new AppError({ code: "PJ_ONBOARDING_INPUT_INVALID", kind: "VALIDATION", safeMessage: "Consulta ou ação PJ inválida." });
+      const resource = await loadProcess(id);
+      if (!canAccessUnit(actor.userDoc, typeof resource.process.unitId === "string" ? resource.process.unitId : null, { isDefaultAdmin: actor.isDefaultAdmin }) || resource.process.workspaceId != null && resource.process.workspaceId !== actor.workspaceId) throw new AppError({ code: "PJ_ONBOARDING_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Processo indisponível para este acesso." });
+      return { actor, input: { id, body: parsed?.success ? parsed.data : null, asset: query.data.asset }, resource };
+    },
+  });
+  return { contract, enforcer };
+}
+const pjGetSecurity = pjSecurity("GET"), pjPatchSecurity = pjSecurity("PATCH");
+export const GET = secureRoute(pjGetSecurity, async ({ security }) => {
   try {
-    const { id } = await context.params;
-    const { process, workflow } = await loadProcess(id);
-    const asset = request.nextUrl.searchParams.get('asset');
+    const { id, asset } = security.input;
+    const { process, workflow } = security.resource;
+    if (asset && process.status === "cancelled") return error("Arquivo indisponível.", 404);
     if (!asset) return NextResponse.json(serializeHrValue({ id, ...process }));
     const path = asset === 'signed_contract' ? workflow.contract?.signedStoragePath : workflow.contract?.storagePath;
     if (!path) return error('Arquivo ainda não disponível.', 404);
@@ -158,30 +182,29 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       },
     });
   } catch (cause) {
-    return error(cause instanceof Error ? cause.message : 'Falha ao carregar o fluxo PJ.', 400);
+    return error(cause instanceof AppError ? cause.safeMessage : 'Falha ao carregar o fluxo PJ.', cause instanceof AppError ? cause.httpStatus : 503);
   }
-}
+});
 
-export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const access = await assertFormalizationAccess(request, 'onboarding.manage').catch(() => null);
-  if (!access) return error('Sem permissão para gerenciar o fluxo PJ.', 403);
-  const { id } = await context.params;
-  const body = record(await request.json().catch(() => null));
+export const PATCH = secureRoute(pjPatchSecurity, async ({ security }) => {
+  const access = security.actor, { id } = security.input;
+  const body = security.input.body!;
   const action = text(body.action, 80);
   try {
-    const { ref, process, workflow } = await loadProcess(id);
+    const { ref, process, workflow } = security.resource;
+    if (["cancelled", "completed"].includes(String(process.status))) throw new AppError({ code: "PJ_ONBOARDING_CLOSED", kind: "CONFLICT", safeMessage: "O processo foi encerrado e está disponível somente para consulta." });
     const now = new Date().toISOString();
     let nextWorkflow = structuredClone(workflow);
     const update: Record<string, unknown> = { updatedAt: now };
 
     if (action === 'set_document_status') {
-      if (workflow.currentStep !== 'registration_review') throw new Error('Os documentos só podem ser conferidos na etapa 3.');
+      if (workflow.currentStep !== 'registration_review') throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Os documentos só podem ser conferidos na etapa 3.' });
       const documentId = text(body.documentId, 120);
       const status = body.status === 'approved' ? 'approved' : body.status === 'rejected' ? 'rejected' : null;
       const documents = Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [];
       const target = documents.find(document => document.id === documentId);
-      if (!target || !status) throw new Error('Documento ou situação inválida.');
-      if (!target.fileUrl && !target.filePath) throw new Error('O documento não possui arquivo para conferência.');
+      if (!target || !status) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Documento ou situação inválida.' });
+      if (!target.fileUrl && !target.filePath) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'O documento não possui arquivo para conferência.' });
       update.documents = documents.map(document => document.id === documentId ? {
         ...document,
         status,
@@ -190,9 +213,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         updatedAt: now,
       } : document);
     } else if (action === 'request_corrections') {
-      if (workflow.currentStep !== 'registration_review') throw new Error('A devolutiva só pode ser enviada na etapa 3.');
+      if (workflow.currentStep !== 'registration_review') throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'A devolutiva só pode ser enviada na etapa 3.' });
       const message = text(body.message, 2000);
-      if (!message) throw new Error('Explique o que a prestadora precisa corrigir.');
+      if (!message) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Explique o que a prestadora precisa corrigir.' });
       const selectedIds = new Set(stringArray(body.documentIds));
       const documents = Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [];
       update.documents = documents.map(document => selectedIds.has(document.id) ? {
@@ -246,12 +269,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         force: true,
       });
     } else if (action === 'approve_registration') {
-      if (workflow.currentStep !== 'registration_review') throw new Error('A aprovação cadastral só pode ocorrer na etapa 3.');
+      if (workflow.currentStep !== 'registration_review') throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'A aprovação cadastral só pode ocorrer na etapa 3.' });
       const missing = pjRequiredRegistrationFieldsMissing(process.publicFormAnswers);
-      if (missing.length) throw new Error(`Cadastro incompleto: ${missing.join(', ')}.`);
+      if (missing.length) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: `Cadastro incompleto: ${missing.join(', ')}.` });
       const documents = Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [];
       const pending = documents.filter(document => document.required !== false && document.status !== 'approved');
-      if (pending.length) throw new Error(`Aprove os documentos obrigatórios: ${pending.map(document => document.label).join(', ')}.`);
+      if (pending.length) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: `Aprove os documentos obrigatórios: ${pending.map(document => document.label).join(', ')}.` });
       nextWorkflow = setPjWorkflowStep({
         ...workflow,
         review: { status: 'approved', issues: [], reviewedAt: now, reviewedBy: access.decoded.uid },
@@ -260,7 +283,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       if (process.currentStage !== 'signature_preparation') update.currentStageStartedAt = now;
       update.status = 'contract_pending';
     } else if (action === 'save_contract_settings') {
-      if (workflow.currentStep !== 'contract_preparation') throw new Error('O contrato só pode ser preparado na etapa 4.');
+      if (workflow.currentStep !== 'contract_preparation') throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'O contrato só pode ser preparado na etapa 4.' });
       const representative = record(body.contractorRepresentative);
       const contractorRepresentative = {
         name: text(representative.name, 180),
@@ -271,14 +294,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         professionalId: text(representative.professionalId, 120) || null,
       };
       if (!contractorRepresentative.name || !contractorRepresentative.email || !contractorRepresentative.role || !contractorRepresentative.qualification || contractorRepresentative.cpf.length !== 11) {
-        throw new Error('Preencha nome, e-mail, cargo, qualificação e CPF do representante da contratante.');
+        throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Preencha nome, e-mail, cargo, qualificação e CPF do representante da contratante.' });
       }
       const signatureCity = text(body.signatureCity, 180);
       const forumCity = text(body.forumCity, 180);
-      if (!signatureCity || !forumCity) throw new Error('Informe a cidade de assinatura e o foro.');
+      if (!signatureCity || !forumCity) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Informe a cidade de assinatura e o foro.' });
       nextWorkflow.contract = { ...workflow.contract, contractorRepresentative, signatureCity, forumCity };
     } else if (action === 'generate_contract') {
-      if (workflow.currentStep !== 'contract_preparation') throw new Error('A minuta só pode ser gerada na etapa 4.');
+      if (workflow.currentStep !== 'contract_preparation') throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'A minuta só pode ser gerada na etapa 4.' });
       const contractor = await resolveDocumentLegalEntitySnapshot({
         cnpj: process.employerCnpj,
         fallbackName: process.employerUnitName,
@@ -303,7 +326,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       };
     } else if (action === 'approve_contract') {
       if (workflow.currentStep !== 'contract_preparation' || workflow.contract?.status !== 'draft' || !workflow.contract.storagePath) {
-        throw new Error('Gere e confira a minuta antes de aprová-la.');
+        throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Gere e confira a minuta antes de aprová-la.' });
       }
       nextWorkflow = setPjWorkflowStep({
         ...workflow,
@@ -313,12 +336,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       if (process.currentStage !== 'signature') update.currentStageStartedAt = now;
     } else if (action === 'send_contract') {
       if (workflow.currentStep !== 'contract_signature' || workflow.contract?.status !== 'approved' || !workflow.contract.storagePath) {
-        throw new Error('A minuta precisa estar aprovada antes do envio.');
+        throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'A minuta precisa estar aprovada antes do envio.' });
       }
       const representative = workflow.contract.contractorRepresentative;
       const contractorEmail = email(representative?.email);
       const providerEmail = email(workflow.provider.email);
-      if (!contractorEmail || !providerEmail) throw new Error('Os dois signatários precisam de e-mails válidos.');
+      if (!contractorEmail || !providerEmail) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Os dois signatários precisam de e-mails válidos.' });
       const buffer = await readStorage(workflow.contract.storagePath);
       const requestRef = hrDbAdmin.collection('hrSignatureRequests').doc();
       const signatureDocumentName = buildSignatureDocumentName({ department: 'RH', documentType: 'Contrato de prestação de serviços', holderName: workflow.provider.legalName });
@@ -350,7 +373,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         throw cause;
       }
     } else if (action === 'reconcile_contract') {
-      if (workflow.currentStep !== 'contract_signature' || !workflow.contract?.providerDocumentId) throw new Error('O contrato ainda não foi enviado.');
+      if (workflow.currentStep !== 'contract_signature' || !workflow.contract?.providerDocumentId) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'O contrato ainda não foi enviado.' });
       const provider = await getAutentiqueDocumentStatus(workflow.contract.providerDocumentId);
       if (provider.completed && provider.signedUrl) {
         const buffer = await downloadSignedPdf(provider.signedUrl);
@@ -374,7 +397,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         update.signatureProgress = { signedCount: provider.signedCount, signaturesCount: provider.signaturesCount, reconciledAt: now };
       }
     } else if (action === 'submit_finance') {
-      if (workflow.currentStep !== 'financial_registration' || workflow.contract?.status !== 'signed') throw new Error('O contrato assinado é necessário antes do envio ao Financeiro.');
+      if (workflow.currentStep !== 'financial_registration' || workflow.contract?.status !== 'signed') throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'O contrato assinado é necessário antes do envio ao Financeiro.' });
       nextWorkflow.finance = { status: 'submitted', submittedAt: now, submittedBy: access.decoded.uid, note: null };
       await hrDbAdmin.collection('hrNotifications').doc(`pj_financial_registration_${id}`).set({
         type: 'pj_financial_registration', status: 'pending', onboardingId: id,
@@ -383,13 +406,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         channels: ['in_app'], recipient: { strategy: 'financial_pool' }, createdAt: now, updatedAt: now,
       }, { merge: true });
     } else if (action === 'finance_return') {
-      if (workflow.currentStep !== 'financial_registration' || workflow.finance?.status !== 'submitted') throw new Error('O cadastro não está aguardando análise financeira.');
+      if (workflow.currentStep !== 'financial_registration' || workflow.finance?.status !== 'submitted') throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'O cadastro não está aguardando análise financeira.' });
       const note = text(body.note, 2000);
-      if (!note) throw new Error('Informe o motivo da devolução.');
+      if (!note) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Informe o motivo da devolução.' });
       nextWorkflow.finance = { ...workflow.finance, status: 'correction_required', reviewedAt: now, reviewedBy: access.decoded.uid, note };
     } else if (action === 'finance_approve') {
       if (workflow.currentStep !== 'financial_registration' || workflow.finance?.status !== 'submitted') {
-        throw new Error('Envie o cadastro ao Financeiro antes de aprová-lo.');
+        throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Envie o cadastro ao Financeiro antes de aprová-lo.' });
       }
       nextWorkflow = setPjWorkflowStep({
         ...workflow,
@@ -399,18 +422,18 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       if (process.currentStage !== 'integration') update.currentStageStartedAt = now;
       update.status = 'active';
     } else if (action === 'save_access') {
-      if (workflow.currentStep !== 'access_configuration') throw new Error('Os acessos só podem ser configurados na etapa 7.');
+      if (workflow.currentStep !== 'access_configuration') throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Os acessos só podem ser configurados na etapa 7.' });
       const userName = text(body.userName, 180);
       const userCpf = digits(body.userCpf, 11);
       const profileId = text(body.profileId, 160);
       const unitIds = stringArray(body.unitIds);
-      if (!userName || userCpf.length !== 11 || !profileId || !unitIds.length) throw new Error('Informe usuário, CPF, perfil e ao menos uma unidade.');
+      if (!userName || userCpf.length !== 11 || !profileId || !unitIds.length) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Informe usuário, CPF, perfil e ao menos uma unidade.' });
       const [profileDocument, ...unitDocuments] = await Promise.all([
         dbAdmin.collection('profiles').doc(profileId).get(),
         ...unitIds.map(unitId => dbAdmin.collection('dp_units').doc(unitId).get()),
       ]);
-      if (!profileDocument.exists || profileDocument.get('isDefaultAdmin') === true) throw new Error('Perfil de acesso inválido para a prestadora.');
-      if (unitDocuments.some(document => !document.exists || document.get('isArchived') === true)) throw new Error('Uma das unidades selecionadas não está disponível.');
+      if (!profileDocument.exists || profileDocument.get('isDefaultAdmin') === true) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Perfil de acesso inválido para a prestadora.' });
+      if (unitDocuments.some(document => !document.exists || document.get('isArchived') === true)) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Uma das unidades selecionadas não está disponível.' });
       const profileName = text(profileDocument.get('name'), 180) || text(profileDocument.get('profileName'), 180) || profileDocument.id;
       const unitNames = unitDocuments.map(document => text(document.get('name'), 180) || document.id);
       const pdvRequired = body.pdvRequired === true;
@@ -419,13 +442,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         const pdvUnitId = text(body.pdvUnitId, 160);
         const pdvProfileId = text(body.pdvProfileId, 160);
         const unitIndex = unitIds.indexOf(pdvUnitId);
-        if (unitIndex < 0 || !pdvProfileId) throw new Error('Selecione uma unidade liberada e um perfil para o PDV Legal.');
+        if (unitIndex < 0 || !pdvProfileId) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Selecione uma unidade liberada e um perfil para o PDV Legal.' });
         const unitDocument = unitDocuments[unitIndex];
         const pdvFilialId = text(unitDocument.get('pdvFilialId'), 160) || (unitDocument.get('externalSource') === 'pdvlegal' ? text(unitDocument.get('externalId'), 160) : '');
-        if (!pdvFilialId) throw new Error('A unidade selecionada não possui filial do PDV Legal vinculada.');
+        if (!pdvFilialId) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'A unidade selecionada não possui filial do PDV Legal vinculada.' });
         const pdvProfiles = await fetchPdvLegalProfiles();
         const pdvProfile = pdvProfiles.find(profile => String(profile.id) === pdvProfileId);
-        if (!pdvProfile) throw new Error('Perfil do PDV Legal não encontrado.');
+        if (!pdvProfile) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Perfil do PDV Legal não encontrado.' });
         pdv = { pdvUnitId, pdvUnitName: unitNames[unitIndex], pdvFilialId, pdvFilialName: unitNames[unitIndex], pdvProfileId, pdvProfileName: String(pdvProfile.name) };
         update.pdvAccess = { required: true, status: 'pending', unitId: pdvUnitId, unitName: unitNames[unitIndex], filialId: pdvFilialId, filialName: unitNames[unitIndex], profileId: pdvProfileId, profileName: String(pdvProfile.name) };
       } else {
@@ -433,9 +456,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       }
       nextWorkflow.access = { status: 'configured', userName, userCpf, profileId, profileName, unitIds, unitNames, pdvRequired, ...pdv, configuredAt: now, configuredBy: access.decoded.uid };
     } else if (action === 'activate') {
-      if (workflow.currentStep !== 'provider_activation' || !text(process.collaboratorUserId, 200)) throw new Error('Crie e envie o acesso antes de ativar a prestadora.');
-      if (record(process.firstAccess).status !== 'used') throw new Error('A prestadora ainda não concluiu o primeiro acesso ao Coala One.');
-      if (workflow.access?.pdvRequired && record(process.pdvAccess).status !== 'completed') throw new Error('O primeiro acesso ao PDV Legal ainda não foi concluído.');
+      if (workflow.currentStep !== 'provider_activation' || !text(process.collaboratorUserId, 200)) throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'Crie e envie o acesso antes de ativar a prestadora.' });
+      if (record(process.firstAccess).status !== 'used') throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'A prestadora ainda não concluiu o primeiro acesso ao Coala One.' });
+      if (workflow.access?.pdvRequired && record(process.pdvAccess).status !== 'completed') throw new AppError({ code: "PJ_ONBOARDING_VALIDATION", kind: "VALIDATION", safeMessage: 'O primeiro acesso ao PDV Legal ainda não foi concluído.' });
       nextWorkflow = {
         ...workflow,
         currentStep: 'provider_activation',
@@ -454,7 +477,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
 
     update.pjWorkflow = nextWorkflow;
-    await ref.set(update, { merge: true });
+    await hrDbAdmin.runTransaction(async (tx) => {
+      const current = await tx.get(ref);
+      if (["cancelled", "completed"].includes(String(current.get("status")))) throw new AppError({ code: "PJ_ONBOARDING_CLOSED", kind: "CONFLICT", safeMessage: "O processo foi encerrado." });
+      tx.set(ref, update, { merge: true });
+    });
     await logAction({
       user_id: access.decoded.uid,
       username: access.decoded.email ?? null,
@@ -466,6 +493,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const saved = await ref.get();
     return NextResponse.json({ process: { id: saved.id, ...((serializeHrValue(saved.data()) as Record<string, unknown>) ?? {}) } });
   } catch (cause) {
-    return error(cause instanceof Error ? cause.message : 'Falha ao atualizar o fluxo PJ.', 400);
+    const current = await hrDbAdmin.collection("onboardingProcesses").doc(id).get();
+    if (current.get("status") === "cancelled") await discardCancelledOnboardingDocuments(id, "system:cancelled-pj-operation");
+    return error(cause instanceof AppError ? cause.safeMessage : 'Falha ao atualizar o fluxo PJ.', cause instanceof AppError ? cause.httpStatus : 503);
   }
-}
+});

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { archiveSourceHref, isGeneratedSigned } from "@/features/documents/central/archive-source-folders";
 import { CheckCircle2, Clock3, Download, Eye, FileStack, Loader2, Lock, RefreshCw, Search, Send, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,7 @@ type GeneratedDocument = {
   onboardingId?: string | null;
   status: string;
   pdfAvailable?: boolean;
+  signedPdfAvailable?: boolean;
   generatedAt?: string;
   generatedByName?: string;
   signatureScope?: string;
@@ -251,12 +254,12 @@ function formatDateTime(value?: string) {
 
 export default function GeneratedDocumentsPage({ history = false }: { history?: boolean }) {
   const searchParams = useSearchParams();
-  const { firebaseUser, permissions } = useAuth();
-  const canView = hasFormalizationPermission(permissions, "documents.view");
-  const canReview = hasFormalizationPermission(permissions, "documents.review");
-  const canViewAudit = hasFormalizationPermission(permissions, "sensitiveData.view");
-  const canSendSignature = hasFormalizationPermission(permissions, "signatures.send");
-  const canViewSignature = hasFormalizationPermission(permissions, "signatures.view");
+  const { firebaseUser, permissions, isDefaultAdmin } = useAuth();
+  const canView = hasFormalizationPermission(permissions, "documents.view", isDefaultAdmin);
+  const canReview = hasFormalizationPermission(permissions, "documents.review", isDefaultAdmin);
+  const canViewAudit = hasFormalizationPermission(permissions, "sensitiveData.view", isDefaultAdmin);
+  const canSendSignature = hasFormalizationPermission(permissions, "signatures.send", isDefaultAdmin);
+  const canViewSignature = hasFormalizationPermission(permissions, "signatures.view", isDefaultAdmin);
   const [documents, setDocuments] = useState<GeneratedDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -382,21 +385,21 @@ export default function GeneratedDocumentsPage({ history = false }: { history?: 
     )
   );
 
-  async function openFile(id: string, format: "pdf" | "docx") {
+  async function openFile(id: string, format: "pdf" | "docx" | "signed-pdf") {
     setBusyDocument(id);
-    const previewWindow = format === "pdf" ? window.open("about:blank", "_blank") : null;
+    const previewWindow = format !== "docx" ? window.open("about:blank", "_blank") : null;
     if (previewWindow) previewWindow.opener = null;
     try {
-      const response = await fetch(`/api/documents/generated/${encodeURIComponent(id)}/file${format === "pdf" ? "?format=pdf" : ""}`, {
+      const response = await fetch(`/api/documents/generated/${encodeURIComponent(id)}/file${format !== "docx" ? `?format=${format}` : ""}`, {
         headers: { Authorization: `Bearer ${await token()}` },
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || "Falha ao abrir o arquivo.");
+        throw new Error((typeof payload.error === "string" ? payload.error : payload.error?.message) || "Falha ao abrir o arquivo.");
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
-      if (format === "pdf") {
+      if (format !== "docx") {
         if (previewWindow) previewWindow.location.href = url;
         else {
           const anchor = document.createElement("a");
@@ -752,18 +755,21 @@ export default function GeneratedDocumentsPage({ history = false }: { history?: 
                       <p><span className="block text-[10px] font-bold text-slate-400">Gerado em</span><span className="font-semibold">{formatDateTime(selectedDocument.generatedAt)}</span></p>
                       <p><span className="block text-[10px] font-bold text-slate-400">Por</span><span className="font-semibold">{selectedDocument.generatedByName ?? "—"}</span></p>
                       <p><span className="block text-[10px] font-bold text-slate-400">Protocolo</span><span className="font-mono font-extrabold">{selectedDocument.protocol ?? "—"}</span></p>
+                      <p><span className="block text-[10px] font-bold text-ds-ink-muted">Pasta no Acervo</span><Link href={archiveSourceHref("generated", selectedDocument.id)} className="font-bold text-ds-accent underline">Empresa → Documentos gerados</Link></p>
                       <p><span className="block text-[10px] font-bold text-slate-400">Estado</span><span className="font-extrabold">{selectedDocument.signatureStatus ?? DOCUMENT_STATUS_LABELS[(selectedDocument.status === "draft" ? "review_pending" : selectedDocument.status) as GeneratedDocumentStatus] ?? selectedDocument.status}</span></p>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       {selectedDocument.pdfAvailable ? (
                         <Button variant="outline" disabled={busyDocument === selectedDocument.id} onClick={() => void openFile(selectedDocument.id, "pdf")}>
-                          <Eye className="mr-2 h-4 w-4" />Ver PDF
+                          <Eye className="mr-2 h-4 w-4" />{isGeneratedSigned(selectedDocument.signatureStatus) ? "PDF preparado" : "Ver PDF"}
                         </Button>
                       ) : null}
+                      {canViewSignature && isGeneratedSigned(selectedDocument.signatureStatus) ? <Button variant="outline" disabled={!selectedDocument.signedPdfAvailable || busyDocument === selectedDocument.id} onClick={() => void openFile(selectedDocument.id, "signed-pdf")}><Eye className="mr-2 h-4 w-4" />PDF assinado</Button> : null}
                       <Button variant="outline" disabled={busyDocument === selectedDocument.id} onClick={() => void openFile(selectedDocument.id, "docx")}>
                         <Download className="mr-2 h-4 w-4" />DOCX
                       </Button>
                     </div>
+                    {canViewSignature && isGeneratedSigned(selectedDocument.signatureStatus) && !selectedDocument.signedPdfAvailable ? <p className="text-xs text-ds-ink-muted">O arquivamento do PDF assinado está pendente. Confira a trilha de assinatura.</p> : null}
                     {!selectedDocument.pdfAvailable ? (
                       <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
                         <p>O DOCX foi criado, mas a prévia em PDF não está disponível. A aprovação permanece bloqueada até a conversão ser concluída.</p>
