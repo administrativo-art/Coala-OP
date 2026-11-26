@@ -31,6 +31,12 @@ test('every registered source declares an exact namespace, field, role and hones
   assert.equal(sourceById('signature-actors')?.role, 'actor');
   assert.equal(sourceById('signature-actors')?.scopePolicy, 'admin-global');
   assert.equal(sourceById('generated-documents')?.role, 'subject');
+  assert.equal(sourceById('financial-document_receipt-payments')?.namespace, 'hr.employees');
+  assert.equal(sourceById('financial-document_receipt-payments')?.coverage, 'live');
+  assert.equal(sourceById('financial-receipt-preparation-actors')?.namespace, 'main.users');
+  assert.equal(sourceById('financial-receipt-preparation-actors')?.role, 'actor');
+  assert.equal(sourceById('financial-receipt-preparation-actors')?.parentCollection, 'bankPaymentRequests');
+  assert.equal(sourceById('generated-document-actors')?.namespace, 'main.users');
   assert.equal(sourceById('schedule-shift-subjects')?.field, 'userId');
   assert.equal(sourceById('schedule-shift-subjects')?.parentCollection, 'dp_schedules');
   assert.equal(sourceById('schedule-responsibility-subjects')?.role, 'subject');
@@ -162,5 +168,58 @@ test('pedidos de revisão antecipada: titular e ator separados, descobertos pela
     assert.equal(canViewPersonRecord(actor, source, { workspaceId: 'w', unitIds: ['A'] }), true);
     assert.equal(canViewPersonRecord(actor, source, { workspaceId: 'w', unitIds: ['B'] }), false);
     assert.equal(canViewPersonRecord(actor, source, { workspaceId: 'other', unitIds: ['A'] }), false);
+  }
+});
+
+test('fiscal export actor sources require an explicit matching workspace even for global admin', () => {
+  const actor = { workspace_id: 'coala', isDefaultAdmin: true, permissions: {}, userDoc: {} } as Parameters<typeof canViewPersonRecord>[0];
+  for (const id of ['fiscal-afd-export-actors', 'fiscal-aej-export-actors']) {
+    const source = sourceById(id)!;
+    assert.equal(canViewPersonRecord(actor, source, {}), false);
+    assert.equal(canViewPersonRecord(actor, source, { workspaceId: 'other' }), false);
+    assert.equal(canViewPersonRecord(actor, source, { workspaceId: 'coala' }), true);
+  }
+});
+
+
+test('manifestos privados admissionais têm consulta por titular separada do ator', () => {
+  const config = JSON.parse(readFileSync('firestore.rh.indexes.json', 'utf8'));
+  for (const id of ['admission-storage-scopes', 'admission-upload-manifests']) {
+    const source = sourceById(id)!;
+    assert.equal(source.role, 'subject');
+    assert.equal(source.namespace, 'subjectKeys');
+    assert.equal(source.parentCollection, 'onboardingProcesses');
+    const field = config.fieldOverrides.find((entry: { collectionGroup: string; fieldPath: string }) => entry.collectionGroup === source.collection && entry.fieldPath === source.field);
+    assert.ok(field?.indexes.some((entry: { arrayConfig?: string; queryScope: string }) => entry.arrayConfig === 'CONTAINS' && entry.queryScope === 'COLLECTION_GROUP'));
+  }
+  assert.equal(sourceById('admission-signature-workflow-actors')?.role, 'actor');
+});
+
+
+test('DP settings inventory preserves subject, actor and responsibility namespaces with exact list lookup', () => {
+  assert.equal(PERSON_SOURCES[0].id, 'accounts');
+  const subject = sourceById('overtime-policy-subjects')!;
+  assert.deepEqual([subject.namespace, subject.field, subject.role, subject.queryMode, subject.permissionPolicy], ['main.users', 'applicability.collaboratorIds', 'subject', 'array-contains', 'time-config-admin']);
+  for (const suffix of ['creators', 'updaters', 'publishers', 'archivers']) {
+    const source = sourceById(`overtime-policy-${suffix}`)!;
+    assert.equal(source.role, 'actor'); assert.equal(source.namespace, 'main.users');
+  }
+  for (const prefix of ['dp-unit-group', 'dp-unit-organization']) {
+    for (const suffix of ['responsible-users', 'vacated-responsible-users']) {
+      const source = sourceById(`${prefix}-${suffix}`)!;
+      assert.equal(source.role, 'participant'); assert.equal(source.namespace, 'main.users');
+      assert.equal(source.permissionPolicy, 'unit-structure-admin');
+    }
+  }
+  assert.equal(PERSON_SOURCES.some(source => source.collection === 'dp_units'), false, 'operational units have no responsibility producer fields');
+  const config = JSON.parse(readFileSync('firestore.indexes.json', 'utf8'));
+  const dpSources = PERSON_SOURCES.filter(source => ['time-config-admin', 'unit-structure-admin'].includes(source.permissionPolicy));
+  assert.equal(dpSources.length, 9);
+  for (const source of dpSources) for (const tenantField of ['workspaceId', 'workspace_id']) {
+    const fields = [{ fieldPath: tenantField, order: 'ASCENDING' },
+      { fieldPath: source.field, ...(source.queryMode === 'array-contains' ? { arrayConfig: 'CONTAINS' } : { order: 'ASCENDING' }) },
+      { fieldPath: '__name__', order: 'ASCENDING' }];
+    assert.ok(config.indexes.some((index: { collectionGroup: string; queryScope: string; fields: unknown }) =>
+      index.collectionGroup === source.collection && index.queryScope === 'COLLECTION' && JSON.stringify(index.fields) === JSON.stringify(fields)), `missing ${source.id}/${tenantField} index`);
   }
 });

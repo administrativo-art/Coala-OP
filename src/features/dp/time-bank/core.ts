@@ -24,6 +24,11 @@ import type { DPAbsenceType, DPOvertimeCategory, DPOvertimePolicy } from '@/type
 import { absorbedEdgeMinutes, assessBreak } from '../time-config/policy-rules';
 
 export const TIME_BANK_ALGORITHM_VERSION = 'time-bank-v4' as const;
+export type TimeBankAlgorithmVersion = 'time-bank-v3' | typeof TIME_BANK_ALGORITHM_VERSION;
+/** Saved calculations remain immutable and readable after an implementation update. */
+export function isReadableTimeBankAlgorithmVersion(value: unknown): value is TimeBankAlgorithmVersion {
+  return value === 'time-bank-v3' || value === TIME_BANK_ALGORITHM_VERSION;
+}
 export const MARKING_TOLERANCE_LIMIT = 5;
 
 export type BankJourney = { cycleLengthDays: number; validFrom: string; days: Array<{ dayIndex: number; plannedMinutes: number }>;

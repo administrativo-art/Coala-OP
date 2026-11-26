@@ -1,4 +1,5 @@
 import 'server-only';
+import { assertTimeReviewEnabled, timeReviewEnabled } from '@/features/dp/time-config/rollout.server';
 
 import { createHash } from 'node:crypto';
 
@@ -53,6 +54,7 @@ function fail(code: string, safeMessage: string, kind: 'VALIDATION' | 'AUTHORIZA
 
 /** Aviso no sino (idempotente pela chave) e push genérico; falha do push não desfaz o aviso. */
 async function notify(workspaceId: string, uid: string, key: string, body: string, now: Date) {
+  if (!timeReviewEnabled()) return false;
   const id = hash(`time-review:${key}:${uid}`);
   const eventId = stableUuid(`time-review:${key}:${uid}`);
   const ref = notifications().doc(id);
@@ -114,6 +116,7 @@ function personMonthCache(workspaceId: string, today: string) {
  * resumo do mês anterior. Só avisa; não cria batida, ajuste nem falta.
  */
 export async function runTimeReviewJob(workspaceId: string, injected: { now?: Date } = {}) {
+  if (!timeReviewEnabled()) return { evaluated: 0, opened: 0, reopened: 0, resolved: 0, notified: 0, skipped: true };
   const now = injected.now ?? new Date();
   const today = businessToday(now);
   const yesterday = addDays(today, -1);
@@ -244,6 +247,7 @@ export async function runTimeReviewJob(workspaceId: string, injected: { now?: Da
 
 /** "Revisei este dia": só a titular, só pedido aberto, nunca em dia ímpar ou sem batidas. Não altera batida. */
 export async function markReviewRequestReviewed(context: ServerUserContext, requestId: string) {
+  assertTimeReviewEnabled();
   const ref = requests().doc(requestId);
   const snapshot = await ref.get();
   const request = snapshot.data() as TimeReviewRequest | undefined;
@@ -270,6 +274,7 @@ export async function markReviewRequestReviewed(context: ServerUserContext, requ
 /** "Pedir revisão" do DP: permissão de conferência, escopo de unidades, mês aberto, motivo da lista, um por dia. */
 export async function requestReviewByDp(context: ServerUserContext, employeeUid: string, input: { date: string; reason: DPReviewReason }) {
   if (!canReadEmployeeTimeRecording(context)) throw fail('TIME_REVIEW_FORBIDDEN', 'Sem permissão para pedir revisão.', 'AUTHORIZATION');
+  assertTimeReviewEnabled();
   if (!(input.reason in DP_REVIEW_REASONS)) throw fail('TIME_REVIEW_REASON_INVALID', 'Escolha um motivo da lista.');
   const today = businessToday();
   if (input.date >= today) throw fail('TIME_REVIEW_DATE_INVALID', 'Só dá para pedir revisão de dias anteriores.');

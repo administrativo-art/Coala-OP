@@ -1,3 +1,4 @@
+import { admissionRecordVisibility } from "@/lib/hr/admission-archive-lifecycle.server";
 import 'server-only';
 
 import { FieldValue, Timestamp, type DocumentReference, type Firestore } from 'firebase-admin/firestore';
@@ -63,7 +64,9 @@ export async function listOwnPublishedDocumentsPage(context: ServerUserContext, 
   const deps = { ...defaults, ...injected };
   // A consulta já filtra titular e publicação (índice employeeId + publication.status), nunca a coleção inteira.
   const snapshot = await employeeDocuments(deps.hrDb).where('employeeId', 'in', ownEmployeeIds(context)).where('publication.status', '==', 'published').limit(OWN_LIMIT + 1).get();
-  const documents = groupPublishedAdmissionReferences(snapshot.docs.slice(0, OWN_LIMIT).filter((doc) => isPublishedToEmployee(doc.data() as Parameters<typeof isPublishedToEmployee>[0]))
+  const visible = admissionRecordVisibility(deps.hrDb);
+  const eligible = (await Promise.all(snapshot.docs.slice(0, OWN_LIMIT).map(async (doc) => await visible(doc.data()) ? doc : null))).filter((doc) => doc !== null);
+  const documents = groupPublishedAdmissionReferences(eligible.filter((doc) => isPublishedToEmployee(doc.data() as Parameters<typeof isPublishedToEmployee>[0]))
     .map((doc) => ({ ...doc.data(), id: doc.id })))
     .map((doc) => publicView(doc.id, doc))
     .sort((left, right) => String(right.publishedAt).localeCompare(String(left.publishedAt)));
@@ -91,7 +94,7 @@ export async function openOwnPublishedDocument(context: ServerUserContext, id: s
   const ref = employeeDocument(deps.hrDb, id);
   const snapshot = await ref.get();
   const data = snapshot.data();
-  if (!data || !ownEmployeeIds(context).includes(String(data.employeeId ?? '')) || !isPublishedToEmployee(data as Parameters<typeof isPublishedToEmployee>[0])) throw notFound();
+  if (!data || !await admissionRecordVisibility(deps.hrDb)(data) || !ownEmployeeIds(context).includes(String(data.employeeId ?? '')) || !isPublishedToEmployee(data as Parameters<typeof isPublishedToEmployee>[0])) throw notFound();
   const path = text(data.storagePath);
   if (!path) throw notFound();
   const bytes = await deps.storage.download(path);

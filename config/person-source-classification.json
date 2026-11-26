@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "nonPersonalCollections": [
+    "onboardingDocumentDiscardQueue",
     "accounts",
     "dailySalesRefundWatches",
     "dp_units",
@@ -34,19 +35,19 @@
       "file": "src/features/privacy/person-inventory.server.ts",
       "function": "collectPersonSource",
       "call": "db.collection(source.collection)",
-      "functionSha256": "984ce322e2201a9c77e2f7182e4aab7b3a5d790c45cab6f16546134d1774b314"
+      "functionSha256": "c943513fbe86f495841d5de70921a07b35d3cd08220732ac7a959d3a2e106638"
     },
     {
       "file": "src/features/privacy/person-inventory.server.ts",
       "function": "collectPersonSource",
       "call": "db.collection(\"employees\").doc(value).collection(source.collection)",
-      "functionSha256": "984ce322e2201a9c77e2f7182e4aab7b3a5d790c45cab6f16546134d1774b314"
+      "functionSha256": "c943513fbe86f495841d5de70921a07b35d3cd08220732ac7a959d3a2e106638"
     },
     {
       "file": "src/features/privacy/person-inventory.server.ts",
       "function": "collectPersonSource",
       "call": "db.collectionGroup(source.collection)",
-      "functionSha256": "984ce322e2201a9c77e2f7182e4aab7b3a5d790c45cab6f16546134d1774b314"
+      "functionSha256": "c943513fbe86f495841d5de70921a07b35d3cd08220732ac7a959d3a2e106638"
     },
     {
       "file": "src/features/dp/time-adjustments/day-corrections.server.ts",

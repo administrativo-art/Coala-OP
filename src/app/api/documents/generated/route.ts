@@ -1,3 +1,4 @@
+import { admissionRecordVisibility } from "@/lib/hr/admission-archive-lifecycle.server";
 import { NextRequest, NextResponse } from "next/server";
 
 import { serializeHrValue } from "@/features/hr/lib/server-access";
@@ -19,18 +20,19 @@ const schema = z.object({
   documentId: z.string().trim().min(1).max(256).regex(/^[^/]+$/).optional(),
   employeeId: z.string().trim().max(256).optional(),
   templateId: z.string().trim().max(256).optional(),
+  archiveOnly: z.literal("true").optional(),
   includeDiscarded: z.enum(["true", "false"]).optional(),
 }).strict();
 const contract = defineSecurityContract({
   schemaVersion: 1, id: "documents.generated.list", version: 1,
   surface: { method: "GET", path: "/api/documents/generated" }, exposure: "authenticated",
   identity: { kind: "active-user" }, authorization: { kind: "custom", strategy: "generated-documents-view" },
-  resourceScope: { kind: "workspace" }, input: { kind: "schema", schema: "documents.generated.query", unknownFields: "reject" },
+  resourceScope: { kind: "custom", strategy: "generated-documents-legacy-global" }, input: { kind: "schema", schema: "documents.generated.query", unknownFields: "reject" },
   effects: { mode: "read", audit: "none" }, errorExposure: "sanitized",
 });
 const enforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, z.infer<typeof schema>, { workspaceId: string }>({
   id: "generated-documents-list-v1",
-  guarantees: ["authenticated-user", "active-user", "authorization:generated-documents-view", "workspace-scoped", "input-validated", "fields-allowlisted"],
+  guarantees: ["authenticated-user", "active-user", "authorization:generated-documents-view", "scope:generated-documents-legacy-global", "input-validated", "fields-allowlisted"],
   async enforce({ request }) {
     const actor = await requireUser(request).catch(rethrowServerAuthenticationFailure);
     if (!hasFormalizationPermission(actor.permissions, "documents.view", actor.isDefaultAdmin)) throw new AppError({ code: "GENERATED_DOCUMENTS_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem permissão para consultar documentos gerados." });
@@ -59,8 +61,10 @@ export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
     if (templateId) query = query.where("templateId", "==", templateId);
     if (documentId) query = query.where(FieldPath.documentId(), "==", documentId);
     const snap = await query.limit(documentId ? 1 : 300).get();
-    const documents = snap.docs
-      .filter((doc) => includeDiscarded || doc.get("status") !== "discarded")
+    const visible = admissionRecordVisibility();
+    const eligible = security.input.archiveOnly === "true" ? (await Promise.all(snap.docs.map(async (doc) => await visible(doc.data()) ? doc : null))).filter((doc) => doc !== null) : snap.docs;
+    const documents = eligible
+      .filter((doc) => (doc.get("workspaceId") == null || doc.get("workspaceId") === access.workspace_id) && (includeDiscarded || doc.get("status") !== "discarded"))
       .map((doc): Record<string, unknown> & { id: string } => {
         const data = serializeHrValue(doc.data());
         const record = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {};
@@ -72,6 +76,8 @@ export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
           storagePath: undefined,
           pdfAvailable: !!record.pdfStoragePath,
           pdfStoragePath: undefined,
+          signedStoragePath: undefined,
+          signedPdfAvailable: Boolean(record.signedStoragePath && record.signedHash && record.signatureRequestId),
           manualValues: includeSensitive ? record.manualValues : undefined,
           parties: Array.isArray(record.parties)
             ? record.parties.map((party) => {

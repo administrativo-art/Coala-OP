@@ -1,6 +1,25 @@
 
 {
   "indexes": [
+    {"collectionGroup":"dp_overtimePolicies","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"createdBy","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_overtimePolicies","queryScope":"COLLECTION","fields":[{"fieldPath":"workspace_id","order":"ASCENDING"},{"fieldPath":"createdBy","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_overtimePolicies","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"updatedBy","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_overtimePolicies","queryScope":"COLLECTION","fields":[{"fieldPath":"workspace_id","order":"ASCENDING"},{"fieldPath":"updatedBy","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_overtimePolicies","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"publishedBy","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_overtimePolicies","queryScope":"COLLECTION","fields":[{"fieldPath":"workspace_id","order":"ASCENDING"},{"fieldPath":"publishedBy","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_overtimePolicies","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"archivedBy","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_overtimePolicies","queryScope":"COLLECTION","fields":[{"fieldPath":"workspace_id","order":"ASCENDING"},{"fieldPath":"archivedBy","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_overtimePolicies","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"applicability.collaboratorIds","arrayConfig":"CONTAINS"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_overtimePolicies","queryScope":"COLLECTION","fields":[{"fieldPath":"workspace_id","order":"ASCENDING"},{"fieldPath":"applicability.collaboratorIds","arrayConfig":"CONTAINS"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_unitGroups","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"responsibleUserId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_unitGroups","queryScope":"COLLECTION","fields":[{"fieldPath":"workspace_id","order":"ASCENDING"},{"fieldPath":"responsibleUserId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_unitGroups","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"responsibilityVacatedByTerminationUserId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_unitGroups","queryScope":"COLLECTION","fields":[{"fieldPath":"workspace_id","order":"ASCENDING"},{"fieldPath":"responsibilityVacatedByTerminationUserId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_unitOrganizations","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"responsibleUserId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_unitOrganizations","queryScope":"COLLECTION","fields":[{"fieldPath":"workspace_id","order":"ASCENDING"},{"fieldPath":"responsibleUserId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_unitOrganizations","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"responsibilityVacatedByTerminationUserId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+    {"collectionGroup":"dp_unitOrganizations","queryScope":"COLLECTION","fields":[{"fieldPath":"workspace_id","order":"ASCENDING"},{"fieldPath":"responsibilityVacatedByTerminationUserId","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
+
     {"collectionGroup":"lots","queryScope":"COLLECTION","fields":[{"fieldPath":"productId","order":"ASCENDING"},{"fieldPath":"quantity","order":"ASCENDING"}]},
     {"collectionGroup":"providerPortalGrants","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"officeId","order":"ASCENDING"},{"fieldPath":"memberId","order":"ASCENDING"},{"fieldPath":"revokedAt","order":"ASCENDING"},{"fieldPath":"expiresAt","order":"ASCENDING"}]},
     {"collectionGroup":"assets","queryScope":"COLLECTION","fields":[{"fieldPath":"custody.holderId","order":"ASCENDING"},{"fieldPath":"custody.holderType","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}]},
@@ -826,7 +845,8 @@
           "order": "ASCENDING"
         }
       ]
-    }
+    },
+    {"collectionGroup": "uniformTransactions","queryScope": "COLLECTION","fields": [{"fieldPath": "workspaceId","order": "ASCENDING"},{"fieldPath": "collaboratorUserId","order": "ASCENDING"},{"fieldPath": "__name__","order": "ASCENDING"}]}
   ],
   "fieldOverrides": [
     { "collectionGroup": "shifts", "fieldPath": "userId", "indexes": [

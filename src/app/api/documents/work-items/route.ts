@@ -173,6 +173,7 @@ async function admissionSignatureItems(actor: ServerUserContext, input: Input): 
       if (typeof employeeId === "string" && employeeId) {
         if (!await assertEmployeeUnitAccess(actor, employeeId).then(() => true, () => false)) return null;
       } else if (!canAccessUnit(actor.userDoc, process.get("unitId"), { isDefaultAdmin: actor.isDefaultAdmin })) return null;
+      if (process.get("status") === "cancelled" || process.get("documentDiscard")) return null;
       return { ...serializeHrValue(process.data()) as Record<string, unknown>, id: process.id };
     })());
     const process = await processes.get(id);

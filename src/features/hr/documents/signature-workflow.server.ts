@@ -1,10 +1,13 @@
+import { assertSignatureCreateClaimable, claimSignatureCreate, signatureOutcomeUnconfirmed, repairSignatureTargetLinks } from "./signature-send-safety.server";
+import { admissionDocumentError } from "./admission-document-error";
+import { discardCancelledOnboardingDocuments } from "@/lib/hr/onboarding-document-discard.server";
 import { prepareOnboardingPersonForWrite } from "@/features/privacy/onboarding-person.server";
 import "server-only";
 
 import { autoPublishDocument } from "@/features/hr/documents/publication.server";
 import { planSignedAdmissionArchive } from "@/features/hr/documents/signed-admission-archive";
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { PDFDocument } from "pdf-lib";
@@ -130,10 +133,10 @@ function assertCompleteAdmissionPackage(
 ) {
   const dependents = admissionDependentConditions(process);
   if (dependents.familySalaryDecisionRequired && dependents.familySalaryDecision === null) {
-    throw new Error("Registre a decisão do operador sobre o salário-família antes de preparar o kit.");
+    throw admissionDocumentError("Registre a decisão do operador sobre o salário-família antes de preparar o kit.");
   }
   if (dependents.familySalaryDecision === true && !dependents.familyRows.length) {
-    throw new Error("Informe os dados dos dependentes para gerar o termo de salário-família.");
+    throw admissionDocumentError("Informe os dados dos dependentes para gerar o termo de salário-família.");
   }
   const templateIds = templates
     .map((template) => text(template.templateId))
@@ -143,7 +146,7 @@ function assertCompleteAdmissionPackage(
     transportVoucherAnswer(process),
     dependents.conditions,
   )) {
-    throw new Error(
+    throw admissionDocumentError(
       "O kit admissional é indivisível. Gere, revise e envie todos os documentos aplicáveis em uma única operação.",
     );
   }
@@ -337,38 +340,38 @@ async function sendAdmissionBundle(params: {
     return;
   }
   if (!existing.exists) {
-    throw new Error("Configure as assinaturas e rubricas antes de enviar o pacote.");
+    throw admissionDocumentError("Configure as assinaturas e rubricas antes de enviar o pacote.");
   }
   const packageHash = text(existing.get("packageHash"));
   const storagePath = text(existing.get("storagePath"));
   const protocol = text(existing.get("protocol"));
   const packageId = text(existing.get("packageId"));
   if (!packageHash || !storagePath || !protocol || !packageId) {
-    throw new Error("A preparação congelada do pacote está incompleta. Prepare o posicionamento novamente.");
+    throw admissionDocumentError("A preparação congelada do pacote está incompleta. Prepare o posicionamento novamente.");
   }
   if (!/^[a-f0-9]{64}$/i.test(params.expectedPackageHash)) {
-    throw new Error("A versão do pacote não foi informada corretamente.");
+    throw admissionDocumentError("A versão do pacote não foi informada corretamente.");
   }
   if (params.expectedPackageHash !== packageHash) {
-    throw new Error("O pacote mudou desde que o editor foi aberto. Reabra o posicionamento antes de enviar.");
+    throw admissionDocumentError("O pacote mudou desde que o editor foi aberto. Reabra o posicionamento antes de enviar.");
   }
   if (text(existing.get("sourceFingerprint")) !== admissionSourceFingerprint(params.targets)) {
-    throw new Error("Os documentos do pacote mudaram. Prepare o posicionamento novamente.");
+    throw admissionDocumentError("Os documentos do pacote mudaram. Prepare o posicionamento novamente.");
   }
   if (!text(existing.get("placementConfiguredAt"))) {
-    throw new Error("Confirme o posicionamento das assinaturas e rubricas antes do envio.");
+    throw admissionDocumentError("Confirme o posicionamento das assinaturas e rubricas antes do envio.");
   }
   const layout = normalizeAdmissionSignatureLayout(existing.get("placementLayout"));
   if (layout.packageHash !== packageHash) {
-    throw new Error("O posicionamento não pertence ao PDF congelado para este envio.");
+    throw admissionDocumentError("O posicionamento não pertence ao PDF congelado para este envio.");
   }
   const storedSigners = normalizedStoredSigners(existing.get("signers"));
   if (storedSigners.length !== 2) {
-    throw new Error("Os dois signatários do pacote precisam estar definidos antes do envio.");
+    throw admissionDocumentError("Os dois signatários do pacote precisam estar definidos antes do envio.");
   }
   const [buffer] = await params.bucket.file(storagePath).download();
   if (hashBuffer(buffer) !== packageHash) {
-    throw new Error("O PDF congelado foi alterado depois do posicionamento. Prepare o pacote novamente.");
+    throw admissionDocumentError("O PDF congelado foi alterado depois do posicionamento. Prepare o pacote novamente.");
   }
   const signers = storedSigners.map((signer) => ({
     email: signer.email,
@@ -377,29 +380,7 @@ async function sendAdmissionBundle(params: {
     positions: autentiquePositionsForParty(layout, signer.party),
   }));
   const now = new Date().toISOString();
-  const sendAttemptId = createHash("sha256")
-    .update(`${params.onboardingId}:${params.actorId}:${now}`)
-    .digest("hex")
-    .slice(0, 32);
-  const claimed = await hrDbAdmin.runTransaction(async (transaction) => {
-    const current = await transaction.get(requestRef);
-    if (current.get("providerDocumentId")) return false;
-    const sendingStartedAt = text(current.get("sendingStartedAt"));
-    const activeSend = current.get("status") === "sending"
-      && sendingStartedAt
-      && Date.now() - new Date(sendingStartedAt).getTime() < 5 * 60_000;
-    if (activeSend) {
-      throw new Error("Este pacote já está sendo enviado. Aguarde a conclusão antes de tentar novamente.");
-    }
-    transaction.set(requestRef, {
-      status: "sending",
-      sendAttemptId,
-      sendingStartedAt: now,
-      error: null,
-      updatedAt: now,
-    }, { merge: true });
-    return true;
-  });
+  const claimed = await claimSignatureCreate(requestRef, { error: null, updatedAt: now }, existing.updateTime);
   if (!claimed) return;
   try {
     const documentName = buildAdmissionSignatureDocumentName(params.process.candidateName);
@@ -447,12 +428,12 @@ async function sendAdmissionBundle(params: {
     }, { merge: true }));
     await batch.commit();
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha ao enviar pacote ao Autentique.";
+    const message = signatureOutcomeUnconfirmed().safeMessage;
     const failedAt = new Date().toISOString();
     const batch = hrDbAdmin.batch();
-    batch.set(requestRef, { status: "failed", error: message, updatedAt: failedAt }, { merge: true });
+    batch.set(requestRef, { status: "send_unconfirmed", error: message, updatedAt: failedAt }, { merge: true });
     params.targets.forEach((target) => batch.set(target.ref, {
-      status: "send_failed",
+      status: "send_unconfirmed",
       lastError: message,
       updatedAt: failedAt,
     }, { merge: true }));
@@ -472,7 +453,7 @@ async function prepareAdmissionBundle(params: {
   const loaded = [];
   for (const target of params.targets) {
     const storagePath = text(target.get("generatedPdfStoragePath"));
-    if (!storagePath) throw new Error(`O PDF oficial de ${target.get("templateName")} não foi gerado.`);
+    if (!storagePath) throw admissionDocumentError(`O PDF oficial de ${target.get("templateName")} não foi gerado.`);
     const [buffer] = await params.bucket.file(storagePath).download();
     const pdf = await PDFDocument.load(buffer);
     const generatedId = text(target.get("generatedDocumentId"));
@@ -509,7 +490,7 @@ async function prepareAdmissionBundle(params: {
     actorName: params.actorName,
   });
   if (!closing.pdfStoragePath) {
-    throw new Error("O PDF do termo de encerramento não foi gerado.");
+    throw admissionDocumentError("O PDF do termo de encerramento não foi gerado.");
   }
   const [closingPdf] = await params.bucket.file(closing.pdfStoragePath).download();
   const packageId = createHash("sha256")
@@ -591,10 +572,10 @@ async function admissionSignatureTargets(onboardingId: string, process: RecordVa
     .filter((document) => document.get("signatureScope") !== "independent")
     .sort(compareWorkflowDocuments);
   if (!targets.length || targets.length !== selectedDocuments.length) {
-    throw new Error("O kit admissional precisa formar um único pacote para assinatura.");
+    throw admissionDocumentError("O kit admissional precisa formar um único pacote para assinatura.");
   }
   if (targets.some((document) => document.get("status") !== "ready_to_send")) {
-    throw new Error("Revise o pacote completo antes de configurar as assinaturas.");
+    throw admissionDocumentError("Revise o pacote completo antes de configurar as assinaturas.");
   }
   return targets;
 }
@@ -607,11 +588,11 @@ export async function prepareAdmissionSignaturePlacement(params: {
   await prepareOnboardingPersonForWrite(params.onboardingId);
   const process = await loadProcess(params.onboardingId);
   if (process.data.currentStage !== "signature_preparation") {
-    throw new Error("O posicionamento só pode ser preparado antes do envio do kit.");
+    throw admissionDocumentError("O posicionamento só pode ser preparado antes do envio do kit.");
   }
   const recipient = text(process.data.candidateEmail)?.toLowerCase();
   if (!recipient || !/^\S+@\S+\.\S+$/.test(recipient)) {
-    throw new Error("O titular não possui um e-mail válido.");
+    throw admissionDocumentError("O titular não possui um e-mail válido.");
   }
   const targets = await admissionSignatureTargets(params.onboardingId, process.data);
   const sourceFingerprint = admissionSourceFingerprint(targets);
@@ -620,8 +601,9 @@ export async function prepareAdmissionSignaturePlacement(params: {
     .doc(admissionSignatureRequestId(params.onboardingId));
   const existing = await requestRef.get();
   if (existing.get("providerDocumentId")) {
-    throw new Error("O kit já foi enviado e não aceita um novo posicionamento.");
+    throw admissionDocumentError("O kit já foi enviado e não aceita um novo posicionamento.");
   }
+  assertSignatureCreateClaimable(existing.data() ?? {});
   if (
     existing.exists
     && text(existing.get("sourceFingerprint")) === sourceFingerprint
@@ -646,12 +628,12 @@ export async function prepareAdmissionSignaturePlacement(params: {
     cnpj: prepared.legalEntity.cnpj,
   });
   if (!companySignatory) {
-    throw new Error(
+    throw admissionDocumentError(
       `Defina o signatário documental da empresa ${text(prepared.legalEntity.legalName) ?? "empregadora"} antes do envio.`,
     );
   }
   if (companySignatory.email.toLowerCase() === recipient) {
-    throw new Error("O signatário da empresa precisa ser diferente do titular do kit.");
+    throw admissionDocumentError("O signatário da empresa precisa ser diferente do titular do kit.");
   }
   const subjectKeys = await confirmedSubjectKeysForDocument(processEmployeeId(process.data), params.onboardingId);
   const companySignerKeys = companySignatory.userId ? await confirmedSubjectKeys({ namespace: "main.users", id: companySignatory.userId }) : [];
@@ -665,16 +647,19 @@ export async function prepareAdmissionSignaturePlacement(params: {
     ...prepared.composition,
     protocol,
   });
-  const packagePath = `signature-packages/${params.onboardingId}/${prepared.packageId}/pre-signature.pdf`;
-  const manifestPath = `signature-packages/${params.onboardingId}/${prepared.packageId}/manifest.json`;
+  const artifactId = randomUUID();
+  const packagePath = `signature-packages/${params.onboardingId}/${prepared.packageId}/${artifactId}/pre-signature.pdf`;
+  const manifestPath = `signature-packages/${params.onboardingId}/${prepared.packageId}/${artifactId}/manifest.json`;
   await Promise.all([
     bucket.file(packagePath).save(composed.buffer, {
       resumable: false,
-      metadata: { contentType: "application/pdf", cacheControl: "private, no-store" },
+      preconditionOpts: { ifGenerationMatch: 0 },
+      metadata: { contentType: "application/pdf", cacheControl: "private, no-store", metadata: { onboardingId: params.onboardingId } },
     }),
     bucket.file(manifestPath).save(Buffer.from(JSON.stringify(composed.manifest, null, 2)), {
       resumable: false,
-      metadata: { contentType: "application/json", cacheControl: "private, no-store" },
+      preconditionOpts: { ifGenerationMatch: 0 },
+      metadata: { contentType: "application/json", cacheControl: "private, no-store", metadata: { onboardingId: params.onboardingId } },
     }),
   ]);
   const signers: AdmissionSignatureLayoutSigner[] = [
@@ -692,7 +677,7 @@ export async function prepareAdmissionSignaturePlacement(params: {
     },
   ];
   const now = new Date().toISOString();
-  await requestRef.set(freezeSignaturePersonBinding(requestRef.id, {
+  const preparedRequest = freezeSignaturePersonBinding(requestRef.id, {
     type: "onboarding_document_package_signature",
     subjectKeys,
     signerKeys: [...subjectKeys, ...companySignerKeys],
@@ -725,7 +710,12 @@ export async function prepareAdmissionSignaturePlacement(params: {
     preparedBy: params.actorId,
     preparedByName: params.actorName,
     updatedAt: now,
-  }));
+  });
+  await hrDbAdmin.runTransaction(async tx => {
+    const current = await tx.get(requestRef);
+    if (!assertSignatureCreateClaimable(current.data() ?? {})) throw admissionDocumentError("O kit já foi enviado e não aceita novo posicionamento.");
+    tx.set(requestRef, preparedRequest);
+  });
   return listSignatureWorkflow(params.onboardingId);
 }
 
@@ -742,11 +732,12 @@ export async function saveAdmissionSignaturePlacement(params: {
   await hrDbAdmin.runTransaction(async (transaction) => {
     const request = await transaction.get(requestRef);
     if (!request.exists || request.get("onboardingId") !== params.onboardingId) {
-      throw new Error("Prepare o pacote antes de salvar o posicionamento.");
+      throw admissionDocumentError("Prepare o pacote antes de salvar o posicionamento.");
     }
     if (request.get("providerDocumentId")) {
-      throw new Error("O pacote já foi enviado e não aceita alteração de posições.");
+      throw admissionDocumentError("O pacote já foi enviado e não aceita alteração de posições.");
     }
+    assertSignatureCreateClaimable(request.data() ?? {});
     const packageHash = text(request.get("packageHash"));
     const manifest = record(request.get("manifest"));
     if (
@@ -754,7 +745,7 @@ export async function saveAdmissionSignaturePlacement(params: {
       || layout.packageHash !== packageHash
       || layout.pageCount !== Number(manifest.totalPages ?? 0)
     ) {
-      throw new Error("O posicionamento não corresponde ao PDF congelado para este envio.");
+      throw admissionDocumentError("O posicionamento não corresponde ao PDF congelado para este envio.");
     }
     const now = new Date().toISOString();
     transaction.set(requestRef, {
@@ -907,19 +898,19 @@ export async function setAdmissionFamilySalaryDecision(params: {
   const process = await loadProcess(params.onboardingId);
   if (process.data.currentStage !== "signature_preparation"
     || record(process.data.accountantWorkflow).status !== "completed") {
-    throw new Error("A decisão sobre o salário-família só pode ser registrada após a conclusão da contabilidade.");
+    throw admissionDocumentError("A decisão sobre o salário-família só pode ser registrada após a conclusão da contabilidade.");
   }
   const dependents = admissionDependentConditions(process.data);
   if (!dependents.familySalaryDecisionRequired) {
-    throw new Error("Não há dependentes informados neste processo.");
+    throw admissionDocumentError("Não há dependentes informados neste processo.");
   }
   if (params.grant && !dependents.familyRows.length) {
-    throw new Error("Informe os dados dos dependentes antes de conceder o salário-família.");
+    throw admissionDocumentError("Informe os dados dos dependentes antes de conceder o salário-família.");
   }
   const workflow = await listSignatureWorkflow(params.onboardingId);
   if (workflow.documents.some((document) => ["sending", "sent", "viewed", "partially_signed", "signed", "signed_archived_pending_employee", "archived"]
     .includes(String(document.status)))) {
-    throw new Error("A decisão não pode ser alterada após o envio do pacote para assinatura.");
+    throw admissionDocumentError("A decisão não pode ser alterada após o envio do pacote para assinatura.");
   }
   if (dependents.familySalaryDecision === params.grant) return listSignatureWorkflow(params.onboardingId);
   const now = new Date().toISOString();
@@ -958,7 +949,7 @@ export async function selectSignatureTemplates(params: {
 }) {
   const process = await loadProcess(params.onboardingId);
   if (process.data.currentStage !== "signature_preparation") {
-    throw new Error("Os modelos só podem ser selecionados na etapa de preparação da assinatura.");
+    throw admissionDocumentError("Os modelos só podem ser selecionados na etapa de preparação da assinatura.");
   }
   const uniqueIds = Array.from(new Set(params.templateIds.filter(Boolean)));
   assertCompleteAdmissionPackage(
@@ -984,7 +975,7 @@ export async function selectSignatureTemplates(params: {
     .filter((template): template is NonNullable<typeof template> => Boolean(template))
     .sort(compareAdmissionSignatureOrder);
   if (templates.length !== uniqueIds.length) {
-    throw new Error("Um dos modelos selecionados não está publicado.");
+    throw admissionDocumentError("Um dos modelos selecionados não está publicado.");
   }
 
   const existing = await hrDbAdmin
@@ -1052,7 +1043,7 @@ export async function selectSignatureTemplates(params: {
 
 async function loadProcess(onboardingId: string) {
   const snapshot = await hrDbAdmin.collection("onboardingProcesses").doc(onboardingId).get();
-  if (!snapshot.exists) throw new Error("Integração não encontrada.");
+  if (!snapshot.exists) throw admissionDocumentError("Integração não encontrada.");
   return { ref: snapshot.ref, data: record(snapshot.data()) };
 }
 
@@ -1063,7 +1054,7 @@ export async function previewAdmissionBundle(params: {
 }) {
   const process = await loadProcess(params.onboardingId);
   if (process.data.currentStage !== "signature_preparation") {
-    throw new Error("O pacote completo só pode ser visualizado durante a preparação da assinatura.");
+    throw admissionDocumentError("O pacote completo só pode ser visualizado durante a preparação da assinatura.");
   }
   const snapshot = await hrDbAdmin
     .collection(WORKFLOW_COLLECTION)
@@ -1081,13 +1072,13 @@ export async function previewAdmissionBundle(params: {
     .filter((document) => document.get("signatureScope") !== "independent")
     .sort(compareWorkflowDocuments);
   if (!targets.length) {
-    throw new Error("Selecione e gere ao menos um documento do pacote admissional.");
+    throw admissionDocumentError("Selecione e gere ao menos um documento do pacote admissional.");
   }
   const unavailable = targets.find(
     (document) => !text(document.get("generatedPdfStoragePath")),
   );
   if (unavailable) {
-    throw new Error(`Gere ${unavailable.get("templateName") ?? "todos os documentos"} antes de visualizar o pacote completo.`);
+    throw admissionDocumentError(`Gere ${unavailable.get("templateName") ?? "todos os documentos"} antes de visualizar o pacote completo.`);
   }
   const prepared = await prepareAdmissionBundle({
     onboardingId: params.onboardingId,
@@ -1117,7 +1108,7 @@ export async function generateSelectedSignatureDocuments(params: {
 }) {
   const process = await loadProcess(params.onboardingId);
   if (process.data.currentStage !== "signature_preparation") {
-    throw new Error("Os documentos só podem ser gerados na etapa de preparação da assinatura.");
+    throw admissionDocumentError("Os documentos só podem ser gerados na etapa de preparação da assinatura.");
   }
   const snapshot = await hrDbAdmin
     .collection(WORKFLOW_COLLECTION)
@@ -1136,7 +1127,7 @@ export async function generateSelectedSignatureDocuments(params: {
       !["sent", "viewed", "partially_signed", "signed", "archived"].includes(String(document.get("status")))
     )
     .sort(compareWorkflowDocuments);
-  if (!targets.length) throw new Error("O pacote admissional não possui documentos disponíveis para geração.");
+  if (!targets.length) throw admissionDocumentError("O pacote admissional não possui documentos disponíveis para geração.");
 
   for (const target of targets) {
     try {
@@ -1212,7 +1203,7 @@ export async function reviewSignaturePackage(params: {
 }) {
   const process = await loadProcess(params.onboardingId);
   if (process.data.currentStage !== "signature_preparation") {
-    throw new Error("A revisão só pode ser feita na etapa de preparação da assinatura.");
+    throw admissionDocumentError("A revisão só pode ser feita na etapa de preparação da assinatura.");
   }
   const snapshot = await hrDbAdmin
     .collection(WORKFLOW_COLLECTION)
@@ -1237,11 +1228,11 @@ export async function reviewSignaturePackage(params: {
     ].includes(String(document.get("status")))
   );
   if (alreadySent) {
-    throw new Error("O pacote já foi enviado e não pode voltar para revisão.");
+    throw admissionDocumentError("O pacote já foi enviado e não pode voltar para revisão.");
   }
   const notGenerated = targets.find((document) => !document.get("generatedDocumentId"));
   if (notGenerated) {
-    throw new Error("Gere o pacote completo antes da revisão.");
+    throw admissionDocumentError("Gere o pacote completo antes da revisão.");
   }
   if (params.approved) {
     const incomplete = targets.find((document) => {
@@ -1251,7 +1242,7 @@ export async function reviewSignaturePackage(params: {
       return missing.length > 0 || !document.get("generatedPdfStoragePath");
     });
     if (incomplete) {
-      throw new Error(
+      throw admissionDocumentError(
         `O componente ${incomplete.get("templateName") ?? "do pacote"} ainda possui dados ou PDF pendentes.`,
       );
     }
@@ -1306,11 +1297,11 @@ export async function sendSignatureDocuments(params: {
   await prepareOnboardingPersonForWrite(params.onboardingId);
   const process = await loadProcess(params.onboardingId);
   if (process.data.currentStage !== "signature_preparation") {
-    throw new Error("O envio só pode ser feito após a preparação e revisão dos documentos.");
+    throw admissionDocumentError("O envio só pode ser feito após a preparação e revisão dos documentos.");
   }
   const recipient = text(process.data.candidateEmail)?.toLowerCase();
   if (!recipient || !/^\S+@\S+\.\S+$/.test(recipient)) {
-    throw new Error("O titular não possui um e-mail válido.");
+    throw admissionDocumentError("O titular não possui um e-mail válido.");
   }
   const snapshot = await hrDbAdmin
     .collection(WORKFLOW_COLLECTION)
@@ -1328,7 +1319,7 @@ export async function sendSignatureDocuments(params: {
     .filter((document) => document.get("status") === "ready_to_send")
     .sort(compareWorkflowDocuments);
   if (targets.length !== selectedDocuments.length) {
-    throw new Error("Revise o pacote completo antes de enviar para assinatura.");
+    throw admissionDocumentError("Revise o pacote completo antes de enviar para assinatura.");
   }
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
   const bundleTargets = targets.filter((target) => target.get("signatureScope") !== "independent");
@@ -1350,7 +1341,7 @@ export async function sendSignatureDocuments(params: {
     const existing = await requestRef.get();
     if (existing.get("providerDocumentId")) continue;
     const generatedStoragePath = text(target.get("generatedPdfStoragePath"));
-    if (!generatedStoragePath) throw new Error(`O PDF oficial de ${target.get("templateName")} não foi gerado.`);
+    if (!generatedStoragePath) throw admissionDocumentError(`O PDF oficial de ${target.get("templateName")} não foi gerado.`);
     const [buffer] = await bucket.file(generatedStoragePath).download();
     const preSignatureHash = hashBuffer(buffer);
     const documentName = buildSignatureDocumentName({
@@ -1359,7 +1350,7 @@ export async function sendSignatureDocuments(params: {
       holderName: process.data.candidateName,
     });
     const now = new Date().toISOString();
-    await requestRef.set(freezeSignaturePersonBinding(requestRef.id, {
+    const claimed = await claimSignatureCreate(requestRef, freezeSignaturePersonBinding(requestRef.id, {
       type: "onboarding_document_signature",
       subjectKeys: await confirmedSubjectKeysForDocument(processEmployeeId(process.data), params.onboardingId),
       signerKeys: await confirmedSubjectKeysForDocument(processEmployeeId(process.data), params.onboardingId),
@@ -1382,6 +1373,7 @@ export async function sendSignatureDocuments(params: {
       requestedByName: params.actorName,
       updatedAt: now,
     }));
+    if (!claimed) continue;
     try {
       const created = await createAutentiqueDocument({
         buffer,
@@ -1412,9 +1404,9 @@ export async function sendSignatureDocuments(params: {
         updatedAt: new Date().toISOString(),
       }, { merge: true });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Falha ao enviar ao Autentique.";
-      await requestRef.set({ status: "failed", error: message, updatedAt: new Date().toISOString() }, { merge: true });
-      await target.ref.set({ status: "send_failed", lastError: message, updatedAt: new Date().toISOString() }, { merge: true });
+      const message = signatureOutcomeUnconfirmed().safeMessage;
+      await requestRef.set({ status: "send_unconfirmed", error: message, updatedAt: new Date().toISOString() }, { merge: true });
+      await target.ref.set({ status: "send_unconfirmed", lastError: message, updatedAt: new Date().toISOString() }, { merge: true });
       throw error;
     }
   }
@@ -1449,7 +1441,7 @@ export async function addCompanySignerToAdmissionBundle(params: {
       .get(),
   ]);
   if (!request.exists || !text(request.get("providerDocumentId"))) {
-    throw new Error("O kit ainda não foi enviado ao Autentique.");
+    throw admissionDocumentError("O kit ainda não foi enviado ao Autentique.");
   }
   const targets = workflow.docs.filter((document) => document.get("selected") === true);
   assertCompleteAdmissionPackage(
@@ -1466,16 +1458,16 @@ export async function addCompanySignerToAdmissionBundle(params: {
     cnpj: legalEntity.cnpj ?? process.data.employerCnpj,
   });
   if (!companySignatory) {
-    throw new Error("Defina o signatário documental da empresa antes de incluí-lo no kit.");
+    throw admissionDocumentError("Defina o signatário documental da empresa antes de incluí-lo no kit.");
   }
   const recipient = text(process.data.candidateEmail)?.toLowerCase();
   if (recipient === companySignatory.email) {
-    throw new Error("O signatário da empresa precisa ser diferente do titular do kit.");
+    throw admissionDocumentError("O signatário da empresa precisa ser diferente do titular do kit.");
   }
   const providerDocumentId = text(request.get("providerDocumentId"))!;
   let provider = await getAutentiqueDocumentSignatures(providerDocumentId);
   if (provider.signedUrl) {
-    throw new Error("O kit já foi concluído e não aceita outro signatário.");
+    throw admissionDocumentError("O kit já foi concluído e não aceita outro signatário.");
   }
   const email = companySignatory.email.toLowerCase();
   const alreadyPresent = provider.signatures.some((signature) =>
@@ -1491,7 +1483,10 @@ export async function addCompanySignerToAdmissionBundle(params: {
   };
   const startedAt = new Date().toISOString();
   if (!alreadyPresent) {
-    await requestRef.set({
+    await hrDbAdmin.runTransaction(async tx => {
+      const current = await tx.get(requestRef);
+      if (record(current.get("signatoryAddition")).requestedAt) throw signatureOutcomeUnconfirmed();
+      tx.set(requestRef, {
       signatoryAddition: {
         status: "adding",
         email,
@@ -1502,14 +1497,15 @@ export async function addCompanySignerToAdmissionBundle(params: {
       },
       updatedAt: startedAt,
     }, { merge: true });
+    });
     try {
       await addAutentiqueSigner({ documentId: providerDocumentId, signer });
       provider = await getAutentiqueDocumentSignatures(providerDocumentId);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Falha ao incluir o signatário da empresa.";
+      const message = signatureOutcomeUnconfirmed().safeMessage;
       await requestRef.set({
         signatoryAddition: {
-          status: "failed",
+          status: "unconfirmed",
           email,
           name: companySignatory.name,
           requestedAt: startedAt,
@@ -1526,7 +1522,10 @@ export async function addCompanySignerToAdmissionBundle(params: {
   const confirmed = provider.signatures.some((signature) =>
     text(signature.email)?.toLowerCase() === email && signature.action?.name === "SIGN"
   );
-  if (!confirmed) throw new Error("O Autentique não confirmou o signatário da empresa.");
+  if (!confirmed) {
+    await requestRef.set({ signatoryAddition: { status: "unconfirmed" }, updatedAt: new Date().toISOString() }, { merge: true });
+    throw signatureOutcomeUnconfirmed();
+  }
   const currentSigners = Array.isArray(request.get("signers"))
     ? request.get("signers") as Array<Record<string, unknown>>
     : [];
@@ -2014,13 +2013,13 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
 }) {
   const generatedRef = dbAdmin.collection("generatedDocuments").doc(params.generatedDocumentId);
   const generated = await generatedRef.get();
-  if (!generated.exists) throw new Error("Documento gerado não encontrado.");
+  if (!generated.exists) throw admissionDocumentError("Documento gerado não encontrado.");
   if (!["approved", "final"].includes(String(generated.get("status")))) {
-    throw new Error("Aprove ou finalize o documento antes de enviá-lo para assinatura.");
+    throw admissionDocumentError("Aprove ou finalize o documento antes de enviá-lo para assinatura.");
   }
   if (generated.get("postAdmissionSignatureScope") !== "independent"
     && generated.get("signatureScope") !== "independent") {
-    throw new Error("Este modelo não permite assinatura individual fora do fluxo de origem.");
+    throw admissionDocumentError("Este modelo não permite assinatura individual fora do fluxo de origem.");
   }
   const employeeId = text(generated.get("employeeId"));
   const employee = employeeId
@@ -2078,7 +2077,7 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
       !candidate.email || !/^\S+@\S+\.\S+$/.test(candidate.email)
     )
   ) {
-    throw new Error("Informe um e-mail válido para cada signatário antes do envio.");
+    throw admissionDocumentError("Informe um e-mail válido para cada signatário antes do envio.");
   }
   const signers = Array.from(new Map(
     signerCandidates.map((candidate) => [
@@ -2091,13 +2090,15 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
     ]),
   ).values());
   const sourcePath = text(generated.get("pdfStoragePath"));
-  if (!sourcePath) throw new Error("O PDF oficial ainda não foi gerado.");
+  if (!sourcePath) throw admissionDocumentError("O PDF oficial ainda não foi gerado.");
   const requestRef = hrDbAdmin.collection(REQUEST_COLLECTION)
     .doc(`signature_generated_${params.generatedDocumentId}`);
   const existing = await requestRef.get();
   if (existing.get("providerDocumentId")) {
     return { requestId: requestRef.id, status: existing.get("status"), reused: true };
   }
+
+  assertSignatureCreateClaimable(existing.data() ?? {});
 
   const subjectKeys = Array.isArray(generated.get("subjectKeys"))
     ? await confirmedStoredSubjectKeys(generated.get("subjectKeys"))
@@ -2112,7 +2113,7 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
   }
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
   const [source] = await bucket.file(sourcePath).download();
-  if (generated.get("pdfContentHash") && hashBuffer(source) !== generated.get("pdfContentHash")) throw new Error("O PDF de origem diverge da versão registrada.");
+  if (generated.get("pdfContentHash") && hashBuffer(source) !== generated.get("pdfContentHash")) throw admissionDocumentError("O PDF de origem diverge da versão registrada.");
   const protocol = text(generated.get("protocol")) ?? await allocateIdempotentDocumentProtocol({
     entity: documentProtocolEntityFromSnapshot(
       generated.get("legalEntitySnapshot"),
@@ -2176,16 +2177,19 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
     }],
     letterheadVersion: "coala-letterhead-v2",
   });
-  const preSignaturePath = `signature-documents/${params.generatedDocumentId}/${packageId}/pre-signature.pdf`;
-  const manifestPath = `signature-documents/${params.generatedDocumentId}/${packageId}/manifest.json`;
+  const artifactId = randomUUID();
+  const preSignaturePath = `signature-documents/${params.generatedDocumentId}/${packageId}/${artifactId}/pre-signature.pdf`;
+  const manifestPath = `signature-documents/${params.generatedDocumentId}/${packageId}/${artifactId}/manifest.json`;
   await Promise.all([
     bucket.file(preSignaturePath).save(composed.buffer, {
       resumable: false,
-      metadata: { contentType: "application/pdf", cacheControl: "private, no-store" },
+      preconditionOpts: { ifGenerationMatch: 0 },
+      metadata: { contentType: "application/pdf", cacheControl: "private, no-store", metadata: text(generated.get("onboardingId")) ? { onboardingId: String(generated.get("onboardingId")) } : {} },
     }),
     bucket.file(manifestPath).save(Buffer.from(JSON.stringify(composed.manifest, null, 2)), {
       resumable: false,
-      metadata: { contentType: "application/json", cacheControl: "private, no-store" },
+      preconditionOpts: { ifGenerationMatch: 0 },
+      metadata: { contentType: "application/json", cacheControl: "private, no-store", metadata: text(generated.get("onboardingId")) ? { onboardingId: String(generated.get("onboardingId")) } : {} },
     }),
   ]);
   const now = new Date().toISOString();
@@ -2200,7 +2204,7 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
     documentType: templateId === "system-receipt-standard" ? "Recibo" : generated.get("templateName"),
     holderName: recipientParty?.name ?? text(generated.get("employeeName")) ?? text(employee?.get("username")) ?? generatedParties.find((party) => !["company", "external_company"].includes(party.partyType))?.name,
   });
-  await requestRef.set(freezeSignaturePersonBinding(requestRef.id, {
+  const claimed = await claimSignatureCreate(requestRef, freezeSignaturePersonBinding(requestRef.id, {
     type: "generated_document_standalone_signature",
     subjectKeys,
     signerKeys: [...signerKeys],
@@ -2209,6 +2213,7 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
     status: "sending",
     provider: "autentique",
     generatedDocumentId: params.generatedDocumentId,
+    onboardingId: text(generated.get("onboardingId")),
     sourceGeneratedVersion: generated.get("version") ?? generated.get("templateVersion") ?? null,
     sourceGeneratedHash: generated.get("pdfContentHash") ?? generated.get("docxContentHash") ?? null,
     sourceGeneratedStoragePath: generated.get("pdfStoragePath") ?? generated.get("storagePath") ?? null,
@@ -2233,6 +2238,7 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
     requestedByName: params.actorName,
     updatedAt: now,
   }));
+  if (!claimed) return { requestId: requestRef.id, status: (await requestRef.get()).get("status"), reused: true };
   try {
     const created = await createAutentiqueDocument({
       buffer: composed.buffer,
@@ -2264,10 +2270,21 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
     ]);
     return { requestId: requestRef.id, status: "sent", reused: false };
   } catch (cause) {
-    const message = cause instanceof Error ? cause.message : "Falha ao enviar para assinatura.";
-    await requestRef.set({ status: "failed", error: message, updatedAt: new Date().toISOString() }, { merge: true });
+    const message = signatureOutcomeUnconfirmed().safeMessage;
+    await requestRef.set({ status: "send_unconfirmed", error: message, updatedAt: new Date().toISOString() }, { merge: true });
     throw cause;
   }
+}
+
+async function updateGeneratedSignatureProjection(ref: FirebaseFirestore.DocumentReference, requestId: string, request: Record<string, unknown>, providerId: string, fields: Record<string, unknown>) {
+  if (request.providerDocumentId !== providerId) throw admissionDocumentError("O ID confirmado do provedor diverge da solicitação original.");
+  await dbAdmin.runTransaction(async tx => {
+    const current = await tx.get(ref);
+    if (!current.exists || current.get("deletedAt") || ["discarded", "cancelled"].includes(String(current.get("status"))) || current.get("archiveStatus") === "disposed") throw admissionDocumentError("O documento foi removido ou descartado.");
+    assertHistoricalGeneratedSource(request, ref.id, current.data() ?? {});
+    if (current.get("signatureRequestId") && current.get("signatureRequestId") !== requestId || current.get("providerDocumentId") && current.get("providerDocumentId") !== providerId) throw admissionDocumentError("A projeção diverge da solicitação original.");
+    tx.update(ref, { ...fields, signatureRequestId: requestId, providerDocumentId: providerId });
+  });
 }
 
 export async function reconcileGeneratedDocumentStandaloneSignature(
@@ -2275,13 +2292,21 @@ export async function reconcileGeneratedDocumentStandaloneSignature(
 ) {
   const generatedRef = dbAdmin.collection("generatedDocuments").doc(generatedDocumentId);
   const generated = await generatedRef.get();
-  if (!generated.exists) throw new Error("Documento gerado não encontrado.");
-  const signatureRequestId = text(generated.get("signatureRequestId"));
-  const providerDocumentId = text(generated.get("providerDocumentId"));
-  if (!signatureRequestId || !providerDocumentId) {
-    throw new Error("O documento ainda não possui solicitação de assinatura.");
+  if (!generated.exists) throw admissionDocumentError("Documento gerado não encontrado.");
+  const signatureRequestId = `signature_generated_${generatedDocumentId}`;
+  const projectedRequestId = text(generated.get("signatureRequestId"));
+  if (projectedRequestId && projectedRequestId !== signatureRequestId) throw admissionDocumentError("O vínculo de assinatura diverge da origem canônica.");
+  const request = await hrDbAdmin.collection("hrSignatureRequests").doc(signatureRequestId).get();
+  const providerDocumentId = text(request.get("providerDocumentId"));
+  const projectedProviderId = text(generated.get("providerDocumentId"));
+  if (projectedProviderId && projectedProviderId !== providerDocumentId) throw admissionDocumentError("A projeção do provedor diverge da solicitação original.");
+  if (!providerDocumentId) {
+    assertSignatureCreateClaimable(request.data() ?? {});
+    throw admissionDocumentError("O documento ainda não possui solicitação de assinatura.");
   }
+  assertHistoricalGeneratedSource(request.data() ?? {}, generatedDocumentId, generated.data() ?? {});
   const provider = await getAutentiqueDocumentStatus(providerDocumentId);
+  await updateGeneratedSignatureProjection(generatedRef, signatureRequestId, request.data() ?? {}, providerDocumentId, {});
   const now = new Date().toISOString();
   if (provider.completed && provider.signedUrl) {
     await archiveAutentiqueSignedDocument({
@@ -2294,12 +2319,12 @@ export async function reconcileGeneratedDocumentStandaloneSignature(
   }
   const status = provider.signedCount > 0 ? "partially_signed" : "sent";
   await Promise.all([
-    generatedRef.set({
+    updateGeneratedSignatureProjection(generatedRef, signatureRequestId, request.data() ?? {}, providerDocumentId, {
       signatureStatus: status,
       providerSignaturesCount: provider.signaturesCount,
       providerSignedCount: provider.signedCount,
       signatureReconciledAt: now,
-    }, { merge: true }),
+    }),
     hrDbAdmin.collection(REQUEST_COLLECTION).doc(signatureRequestId).set({
       status,
       providerSignaturesCount: provider.signaturesCount,
@@ -2341,6 +2366,22 @@ export async function reconcileSignatureDocuments(params: {
     else requests.set(key, { providerDocumentId, signatureRequestId, targets: [target] });
   }
   const errors: Array<{ documentId: string; message: string }> = [];
+  const unresolvedRefs = [hrDbAdmin.collection("hrSignatureRequests").doc(`signature_bundle_${params.onboardingId}`), ...snapshot.docs.map(doc => hrDbAdmin.collection("hrSignatureRequests").doc(`signature_${doc.id}`))];
+  const unresolved = await hrDbAdmin.getAll(...unresolvedRefs);
+  for (const request of unresolved) {
+    if (!request.exists || request.get("onboardingId") !== params.onboardingId) continue;
+    const providerDocumentId = text(request.get("providerDocumentId"));
+    if (providerDocumentId) {
+      const ids = Array.isArray(request.get("workflowDocumentIds")) ? request.get("workflowDocumentIds") as string[] : [request.get("workflowDocumentId")];
+      const linkedTargets = snapshot.docs.filter(target => ids.includes(target.id));
+      if (linkedTargets.length !== ids.length || !linkedTargets.length) { errors.push({ documentId: request.id, message: "A origem da solicitação exige reconciliação dos componentes." }); continue; }
+      requests.set(`${request.id}:${providerDocumentId}`, { providerDocumentId, signatureRequestId: request.id, targets: linkedTargets });
+    } else {
+      try { assertSignatureCreateClaimable(request.data() ?? {}); }
+      catch { errors.push({ documentId: request.id, message: signatureOutcomeUnconfirmed().safeMessage }); }
+    }
+  }
+
 
   for (const request of requests.values()) {
     try {
@@ -2351,6 +2392,8 @@ export async function reconcileSignatureDocuments(params: {
         getAutentiqueDocumentSignatures(request.providerDocumentId),
         requestRef.get(),
       ]);
+      if (provider.id !== request.providerDocumentId) throw admissionDocumentError("O provedor retornou outra solicitação de assinatura.");
+      await repairSignatureTargetLinks(requestRef, params.onboardingId, request.providerDocumentId, request.targets.map(target => target.ref));
       const now = new Date().toISOString();
       const participants = participantsFromProvider({
         signatures: provider.signatures,
@@ -2432,14 +2475,14 @@ function allowedSignedUrl(value: string) {
 }
 
 async function downloadSignedPdf(url: string) {
-  if (!allowedSignedUrl(url)) throw new Error("URL do documento assinado não autorizada.");
+  if (!allowedSignedUrl(url)) throw admissionDocumentError("URL do documento assinado não autorizada.");
   const response = await fetch(url, { signal: AbortSignal.timeout(30_000), cache: "no-store" });
-  if (!response.ok) throw new Error(`Falha ao baixar PDF assinado (HTTP ${response.status}).`);
+  if (!response.ok) throw admissionDocumentError(`Falha ao baixar PDF assinado (HTTP ${response.status}).`);
   const length = Number(response.headers.get("content-length") ?? 0);
-  if (length > MAX_SIGNED_BYTES) throw new Error("PDF assinado excede 30 MB.");
+  if (length > MAX_SIGNED_BYTES) throw admissionDocumentError("PDF assinado excede 30 MB.");
   const buffer = Buffer.from(await response.arrayBuffer());
   if (buffer.byteLength > MAX_SIGNED_BYTES || buffer.subarray(0, 4).toString() !== "%PDF") {
-    throw new Error("O arquivo assinado recebido não é um PDF válido.");
+    throw admissionDocumentError("O arquivo assinado recebido não é um PDF válido.");
   }
   return buffer;
 }
@@ -2457,18 +2500,18 @@ async function createEmployeeSignedDocument(params: {
   const reference = hrDbAdmin.collection("employeeDocuments").doc(documentId);
   const existing = await reference.get();
   if (existing.exists) {
-    if (existing.get("signatureRequestId") !== params.workflow.signatureRequestId || existing.get("sourceOnboardingId") !== params.workflow.onboardingId || existing.get("employeeId") !== params.employeeId || existing.get("contentHash") !== hashBuffer(params.signedBuffer) || existing.get("storagePath") !== params.signedStoragePath || existing.get("deletedAt")) throw new Error("O documento existente diverge da assinatura atual.");
+    if (existing.get("signatureRequestId") !== params.workflow.signatureRequestId || existing.get("sourceOnboardingId") !== params.workflow.onboardingId || existing.get("employeeId") !== params.employeeId || existing.get("contentHash") !== hashBuffer(params.signedBuffer) || existing.get("storagePath") !== params.signedStoragePath || existing.get("deletedAt")) throw admissionDocumentError("O documento existente diverge da assinatura atual.");
     return documentId;
   }
   const requestId = text(params.workflow.signatureRequestId);
-  if (!requestId) throw new Error("Documento sem solicitação histórica confirmada.");
+  if (!requestId) throw admissionDocumentError("Documento sem solicitação histórica confirmada.");
   const request = await hrDbAdmin.collection("hrSignatureRequests").doc(requestId).get();
   const history = request.data() ?? {};
   const ids = Array.isArray(history.workflowDocumentIds) ? history.workflowDocumentIds : [history.workflowDocumentId];
   if (!request.exists || history.onboardingId !== params.workflow.onboardingId || !ids.includes(params.workflowDocumentId)
     || (history.employeeId && history.employeeId !== params.employeeId)
     || history.signedStoragePath && history.signedStoragePath !== params.signedStoragePath
-    || history.signedHash && history.signedHash !== hashBuffer(params.signedBuffer)) throw new Error("A origem do documento não corresponde à solicitação histórica.");
+    || history.signedHash && history.signedHash !== hashBuffer(params.signedBuffer)) throw admissionDocumentError("A origem do documento não corresponde à solicitação histórica.");
   const { subjectKeys, partyKeys } = historicalSignaturePersonKeys(requestId, history);
   const config = getDocumentTypeConfig(params.admissionPackage ? "ADMISSION_PACKAGE" : text(params.workflow.documentTypeCode) ?? "UNKNOWN_DOCUMENT");
   const employeeCode = text(history.employeeCode) ?? params.employeeId;
@@ -2524,8 +2567,10 @@ async function createEmployeeSignedDocument(params: {
   };
   await hrDbAdmin.runTransaction(async (transaction) => {
     const current = await transaction.get(reference);
+    const currentProcess = await transaction.get(hrDbAdmin.collection("onboardingProcesses").doc(String(params.workflow.onboardingId)));
+    if (currentProcess.get("status") === "cancelled") throw admissionDocumentError("A admissão foi encerrada; o documento não pode ser arquivado.");
     if (current.exists) {
-      if (current.get("signatureRequestId") !== params.workflow.signatureRequestId || current.get("sourceOnboardingId") !== params.workflow.onboardingId || current.get("employeeId") !== params.employeeId || current.get("contentHash") !== documentData.contentHash || current.get("storagePath") !== params.signedStoragePath || current.get("deletedAt")) throw new Error("O documento existente diverge da assinatura atual.");
+      if (current.get("signatureRequestId") !== params.workflow.signatureRequestId || current.get("sourceOnboardingId") !== params.workflow.onboardingId || current.get("employeeId") !== params.employeeId || current.get("contentHash") !== documentData.contentHash || current.get("storagePath") !== params.signedStoragePath || current.get("deletedAt")) throw admissionDocumentError("O documento existente diverge da assinatura atual.");
       return;
     }
     transaction.set(reference, documentData);
@@ -2557,7 +2602,10 @@ export async function advanceOnboardingAfterSignatures(onboardingId: string) {
   if (currentStage !== "signature" && currentStage !== "signature_preparation") return false;
   const nextStage = nextLegacyStage(process.data, "signature") ?? nextLegacyStage(process.data, currentStage);
   const stageStartedAt = new Date().toISOString();
-  await process.ref.set({
+  return hrDbAdmin.runTransaction(async (tx) => {
+    const current = await tx.get(process.ref);
+    if (current.get("status") === "cancelled" || current.get("currentStage") !== currentStage) return false;
+    tx.set(process.ref, {
     currentStage: nextStage ?? currentStage,
     ...(nextStage && nextStage !== currentStage ? { currentStageStartedAt: stageStartedAt } : {}),
     status: onboardingStatusForStage(nextStage),
@@ -2568,10 +2616,26 @@ export async function advanceOnboardingAfterSignatures(onboardingId: string) {
     },
     updatedAt: stageStartedAt,
   }, { merge: true });
-  return true;
+    return true;
+  });
 }
 
-export async function archiveAutentiqueSignedDocument(params: {
+export async function archiveAutentiqueSignedDocument(params: { signatureRequestId: string; signedUrl: string; signedAt?: string | null; confirmedByEventId?: string | null }) {
+  const request = await hrDbAdmin.collection("hrSignatureRequests").doc(params.signatureRequestId).get();
+  const generatedId = text(request.get("generatedDocumentId"));
+  const onboardingId = text(request.get("onboardingId")) ?? (generatedId ? text((await dbAdmin.collection("generatedDocuments").doc(generatedId).get()).get("onboardingId")) : null);
+  const parent = onboardingId ? hrDbAdmin.collection("onboardingProcesses").doc(onboardingId) : null;
+  if (parent && (await parent.get()).get("status") === "cancelled") return null;
+  try { return await archiveAutentiqueSignedDocumentImpl(params); }
+  finally {
+    if (parent && (await parent.get()).get("status") === "cancelled") {
+      await parent.set({ documentDiscard: { status: "pending" } }, { merge: true });
+      await discardCancelledOnboardingDocuments(parent.id, "system:cancelled-signature-return");
+    }
+  }
+}
+
+async function archiveAutentiqueSignedDocumentImpl(params: {
   signatureRequestId: string;
   signedUrl: string;
   signedAt?: string | null;
@@ -2579,7 +2643,7 @@ export async function archiveAutentiqueSignedDocument(params: {
 }) {
   const requestRef = hrDbAdmin.collection(REQUEST_COLLECTION).doc(params.signatureRequestId);
   const request = await requestRef.get();
-  if (!request.exists) throw new Error("Solicitação de assinatura não encontrada.");
+  if (!request.exists) throw admissionDocumentError("Solicitação de assinatura não encontrada.");
   // Pacote do fechamento do mês (espelho e contracheque): arquivado pelo próprio serviço do ponto.
   if (request.get("purpose") === "time_closing_package") {
     const { syncClosingPackageSignature } = await import("@/features/dp/time-adjustments/closing-package.server");
@@ -2592,7 +2656,21 @@ export async function archiveAutentiqueSignedDocument(params: {
     for (const id of archivedIds) {
       const archived = await hrDbAdmin.collection("employeeDocuments").doc(id).get();
       if (!archived.exists || archived.get("signatureRequestId") !== params.signatureRequestId || archived.get("storagePath") !== request.get("signedStoragePath")
-        || archived.get("contentHash") !== request.get("signedHash") || archived.get("deletedAt")) throw new Error("O arquivo histórico diverge da solicitação assinada.");
+        || archived.get("contentHash") !== request.get("signedHash") || archived.get("deletedAt")) throw admissionDocumentError("O arquivo histórico diverge da solicitação assinada.");
+    }
+    const generatedId = text(request.get("generatedDocumentId"));
+    if (generatedId && !text(request.get("workflowDocumentId")) && !(Array.isArray(request.get("workflowDocumentIds")) && request.get("workflowDocumentIds").length)) {
+      const providerId = text(request.get("providerDocumentId"));
+      if (!providerId) throw admissionDocumentError("A solicitação não possui ID confirmado no provedor.");
+      const generatedRef = dbAdmin.collection("generatedDocuments").doc(generatedId);
+      await updateGeneratedSignatureProjection(generatedRef, params.signatureRequestId, request.data() ?? {}, providerId, {});
+      for (const id of archivedIds) {
+        const archived = await hrDbAdmin.collection("employeeDocuments").doc(id).get();
+        if (archived.get("sourceGeneratedDocumentId") !== generatedId || archived.get("providerDocumentId") !== providerId) throw admissionDocumentError("O arquivo histórico diverge da origem gerada.");
+        // The archive may be committed while publication failed. Retrying only
+        // this idempotent step must not download or create another signed file.
+        await autoPublishDocument(id, "signed");
+      }
     }
   }
   const bundleOnboardingId = text(request.get("onboardingId"));
@@ -2621,10 +2699,15 @@ export async function archiveAutentiqueSignedDocument(params: {
     if (!generatedDocumentId) return null;
     const generatedRef = dbAdmin.collection("generatedDocuments").doc(generatedDocumentId);
     const generated = await generatedRef.get();
-    if (!generated.exists) throw new Error("Documento gerado da solicitação não encontrado.");
-    assertHistoricalGeneratedSource(request.data() ?? {}, generatedDocumentId, generated.data() ?? {});
+    if (!generated.exists) throw admissionDocumentError("Documento gerado da solicitação não encontrado.");
+    const providerDocumentId = text(request.get("providerDocumentId"));
+    if (!providerDocumentId) throw admissionDocumentError("A solicitação não possui ID confirmado no provedor.");
+    // Both webhook and manual reconciliation must reject disposal or conflicting
+    // projections before downloading, storing or exposing the signed document.
+    await updateGeneratedSignatureProjection(generatedRef, params.signatureRequestId, request.data() ?? {}, providerDocumentId, {});
     const { subjectKeys, partyKeys } = historicalSignaturePersonKeys(params.signatureRequestId, request.data() ?? {});
     const signedBuffer = await downloadSignedPdf(params.signedUrl);
+    await updateGeneratedSignatureProjection(generatedRef, params.signatureRequestId, request.data() ?? {}, providerDocumentId, {});
     const signedHash = hashBuffer(signedBuffer);
     const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
     const signedStoragePath = `signed-documents/generated/${generatedDocumentId}/${params.signatureRequestId}/${signedHash}/signed.pdf`;
@@ -2657,7 +2740,7 @@ export async function archiveAutentiqueSignedDocument(params: {
       await hrDbAdmin.runTransaction(async (transaction) => {
         const existing = await transaction.get(employeeDocumentRef);
         if (existing.exists) {
-          if (existing.get("signatureRequestId") !== params.signatureRequestId || existing.get("sourceGeneratedDocumentId") !== generatedDocumentId || existing.get("employeeId") !== employeeId || existing.get("contentHash") !== signedHash || existing.get("storagePath") !== signedStoragePath || existing.get("deletedAt")) throw new Error("O documento existente diverge da assinatura atual.");
+          if (existing.get("signatureRequestId") !== params.signatureRequestId || existing.get("sourceGeneratedDocumentId") !== generatedDocumentId || existing.get("employeeId") !== employeeId || existing.get("contentHash") !== signedHash || existing.get("storagePath") !== signedStoragePath || existing.get("deletedAt")) throw admissionDocumentError("O documento existente diverge da assinatura atual.");
           return;
         }
         const now = Timestamp.now();
@@ -2706,11 +2789,9 @@ export async function archiveAutentiqueSignedDocument(params: {
         });
         transaction.set(employeeDocumentRef.collection("audit").doc("signed-document-archived"), { action: "SIGNED_DOCUMENT_ARCHIVED", actorId: "system:autentique", signatureRequestId: params.signatureRequestId, at: now });
       });
-      await autoPublishDocument(archivedDocumentId, "signed");
     }
     const archivedAt = new Date().toISOString();
-    await Promise.all([
-      generatedRef.set({
+    await updateGeneratedSignatureProjection(generatedRef, params.signatureRequestId, request.data() ?? {}, providerDocumentId, {
         status: "final",
         signatureStatus: "signed",
         archiveStatus: "archived",
@@ -2722,8 +2803,9 @@ export async function archiveAutentiqueSignedDocument(params: {
         confirmedByEventId: params.confirmedByEventId ?? null,
         employeeDocumentId: archivedDocumentId,
         archivedAt,
-      }, { merge: true }),
-      requestRef.set({
+      });
+    // A rejected projection must not race a terminal request write or publication.
+    await requestRef.set({
         status: "signed",
         signedAt: params.signedAt ?? archivedAt,
         signedStoragePath,
@@ -2732,8 +2814,8 @@ export async function archiveAutentiqueSignedDocument(params: {
         archivedDocumentId,
         archivedAt,
         updatedAt: archivedAt,
-      }, { merge: true }),
-    ]);
+      }, { merge: true });
+    if (archivedDocumentId) await autoPublishDocument(archivedDocumentId, "signed");
     return archivedDocumentId;
   }
   const workflowRefs: FirebaseFirestore.DocumentReference[] = workflowDocumentIds.map(
@@ -2744,11 +2826,11 @@ export async function archiveAutentiqueSignedDocument(params: {
     loadProcess(onboardingId),
   ]);
   if (workflowSnapshots.some((snapshot) => !snapshot.exists)) {
-    throw new Error("Documento do fluxo de assinatura não encontrado.");
+    throw admissionDocumentError("Documento do fluxo de assinatura não encontrado.");
   }
   historicalSignaturePersonKeys(params.signatureRequestId, request.data() ?? {});
   if (workflowSnapshots.some((snapshot) => snapshot.get("onboardingId") !== onboardingId || snapshot.get("signatureRequestId") !== params.signatureRequestId
-    || snapshot.get("providerDocumentId") !== request.get("providerDocumentId"))) throw new Error("Componentes divergentes da solicitação histórica.");
+    || snapshot.get("providerDocumentId") !== request.get("providerDocumentId"))) throw admissionDocumentError("Componentes divergentes da solicitação histórica.");
   const buffer = await downloadSignedPdf(params.signedUrl);
   const signedHash = hashBuffer(buffer);
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
@@ -2772,14 +2854,16 @@ export async function archiveAutentiqueSignedDocument(params: {
   if (isAdmissionBundle) {
     // Webhook before and after activation use the same canonical archive path.
     const plan = planSignedAdmissionArchive(onboardingId, workflowSnapshots.map((snapshot) => ({ id: snapshot.id, ...snapshot.data(), status: "signed" })), { ...request.data(), status: "signed", signedStoragePath, signedHash });
-    if (plan.kind !== "create") throw new Error("O pacote exige reconciliação antes de arquivar a assinatura.");
+    if (plan.kind !== "create") throw admissionDocumentError("O pacote exige reconciliação antes de arquivar a assinatura.");
     await hrDbAdmin.runTransaction(async (transaction) => {
       const currentRequest = await transaction.get(requestRef);
       const currentWorkflows = await transaction.getAll(...workflowRefs);
+      const currentProcess = await transaction.get(process.ref);
+      if (currentProcess.get("status") === "cancelled") throw admissionDocumentError("A admissão foi encerrada.");
       if (currentRequest.get("archivedDocumentId")) return;
-      if (currentRequest.get("providerDocumentId") !== request.get("providerDocumentId") || currentRequest.get("packageHash") !== request.get("packageHash")) throw new Error("A solicitação mudou durante o retorno da assinatura.");
+      if (currentRequest.get("providerDocumentId") !== request.get("providerDocumentId") || currentRequest.get("packageHash") !== request.get("packageHash")) throw admissionDocumentError("A solicitação mudou durante o retorno da assinatura.");
       const currentPlan = planSignedAdmissionArchive(onboardingId, currentWorkflows.map((snapshot) => ({ id: snapshot.id, ...snapshot.data(), status: "signed" })), { ...currentRequest.data(), status: "signed", signedStoragePath, signedHash });
-      if (currentPlan.kind !== "create" || currentPlan.documentId !== plan.documentId) throw new Error("Os componentes mudaram durante o retorno da assinatura.");
+      if (currentPlan.kind !== "create" || currentPlan.documentId !== plan.documentId) throw admissionDocumentError("Os componentes mudaram durante o retorno da assinatura.");
       const archivedAt = new Date().toISOString();
       for (const workflowRef of workflowRefs) transaction.set(workflowRef, { status: "signed_archived_pending_employee", signedAt, signedStoragePath, signedFileUrl: params.signedUrl, preSignatureHash: request.get("preSignatureHash") ?? request.get("packageHash") ?? null, signedHash, signatureReportHash: request.get("signatureReportHash") ?? null, providerDocumentId: request.get("providerDocumentId") ?? null, confirmedByEventId: params.confirmedByEventId ?? null, packageId: request.get("packageId") ?? null, packageProtocol: request.get("protocol") ?? null, archivedAt, updatedAt: archivedAt }, { merge: true });
       transaction.set(requestRef, { status: "signed", signedAt, signedStoragePath, preSignatureHash: request.get("preSignatureHash") ?? request.get("packageHash") ?? null, signedHash, signatureReportHash: request.get("signatureReportHash") ?? null, confirmedByEventId: params.confirmedByEventId ?? null, archivedAt, updatedAt: archivedAt }, { merge: true });
@@ -2844,6 +2928,7 @@ export async function promoteSignedOnboardingDocuments(params: {
   employeeId: string;
 }) {
   const process = await loadProcess(params.onboardingId);
+  if (process.data.status === "cancelled") return [];
   const snapshot = await hrDbAdmin.collection(WORKFLOW_COLLECTION)
     .where("onboardingId", "==", params.onboardingId)
     .limit(30)
@@ -2858,12 +2943,12 @@ export async function promoteSignedOnboardingDocuments(params: {
   if (bundle.kind === "create") {
     const existing = await hrDbAdmin.collection("employeeDocuments").doc(bundle.documentId).get();
     if (existing.exists) {
-      if (existing.get("employeeId") !== params.employeeId || existing.get("documentTypeCode") !== "ADMISSION_PACKAGE" || existing.get("contentHash") !== bundle.signedHash || existing.get("deletedAt")) throw new Error("O pacote arquivado não corresponde à assinatura atual.");
+      if (existing.get("employeeId") !== params.employeeId || existing.get("documentTypeCode") !== "ADMISSION_PACKAGE" || existing.get("contentHash") !== bundle.signedHash || existing.get("deletedAt")) throw admissionDocumentError("O pacote arquivado não corresponde à assinatura atual.");
       await autoPublishDocument(bundle.documentId, "signed");
     } else {
       const source = bucket.file(bundle.signedStoragePath);
       const [buffer] = await source.download();
-      if (hashBuffer(buffer) !== bundle.signedHash) throw new Error("O conteúdo do pacote não corresponde ao hash assinado.");
+      if (hashBuffer(buffer) !== bundle.signedHash) throw admissionDocumentError("O conteúdo do pacote não corresponde ao hash assinado.");
       const first = snapshot.docs.find((document) => document.id === bundle.workflowIds[0])!;
       await createEmployeeSignedDocument({ workflowDocumentId: first.id, workflow: { id: first.id, ...first.data() }, process: process.data, employeeId: params.employeeId, signedBuffer: buffer, signedStoragePath: bundle.signedStoragePath, admissionPackage: { documentId: bundle.documentId, documentName: text(bundleRequest.get("documentName")) ?? buildAdmissionSignatureDocumentName(process.data.candidateName), workflowIds: bundle.workflowIds } });
     }
@@ -2871,9 +2956,9 @@ export async function promoteSignedOnboardingDocuments(params: {
       const currentRequest = await transaction.get(requestRef);
       const refs = bundle.workflowIds.map((id) => hrDbAdmin.collection(WORKFLOW_COLLECTION).doc(id));
       const currentWorkflows = await transaction.getAll(...refs);
-      if (currentRequest.get("signedHash") !== bundle.signedHash || currentRequest.get("signedStoragePath") !== bundle.signedStoragePath || !SIGNED_COMPLETE_STATUSES.has(String(currentRequest.get("status")))) throw new Error("A assinatura mudou durante o arquivamento; confira o pacote atual.");
+      if (currentRequest.get("signedHash") !== bundle.signedHash || currentRequest.get("signedStoragePath") !== bundle.signedStoragePath || !SIGNED_COMPLETE_STATUSES.has(String(currentRequest.get("status")))) throw admissionDocumentError("A assinatura mudou durante o arquivamento; confira o pacote atual.");
       for (const workflow of currentWorkflows) {
-        if (!workflow.exists || workflow.get("signatureRequestId") !== bundle.requestId || workflow.get("selected") === false || !SIGNED_COMPLETE_STATUSES.has(String(workflow.get("status"))) || (workflow.get("employeeDocumentId") && workflow.get("employeeDocumentId") !== bundle.documentId)) throw new Error("Os componentes mudaram durante o arquivamento; confira as referências.");
+        if (!workflow.exists || workflow.get("signatureRequestId") !== bundle.requestId || workflow.get("selected") === false || !SIGNED_COMPLETE_STATUSES.has(String(workflow.get("status"))) || (workflow.get("employeeDocumentId") && workflow.get("employeeDocumentId") !== bundle.documentId)) throw admissionDocumentError("Os componentes mudaram durante o arquivamento; confira as referências.");
       }
       const now = new Date().toISOString();
       for (const ref of refs) transaction.set(ref, { status: "archived", employeeId: params.employeeId, employeeDocumentId: bundle.documentId, promotedAt: now, updatedAt: now }, { merge: true });
@@ -2893,7 +2978,7 @@ export async function promoteSignedOnboardingDocuments(params: {
     if (!sourcePath) continue;
     const [buffer] = await bucket.file(sourcePath).download();
     const expectedHash = text(workflowDocument.get("signedHash"));
-    if (expectedHash && hashBuffer(buffer) !== expectedHash) throw new Error("O conteúdo do documento não corresponde ao hash assinado.");
+    if (expectedHash && hashBuffer(buffer) !== expectedHash) throw admissionDocumentError("O conteúdo do documento não corresponde ao hash assinado.");
     const workflow = { id: workflowDocument.id, ...workflowDocument.data() } as RecordValue;
     const documentId = await createEmployeeSignedDocument({
       workflowDocumentId: workflowDocument.id,

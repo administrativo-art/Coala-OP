@@ -147,6 +147,7 @@ export const timeReviewDailyJob = onSchedule({
   maxInstances: 1,
   secrets: [jobSecret],
 }, async () => {
+  if (process.env.DP_TIME_REVIEW_ENABLED?.trim() !== 'true') return;
   const response = await fetch(new URL('/api/jobs/dp/time-recording/review-requests', jobUrl.value()), {
     method: 'POST', headers: { Authorization: `Bearer ${jobSecret.value()}`, 'Content-Type': 'application/json' }, body: '{}',
   });

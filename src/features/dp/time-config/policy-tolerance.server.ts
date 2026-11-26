@@ -4,6 +4,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 
 import { resolveDPJourney } from '@/lib/dp-journey-resolution';
 import type { DPOvertimePolicy, DPPolicyTolerances } from '@/types';
+import { policyRulesEnabled } from './rollout.server';
 
 const POLICY_LIMIT = 500;
 
@@ -30,6 +31,7 @@ export async function policyTargetOf(db: Firestore, uid: string) {
  * Enquanto nenhuma política tiver tolerâncias, custa só a consulta das políticas e o resto segue pela jornada.
  */
 export async function policyDayRulesFor(db: Firestore, uid: string): Promise<(date: string) => PolicyDayRules | null> {
+  if (!policyRulesEnabled()) return () => null;
   const snapshot = await db.collection('dp_overtimePolicies').where('status', 'in', ['published', 'archived']).limit(POLICY_LIMIT + 1).get();
   if (snapshot.size > POLICY_LIMIT) throw new Error('Há políticas de hora extra demais para resolver as tolerâncias com segurança.');
   const policies = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as DPOvertimePolicy);

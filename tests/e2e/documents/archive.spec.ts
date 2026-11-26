@@ -48,6 +48,11 @@ test("Acervo abre na Empresa, busca por termos e mostra a pasta do colaborador n
   await page.route("**/api/documents/templates", (route) => route.fulfill({ json: { templates: [{ id: "archive-model-e2e", name: "Recibo de pagamento", category: "Financeiro e recibos", status: "published", version: 2, generationMode: "direct", sourceFormat: "pdf", previewUrl: "/api/documents/templates/archive-model-e2e/preview", downloadUrl: "/api/documents/templates/archive-model-e2e/source" }] } }));
   await page.route("**/api/documents/templates/archive-model-e2e/preview", (route) => route.fulfill({ contentType: "application/pdf", body: bytes }));
   await page.route("**/api/audit/log", (route) => route.fulfill({ json: { ok: true } }));
+  await page.route("**/api/documents/archive/sources/admissionUploads?*", route => {
+    const parent = new URL(route.request().url()).searchParams.get("parent");
+    return route.fulfill({ json: { items: parent ? [{ id: "slot:identity_document", title: "Identificação recebida", pdfAvailable: true, available: true, mimeType: "application/pdf", fileUrl: "/api/documents/archive/sources/admissionUploads/file?parent=synthetic-process&id=slot%3Aidentity_document" }] : [{ id: "synthetic-process", title: "Candidato sintético", folder: true, href: "/dashboard/documents/archive?source=admissionUploads&parent=synthetic-process" }], nextCursor: null, ...(parent ? { folderLabel: "Candidato sintético" } : {}) } });
+  });
+  await page.route("**/api/documents/archive/sources/admissionUploads/file?*", route => route.fulfill({ contentType: "application/pdf", body: bytes }));
   await page.goto("/login?next=%2Fdashboard%2Fdocuments");
   await page.getByLabel("E-mail").fill(E2E_USER.email);
   await page.getByLabel("Senha").fill(E2E_USER.password);
@@ -381,4 +386,52 @@ test("perfil comum abre só a própria pasta publicada e baixa com o nome da ori
     await auth.deleteUser(uid).catch(() => undefined);
     await deleteApp(app);
   }
+});
+
+test("Acervo inclui gerados avulsos, editor e recebidos em pastas navegáveis", async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  const pdf = await PDFDocument.create(); pdf.addPage().drawText("Recibo assinado no Acervo", { x: 40, y: 760 });
+  const bytes = Buffer.from(await pdf.save());
+  let fileCalls = 0;
+  await page.route("**/api/documents/company", (route) => route.fulfill({ json: { documents: [] } }));
+  await page.route("**/api/documents/company/units", (route) => route.fulfill({ json: { units: [] } }));
+  await page.route("**/api/documents/archive/generated?*", (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get("cursor");
+    return route.fulfill({ json: { items: cursor ? [{ id: "legacy-receipt", title: "Recibo de pagamento avulso", protocol: "CTSO-REC-2026-000003", signed: true, pdfAvailable: true, updatedAt: "2026-11-26T13:17:00.000Z" }] : [], nextCursor: cursor ? null : "filtered-page" } });
+  });
+  await page.route("**/api/documents/generated/legacy-receipt/file?format=signed-pdf", (route) => { fileCalls++; return route.fulfill({ contentType: "application/pdf", body: bytes }); });
+  await page.route("**/api/documents/editor?*", (route) => route.fulfill({ json: { items: [{ id: "ed_" + "a".repeat(32), title: "Declaração do editor", status: "draft", updatedAt: "2026-11-26T13:17:00.000Z" }], nextCursor: null } }));
+  await page.route("**/api/documents/work-items?*", (route) => route.fulfill({ json: { items: [{ id: "pending-upload", documentRef: { sourceId: "upload-1" }, title: "Recebido ainda sem classificação.pdf", statusLabel: "Revisão necessária", href: "/dashboard/documents/collaborators?batch=synthetic" }], continuations: [], warnings: [], sources: [{ source: "employee_upload", available: true }], pageInfo: { hasMore: false, limit: 25 } } }));
+  await page.route("**/api/documents/archive/sources/admissionUploads?*", route => {
+    const parent = new URL(route.request().url()).searchParams.get("parent");
+    return route.fulfill({ json: { items: parent ? [{ id: "slot:identity_document", title: "Identificação recebida", pdfAvailable: true, available: true, mimeType: "application/pdf", fileUrl: "/api/documents/archive/sources/admissionUploads/file?parent=synthetic-process&id=slot%3Aidentity_document" }] : [{ id: "synthetic-process", title: "Candidato sintético", folder: true, href: "/dashboard/documents/archive?source=admissionUploads&parent=synthetic-process" }], nextCursor: null, ...(parent ? { folderLabel: "Candidato sintético" } : {}) } });
+  });
+  await page.route("**/api/documents/archive/sources/admissionUploads/file?*", route => route.fulfill({ contentType: "application/pdf", body: bytes }));
+  await page.goto("/login?next=%2Fdashboard%2Fdocuments");
+  await page.getByLabel("E-mail").fill(E2E_USER.email);
+  await page.getByLabel("Senha").fill(E2E_USER.password);
+  await page.getByRole("button", { name: "Entrar no sistema" }).click();
+  const contents = page.getByRole("main", { name: "Conteúdo da pasta" });
+  await expect(contents.getByRole("button", { name: "Pasta: Documentos gerados", exact: true })).toBeVisible({ timeout: 180_000 });
+  await expect(contents.getByRole("button", { name: "Pasta: Documentos do editor", exact: true })).toBeVisible();
+  await expect(contents.getByRole("button", { name: "Pasta: Recebidos a classificar", exact: true })).toBeVisible();
+  await contents.getByRole("button", { name: "Pasta: Documentos gerados", exact: true }).click();
+  await expect(page).toHaveURL(/archive\?source=generated/, { timeout: 120_000 });
+  await page.getByRole("button", { name: "Carregar mais", exact: true }).click();
+  await expect(contents.getByRole("button", { name: "Arquivo: Recibo de pagamento avulso", exact: true })).toBeVisible();
+  await contents.getByRole("button", { name: "Arquivo: Recibo de pagamento avulso", exact: true }).click();
+  await expect.poll(() => fileCalls).toBe(1);
+  await expect(page.getByText("Assinado", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("img", { name: "Prévia de Recibo de pagamento avulso" }).first()).toHaveAttribute("data-rendered", "true");
+  await page.screenshot({ path: testInfo.outputPath("gerados-no-acervo.png"), fullPage: true });
+  await page.goto("/dashboard/documents/archive?source=editor");
+  await expect(contents.getByText("Declaração do editor", { exact: true })).toBeVisible();
+  await page.goto("/dashboard/documents/archive?source=received");
+  await expect(contents.getByText("Recebido ainda sem classificação.pdf", { exact: true })).toBeVisible();
+  await page.goto("/dashboard/documents/archive?source=admissionUploads");
+  await contents.getByRole("button", { name: "Pasta: Candidato sintético", exact: true }).click();
+  await expect(page).toHaveURL(/parent=synthetic-process/);
+  await expect(page.getByRole("navigation", { name: "Caminho da pasta" }).getByText("Candidato sintético", { exact: true })).toBeVisible();
+  await contents.getByRole("button", { name: "Arquivo: Identificação recebida", exact: true }).click();
+  await expect(page.getByRole("img", { name: "Prévia de Identificação recebida" }).first()).toHaveAttribute("data-rendered", "true");
 });

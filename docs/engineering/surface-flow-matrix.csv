@@ -82,6 +82,7 @@ api,src/app/api/documents/editor/route.ts,,docs/engineering/flows/document-gener
 api,src/app/api/documents/generate/route.ts,,docs/engineering/flows/document-generation.md,POST secureRoute com schema estrito e autorização pessoal servidor antes de resolução e Storage.
 api,src/app/api/documents/generated/[id]/audit/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/generated/[id]/file/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/documents/generated/[id]/payment/route.ts,,docs/engineering/flows/document-generation.md,Envio Pix do recibo aprovado ao Inter com permissao financeira e documental.
 api,src/app/api/documents/generated/[id]/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/generated/[id]/signature/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/generated/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -683,3 +684,11 @@ api,src/app/api/service-portal/closures/route.ts,,docs/engineering/service-provi
 api,src/app/api/dp/time-recording/payslip-reconciliation/route.ts,,docs/engineering/flows/dp-time-recording.md,Conferencia RH de eventos do contracheque contra entrega imutavel com revisao fechamento todas unidades documento exato e bloqueio de assinatura.
 api,src/app/api/dp/time-recording/closing-progress/route.ts,,docs/engineering/flows/dp-time-recording.md,Acompanhamento DP limitado por competencia sem extrato ou PDF por pessoa e sem escrita.
 api,src/app/api/dp/time-recording/payroll-finance/route.ts,,docs/engineering/flows/dp-time-recording.md,Conferencia documental com permissao RH e financeira de titulos existentes sem criar lancamento ou pagamento.
+api,src/app/api/documents/archive/generated/route.ts,,docs/engineering/flows/document-central.md,Pasta projetada paginada dos gerados com mesma ACL global legada e allowlist.
+api,src/app/api/documents/archive/sources/[source]/route.ts,,docs/engineering/flows/document-central.md,Pastas contextuais somente leitura com paginacao e escopo da origem; anexos admissionais somente apos conclusao com documento final.
+api,src/app/api/documents/archive/sources/[source]/file/route.ts,,docs/engineering/flows/document-central.md,Bytes da origem com revalidacao de permissao workspace unidade titular tipo e integridade quando persistida; sem bearer URL.
+api,src/app/api/jobs/hr/onboarding-document-discard/route.ts,,docs/engineering/runtime-surfaces.md,Servico autenticado por segredo proprio; apaga apenas objetos de admissao cancelada com origem comprovada e audita pendencias.
+function,functions/src/onboarding-document-discard.ts,onboardingDocumentDiscardRequested,docs/engineering/runtime-surfaces.md,Retomada de exclusao definitiva admissional por eventos ou agenda com segredo especifico e API interna limitada.
+function,functions/src/onboarding-document-discard.ts,discardLateOnboardingObject,docs/engineering/runtime-surfaces.md,Retomada de exclusao definitiva admissional por eventos ou agenda com segredo especifico e API interna limitada.
+function,functions/src/onboarding-document-discard.ts,discardLateOnboardingEmployeeDocument,docs/engineering/runtime-surfaces.md,Retomada de exclusao definitiva admissional por eventos ou agenda com segredo especifico e API interna limitada.
+function,functions/src/onboarding-document-discard.ts,retryOnboardingDocumentDiscard,docs/engineering/runtime-surfaces.md,Retomada de exclusao definitiva admissional por eventos ou agenda com segredo especifico e API interna limitada.

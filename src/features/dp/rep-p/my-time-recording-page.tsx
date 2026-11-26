@@ -445,7 +445,7 @@ export function MyTimeRecordingPage({ employeeUid, initialView = "records", embe
           ) : (
             <>
               {openReviewDates.size ? (
-                <div className="flex flex-wrap items-center gap-3 rounded-ds-btn-lg border border-ds-info-border bg-ds-info-bg px-4 py-2.5">
+                <div className="flex flex-wrap items-center gap-3 rounded-ds-btn-lg border border-ds-info/20 bg-ds-info-bg px-4 py-2.5">
                   <p className="min-w-0 flex-1 text-sm text-ds-ink-2">
                     <strong className="text-ds-ink">{openReviewDates.size} {openReviewDates.size === 1 ? "dia" : "dias"} {readOnly ? "com revisão pedida" : "para revisar"}</strong>
                     {readOnly ? " à colaboradora neste mês." : " neste mês. Confira as batidas e peça correção se houver erro."}

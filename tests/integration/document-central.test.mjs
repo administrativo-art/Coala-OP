@@ -66,8 +66,8 @@ test("kit assinado arquiva uma vez antes ou depois da ativação e suporta retor
     const permanentPath = signedPath;
     paths.push(signedPath, permanentPath);
     await processRef.set({ candidateName: "Pessoa sintética", expectedAdmissionDate: "2099-01-01", currentStage: "completed", ...(alreadyActive ? { employeeId: person } : {}) });
-    await requestRef.set({ onboardingId, status: "sent", providerDocumentId: `provider-${onboardingId}`, documentName: "Coala Shakes - RH | Admissão - Pessoa sintética", workflowDocumentIds: workflows.map((workflow) => workflow.id), manifest: { schemaVersion: 1, packageType: "admission", components: [...workflows.map(({ templateId }) => ({ templateId })), { templateId: "system-admission-bundle-closing-term" }] } });
-    await Promise.all(workflowRefs.map((ref, index) => ref.set({ onboardingId, signatureRequestId: requestId, selected: true, status: "sent", documentTypeCode: "ADMISSION_DOCUMENT", templateId: workflows[index].templateId })));
+    await requestRef.set({ storagePath: `signature-packages/${onboardingId}/prepared.pdf`, packageHash: contentHash, subjectKeys: [`hr.employees:${person}`], onboardingId, status: "sent", providerDocumentId: `provider-${onboardingId}`, documentName: "Coala Shakes - RH | Admissão - Pessoa sintética", workflowDocumentIds: workflows.map((workflow) => workflow.id), manifest: { schemaVersion: 1, packageType: "admission", components: [...workflows.map(({ templateId }) => ({ templateId })), { templateId: "system-admission-bundle-closing-term" }] } });
+    await Promise.all(workflowRefs.map((ref, index) => ref.set({ onboardingId, signatureRequestId: requestId, selected: true, status: "sent", providerDocumentId: `provider-${onboardingId}`, documentTypeCode: "ADMISSION_DOCUMENT", templateId: workflows[index].templateId })));
     const first = await archiveAutentiqueSignedDocument({ signatureRequestId: requestId, signedUrl });
     if (!alreadyActive) {
       assert.equal(first, null); assert.equal((await archiveRef.get()).exists, false);
@@ -110,7 +110,7 @@ test("assinatura individual da admissão também reutiliza o arquivo e valida se
   const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
   t.after(async () => { await Promise.all([workflow, processRef, request, document].map((ref) => hrDbAdmin.recursiveDelete(ref))); await bucket.file(path).delete({ ignoreNotFound: true }); });
   await processRef.set({ candidateName: "Pessoa sintética", employeeId, expectedAdmissionDate: "2099-01-01" });
-  await request.set({ onboardingId, status: "signed", signedStoragePath: path });
+  await request.set({ onboardingId, workflowDocumentIds: [workflowId], storagePath: `signature-packages/${onboardingId}/prepared.pdf`, packageHash: hash, subjectKeys: [`hr.employees:${employeeId}`], status: "signed", signedStoragePath: path });
   await workflow.set({ onboardingId, signatureRequestId: requestId, status: "signed", selected: true, signedStoragePath: path, signedHash: "0".repeat(64), documentTypeCode: "EMPLOYMENT_CONTRACT", providerDocumentId: "synthetic-independent" });
   await bucket.file(path).save(bytes, { resumable: false });
   await assert.rejects(promoteSignedOnboardingDocuments({ onboardingId, employeeId }), /hash assinado/);
@@ -141,11 +141,11 @@ test("callbacks concorrentes com conteúdos distintos não sobrescrevem o origin
       refs.push([hrDbAdmin, processRef], [hrDbAdmin, workflow]);
       await processRef.set({ candidateName: "Pessoa sintética", employeeId: person, currentStage: "completed" });
       await workflow.set({ onboardingId: contextId, signatureRequestId: requestId, status: "sent", selected: true, documentTypeCode: "EMPLOYMENT_CONTRACT", providerDocumentId: "synthetic-race" });
-      await request.set({ onboardingId: contextId, workflowDocumentIds: [workflowId], status: "sent", providerDocumentId: "synthetic-race" });
+      await request.set({ storagePath: `signature-packages/${contextId}/prepared.pdf`, packageHash: "a".repeat(64), subjectKeys: [`hr.employees:${person}`], onboardingId: contextId, workflowDocumentIds: [workflowId], status: "sent", providerDocumentId: "synthetic-race" });
     } else {
       const generatedRef = dbAdmin.collection("generatedDocuments").doc(generatedId); refs.push([dbAdmin, generatedRef]);
       await generatedRef.set({ employeeId: person, documentTypeCode: "VACATION_RECEIPT", templateName: "Recibo sintético", status: "final" });
-      await request.set({ generatedDocumentId: generatedId, employeeId: person, documentTypeCode: "VACATION_RECEIPT", status: "sent", providerDocumentId: "synthetic-race" });
+      await request.set({ storagePath: `signature-documents/${generatedId}/prepared.pdf`, packageHash: "a".repeat(64), subjectKeys: [`hr.employees:${person}`], generatedDocumentId: generatedId, employeeId: person, documentTypeCode: "VACATION_RECEIPT", status: "sent", providerDocumentId: "synthetic-race" });
     }
     const bodies = [Buffer.from(`%PDF-conteudo-A-${mode}`), Buffer.from(`%PDF-conteudo-B-${mode}`)];
     const urls = bodies.map((_, index) => `https://api.autentique.com.br/${contextId}-${index}.pdf`);
@@ -364,6 +364,243 @@ test("central: autorização atual, paginação e proposta preservadas pelas API
     const response = await route.GET(new NextRequest(`http://localhost${path}?${new URLSearchParams(params)}`, { headers: { Authorization: `Bearer ${idToken}` } }), { params: Promise.resolve({}) });
     return { status: response.status, body: await response.json() };
   };
+  await t.test("Acervo conserva avulsos legados, pagina e abre somente o assinado íntegro", async () => {
+    const archive = await import("../../src/app/api/documents/archive/generated/route.ts");
+    const file = await import("../../src/app/api/documents/generated/[id]/file/route.ts");
+    assert.equal((await archive.GET(new NextRequest("http://localhost/api/documents/archive/generated"), { params: Promise.resolve({}) })).status, 401);
+    const ids = [];
+    for (let index = 0; index < 28; index++) {
+      const id = `000-archive-${String(index).padStart(2, "0")}`;
+      ids.push(id);
+      await seed(dbAdmin, "generatedDocuments", id, { templateName: "Recibo legado", status: index === 0 ? "discarded" : "final", manualValues: { private: "do-not-expose" }, employeeId: null, onboardingId: null });
+    }
+    const seen = new Set(); let cursor;
+    do {
+      const response = await call(archive, "/api/documents/archive/generated", { limit: "5", ...(cursor ? { cursor } : {}) });
+      assert.equal(response.status, 200);
+      for (const item of response.body.items) { seen.add(item.id); assert.equal(item.folder, "Documentos gerados"); }
+      assert.equal(JSON.stringify(response.body).includes("do-not-expose"), false);
+      cursor = response.body.nextCursor;
+    } while (cursor);
+    assert.equal(seen.has(ids[0]), false);
+    assert.ok(ids.slice(1).every((id) => seen.has(id)), "todos os legados alcançáveis além da primeira página");
+    const id = ids[1], requestId = "archive-synthetic-request";
+    const bytes = Buffer.from("%PDF-signed-canonical");
+    const signedHash = createHash("sha256").update(bytes).digest("hex");
+    const path = `signed-documents/generated/${id}/${requestId}/${signedHash}/signed.pdf`;
+    const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+    t.after(() => bucket.file(path).delete({ ignoreNotFound: true }));
+    await bucket.file(path).save(bytes, { resumable: false });
+    const ref = dbAdmin.collection("generatedDocuments").doc(id);
+    await ref.update({ signatureStatus: "signed", signedStoragePath: path, signedHash, signatureRequestId: requestId, pdfStoragePath: "prepared-must-not-be-downloaded.pdf" });
+    const request = await seed(hrDbAdmin, "hrSignatureRequests", requestId, { status: "signed", generatedDocumentId: id, signedStoragePath: path, signedHash });
+    const read = (token = idToken) => file.GET(new NextRequest(`http://localhost/api/documents/generated/${id}/file?format=signed-pdf`, { headers: token ? { Authorization: `Bearer ${token}` } : {} }), { params: Promise.resolve({ id }) });
+    assert.equal((await read(null)).status, 401);
+    const response = await read();
+    assert.equal(response.status, 200);
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
+    const restrictedId = "archive-restricted-employee";
+    await seed(dbAdmin, "users", restrictedId, { unitIds: ["central-unit-b"] });
+    const employeeDoc = await seed(hrDbAdmin, "employeeDocuments", "archive-restricted-signed", { employeeId: restrictedId, signatureRequestId: requestId, storagePath: path, contentHash: signedHash, category: "benefits", documentTypeCode: "TRANSPORT_REQUEST", accessLevel: "internal" });
+    await ref.update({ employeeId: restrictedId, employeeDocumentId: employeeDoc.id });
+    await request.update({ employeeId: restrictedId });
+    assert.equal((await read()).status, 403, "assinatura não contorna unidade do titular");
+    await ref.update({ employeeId: null, employeeDocumentId: null });
+    await request.update({ employeeId: null });
+    await request.update({ signedHash: "f".repeat(64) });
+    assert.equal((await read()).status, 409);
+    await request.update({ signedHash });
+    await bucket.file(path).save(Buffer.from("%PDF-tampered"), { resumable: false });
+    assert.equal((await read()).status, 409);
+    await ref.update({ signedStoragePath: null });
+    assert.equal((await read()).status, 409, "não deve cair no PDF preparado");
+    await profile.set({ permissions: { hr: { formalization: { companyDocuments: { view: true }, documents: { view: false } } } } });
+    assert.equal((await call(archive, "/api/documents/archive/generated", {})).status, 403);
+    assert.equal((await read()).status, 403);
+    await profile.set({ permissions: { hr: { formalization: { documents: { view: true }, signatures: { view: false } } } } });
+    assert.equal((await read()).status, 403, "leitor de gerados sem acesso à assinatura não recebe novos bytes assinados");
+    await profile.set({ permissions });
+  });
+  await t.test("pastas contextuais preservam versões, prova e escopo sem emitir ou copiar documentos", async () => {
+    const contextList = await import("../../src/app/api/documents/archive/sources/[source]/route.ts");
+    const contextFile = await import("../../src/app/api/documents/archive/sources/[source]/file/route.ts");
+    const { repPDbAdmin } = await import("../../src/lib/firebase-rep-p-admin.ts");
+    const extended = { ...permissions, hr: { formalization: { view: true, documents: { view: true }, aso: { view: true }, accountant: { view: true }, signatures: { view: true } } }, financial: { view: true, paymentRequests: { view: true, viewProof: true } } };
+    await profile.set({ permissions: extended });
+    const headers = { Authorization: `Bearer ${idToken}` };
+    const list = (source, params = {}, authenticated = true) => contextList.GET(new NextRequest(`http://localhost/api/documents/archive/sources/${source}?${new URLSearchParams({ limit: "1", ...params })}`, { headers: authenticated ? headers : {} }), { params: Promise.resolve({ source }) });
+    const read = (source, id, parent) => contextFile.GET(new NextRequest(`http://localhost/api/documents/archive/sources/${source}/file?${new URLSearchParams({ id, ...(parent ? { parent } : {}) })}`, { headers }), { params: Promise.resolve({ source }) });
+    const all = async (source) => {
+      const items = []; let cursor; let pages = 0;
+      do { const response = await list(source, cursor ? { cursor } : {}); assert.equal(response.status, 200); const body = await response.json(); items.push(...body.items); cursor = body.nextCursor; assert.ok(++pages < 30); } while (cursor);
+      return items;
+    };
+    assert.equal((await list("aso", {}, false)).status, 401);
+    assert.equal((await list("aso", { cursor: Buffer.from(JSON.stringify({source:"aso"})).toString("base64url") })).status, 400);
+    const parent = "000-context-admission-allowed", denied = "000-context-admission-denied";
+    await seed(hrDbAdmin, "onboardingProcesses", parent, { workspaceId: "coala", unitId: "central-unit-a" });
+    await seed(hrDbAdmin, "onboardingProcesses", denied, { workspaceId: "coala", unitId: "central-unit-b" });
+    const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+    const bytes = Buffer.from("%PDF-context-canonical");
+    const hash = createHash("sha256").update(bytes).digest("hex");
+    const paths = [];
+    const put = async (path, contents = bytes) => { paths.push(path); await bucket.file(path).save(contents, { resumable: false }); return path; };
+    t.after(() => Promise.all(paths.map((path) => bucket.file(path).delete({ ignoreNotFound: true }))));
+    for (const [parentId, kind, id] of [[parent,"aso_admission_referral","guide-1"],[parent,"aso_admission_referral","guide-2"],[parent,"accountant_admission_form","form-1"],[parent,"accountant_admission_form","form-2"],[denied,"aso_admission_referral","guide-denied"]]) {
+      await seed(hrDbAdmin, `onboardingProcesses/${parentId}/generatedDocuments`, id, { kind, fileName: `${id}.pdf`, generatedAt: "2026-11-26T12:00:00.000Z", storagePath: await put(`hr/onboarding/${parentId}/generated/${kind === "accountant_admission_form" ? "accountant-forms" : "aso-guides"}/${id}.pdf`), hashSha256: hash, generatedBy: uid });
+    }
+    await seed(hrDbAdmin, "unrelated/private/generatedDocuments", "foreign-kind", { kind: "aso_admission_referral", fileName: "Not-an-onboarding-version", storagePath: "never-expose" });
+    const guides = await all("aso"), forms = await all("accountant");
+    assert.equal(guides.length, 2); assert.equal(forms.length, 2);
+    assert.equal(JSON.stringify(guides).includes("storagePath"), false);
+    assert.equal(JSON.stringify(guides).includes("guide-denied"), false);
+    assert.equal((await read("aso", "guide-denied", denied)).status, 404);
+    assert.equal((await read("aso", "form-1", parent)).status, 404);
+    const guide = await read("aso", "guide-1", parent); assert.equal(guide.status, 200); assert.deepEqual(Buffer.from(await guide.arrayBuffer()), bytes);
+    await hrDbAdmin.collection("onboardingProcesses").doc(parent).update({ unitId: "central-unit-b" });
+    assert.equal((await read("aso", "guide-1", parent)).status, 404, "revogação do processo pai vale na abertura seguinte");
+    await hrDbAdmin.collection("onboardingProcesses").doc(parent).update({ unitId: "central-unit-a" });
+    await bucket.file(paths[0]).save(Buffer.from("%PDF-corrupt"), { resumable: false });
+    assert.equal((await read("aso", "guide-1", parent)).status, 500);
+    const confirmedSlotPath = await put("hr/onboarding/synthetic-private-token/123-document.pdf");
+    await bucket.file(confirmedSlotPath).setMetadata({ contentType: "application/pdf", metadata: { onboardingDocumentId: "identity_document", originalName: "Identificação.pdf" } });
+    await hrDbAdmin.collection("onboardingProcesses").doc(parent).update({ candidateName: "Candidato sintético", publicToken: "synthetic-private-token", documents: [{ id: "identity_document", label: "Identificação", filePath: confirmedSlotPath, fileHashSha256: hash }] });
+    assert.equal((await list("admissionUploads", { parent })).status, 404, "formulário recebido não entra no Acervo antes da conclusão");
+    await hrDbAdmin.collection("onboardingProcesses").doc(parent).update({ status: "completed", currentStage: "done", completedAt: "2026-11-26T12:00:00.000Z" });
+    assert.equal((await list("admissionUploads", { parent })).status, 404, "conclusão sem documento final ainda não libera o Acervo");
+    const finalPath = await put(`signed-documents/${parent}/signature_bundle_${parent}/${hash}/signed.pdf`);
+    await seed(hrDbAdmin, "hrSignatureRequests", `signature_bundle_${parent}`, { onboardingId: parent, status: "signed", signedStoragePath: finalPath, signedHash: hash, archivedDocumentId: "context-final-admission" });
+    await seed(hrDbAdmin, "employeeDocuments", "context-final-admission", { employeeId: "context-final-person", documentTypeCode: "ADMISSION_PACKAGE", sourceOnboardingId: parent, signatureRequestId: `signature_bundle_${parent}`, signatureStatus: "signed", storagePath: finalPath, contentHash: hash });
+    const attachmentPage = await list("admissionUploads", { parent }); assert.equal(attachmentPage.status, 200);
+    const attachmentBody = await attachmentPage.json(); assert.equal(attachmentBody.items.length, 1, JSON.stringify(attachmentBody));
+    assert.equal(JSON.stringify(attachmentBody).includes("synthetic-private-token"), false);
+    assert.equal((await read("admissionUploads", "slot:identity_document", parent)).status, 200);
+    assert.equal((await read("admissionUploads", "slots:identity_document", parent)).status, 404);
+    assert.equal((await read("admissionUploads", "public:123-document.pdf", parent)).status, 404);
+    assert.equal((await list("admissionStaging", { parent })).status, 400);
+    assert.equal((await list("admissionUploads", { parent: denied })).status, 404);
+    await bucket.file(confirmedSlotPath).setMetadata({ metadata: { onboardingDocumentId: "other-slot" } });
+    assert.equal((await read("admissionUploads", "slot:identity_document", parent)).status, 404);
+    await bucket.file(confirmedSlotPath).setMetadata({ metadata: { onboardingDocumentId: "identity_document" } });
+    await seed(hrDbAdmin, "onboardingProcesses", "context-duplicate-token", { publicToken: "synthetic-private-token" });
+    assert.equal((await read("admissionUploads", "slot:identity_document", parent)).status, 404, "token ambíguo nunca associa bytes de outro processo");
+    await hrDbAdmin.collection("onboardingProcesses").doc("context-duplicate-token").delete();
+    for (const [family, folder] of [["aso", "aso/returned"], ["registry", "accountant/registry"]]) {
+      const returnedPath = await put(`hr/onboarding/${parent}/${folder}/returned-v1.pdf`);
+      await bucket.file(returnedPath).setMetadata({ contentType: "application/pdf", metadata: { onboardingId: parent, hashSha256: hash } });
+      const contents = []; let cursor = attachmentBody.nextCursor;
+      while (cursor) { const response = await list("admissionUploads", { parent, cursor }); assert.equal(response.status, 200); const body = await response.json(); contents.push(...body.items); cursor = body.nextCursor; }
+      assert.ok(contents.some((entry) => entry.id === `${family}:returned-v1.pdf`), JSON.stringify(contents));
+      assert.equal((await read("admissionUploads", `${family}:returned-v1.pdf`, parent)).status, 200);
+    }
+    const { discardCancelledOnboardingDocuments } = await import("../../src/lib/hr/onboarding-document-discard.server.ts");
+    const { registerOnboardingUpload, finishOnboardingUpload } = await import("../../src/lib/hr/onboarding-upload-scope.server.ts");
+    const cancelled = "context-cancelled-admission", cancelledToken = "synthetic-cancelled-token", discardedPath = `hr/onboarding/${cancelledToken}/uploaded.pdf`;
+    const cancellation = await seed(hrDbAdmin, "onboardingProcesses", cancelled, { source: "recruitment", candidateId: "context-native-candidate", workspaceId: "coala", unitId: "central-unit-a", publicToken: cancelledToken, documents: [{ id: "identity_document", filePath: discardedPath, fileHashSha256: hash }] });
+    const claim = await registerOnboardingUpload(cancelledToken, discardedPath, "identity_document", hash);
+    assert.deepEqual((await claim.file.get()).get("subjectKeys"), ["hr.candidates:context-native-candidate"]);
+    for (const collection of ["documentFiles", "documentStorageScopes"]) {
+      const exact = await hrDbAdmin.collectionGroup(collection).where("subjectKeys", "array-contains", "hr.candidates:context-native-candidate").limit(5).get();
+      assert.equal(exact.size, 1);
+      assert.equal((await hrDbAdmin.collectionGroup(collection).where("subjectKeys", "array-contains", `main.users:${uid}`).limit(5).get()).size, 0, "o operador não vira titular do upload");
+    }
+    await put(discardedPath); await bucket.file(discardedPath).setMetadata({ metadata: { onboardingId: cancelled, onboardingDocumentId: "identity_document" } });
+    assert.equal(await finishOnboardingUpload(claim), true);
+    const privatePath = await put(`hr/onboarding/${cancelled}/aso/returned/private.pdf`);
+    await bucket.file(privatePath).setMetadata({ metadata: { onboardingId: cancelled } });
+    const promotedPath = await put("hr/employee-documents/synthetic-person/documents/context-discard-promoted/versions/01/original.pdf");
+    await seed(hrDbAdmin, "employeeDocuments", "context-discard-promoted", { employeeId: "synthetic-person", source: "recruitment_onboarding", sourceOnboardingId: cancelled, storagePath: promotedPath });
+    const unrelatedPath = await put("hr/employee-documents/synthetic-person/documents/unrelated-existing/versions/01/original.pdf");
+    await seed(hrDbAdmin, "employeeDocuments", "unrelated-existing", { employeeId: "synthetic-person", source: "manual", storagePath: unrelatedPath });
+    await cancellation.update({ status: "cancelled", documentDiscard: { status: "pending" } });
+    await assert.rejects(registerOnboardingUpload(cancelledToken, discardedPath, "identity_document", hash), /não aceita mais/);
+    const discarded = await discardCancelledOnboardingDocuments(cancelled, uid);
+    assert.equal(discarded.status, "completed", JSON.stringify(discarded));
+    for (const path of [discardedPath, privatePath, promotedPath]) assert.equal((await bucket.file(path).exists())[0], false, path);
+    assert.equal((await bucket.file(unrelatedPath).exists())[0], true);
+    assert.ok((await hrDbAdmin.collection("employeeDocuments").doc("context-discard-promoted").get()).get("deletedAt"));
+    assert.equal((await discardCancelledOnboardingDocuments(cancelled, uid)).status, "completed", "descarte repetido é idempotente");
+    assert.equal((await list("admissionUploads", { parent: cancelled })).status, 404);
+    const { archiveAutentiqueSignedDocument, advanceOnboardingAfterSignatures } = await import("../../src/features/hr/documents/signature-workflow.server.ts");
+    await seed(hrDbAdmin, "hrSignatureRequests", "context-cancelled-signature", { onboardingId: cancelled, status: "sent" });
+    assert.equal(await archiveAutentiqueSignedDocument({ signatureRequestId: "context-cancelled-signature", signedUrl: "https://example.invalid/must-not-download.pdf" }), null);
+    assert.equal(await advanceOnboardingAfterSignatures(cancelled), false);
+    assert.equal((await cancellation.get()).get("status"), "cancelled");
+    // An upload already in flight cannot become visible after cancellation.
+    const race = "context-upload-cancellation-race", raceToken = "synthetic-racing-token", racePath = `hr/onboarding/${raceToken}/race.pdf`;
+    const raceParent = await seed(hrDbAdmin, "onboardingProcesses", race, { publicToken: raceToken, status: "collecting_documents" });
+    const racing = await registerOnboardingUpload(raceToken, racePath, "identity_document", hash);
+    await raceParent.update({ status: "cancelled" });
+    await put(racePath); await bucket.file(racePath).setMetadata({ metadata: { onboardingId: race } });
+    assert.equal(await finishOnboardingUpload(racing), false);
+    await racing.file.update({ status: "purged" });
+    assert.equal((await discardCancelledOnboardingDocuments(race, uid)).status, "completed");
+    assert.equal((await bucket.file(racePath).exists())[0], false);
+    await seed(financialDbAdmin, "bankPaymentRequests", "context-proof", { workspaceId: "coala", description: "Comprovante confirmado", proofStoragePath: await put("financial/payment-proofs/context-proof/comprovante-pagamento.pdf"), paidAt: "2026-11-26T12:00:00.000Z" });
+    await seed(financialDbAdmin, "bankPaymentRequests", "context-proof-other-workspace", { workspaceId: "other", description: "Não revelar", proofStoragePath: paths.at(-1) });
+    assert.equal((await all("paymentProof")).length, 1);
+    assert.equal((await read("paymentProof", "context-proof-other-workspace")).status, 404);
+    const proof = await read("paymentProof", "context-proof"); assert.equal(proof.status, 200); assert.deepEqual(Buffer.from(await proof.arrayBuffer()), bytes);
+    await seed(dbAdmin, "uniformTransactions", "context-term-own", { workspaceId: "coala", collaboratorUserId: uid, term: { archiveStatus: "failed", storagePath: await put(`hr/employee-documents/${uid}/documents/context-term-own/versions/01/original.pdf`), contentHash: hash, fileName: "Termo-preservado.pdf" } });
+    const restrictedPerson = "context-restricted-person";
+    await seed(dbAdmin, "users", restrictedPerson, { unitIds: ["central-unit-b"] });
+    await seed(dbAdmin, "uniformTransactions", "context-term-denied", { workspaceId: "coala", collaboratorUserId: restrictedPerson, term: { storagePath: paths.at(-1), contentHash: hash } });
+    assert.equal((await all("uniforms")).length, 1, "termo com projeção falha continua acessível na pasta própria");
+    assert.equal((await read("uniforms", "context-term-denied")).status, 404);
+    assert.equal((await read("uniforms", "context-term-own")).status, 200);
+    const receiptId = `${"a".repeat(64)}_000000001`;
+    await seed(repPDbAdmin, "repP_receipts", receiptId, { workspaceId: "coala", employeeId: uid, status: "issued", filename: "Comprovante-fiscal.pdf", pdf: bytes, sha256: hash, snapshot: { private: "never-list" }, issuedAt: "2026-11-26T12:00:00.000Z" });
+    await seed(repPDbAdmin, "repP_receipts", `${"a".repeat(64)}_000000002`, { workspaceId: "coala", employeeId: restrictedPerson, status: "issued", pdf: bytes, sha256: hash });
+    const receipts = await all("receipts"); assert.equal(receipts.length, 1); assert.equal(JSON.stringify(receipts).includes("never-list"), false); assert.equal(JSON.stringify(receipts).includes("sha256"), false);
+    const receipt = await read("receipts", receiptId); assert.equal(receipt.status, 200); assert.deepEqual(Buffer.from(await receipt.arrayBuffer()), bytes);
+    assert.equal((await read("receipts", `${"a".repeat(64)}_000000002`)).status, 404);
+    const { REP_P_PILOT_RECEIPT_PREVIEW_SNAPSHOT } = await import("../../src/features/dp/rep-p/pilot-receipt.ts");
+    const pilotId = `pilot_${"b".repeat(64)}`;
+    await seed(hrDbAdmin, "repP_pilotMarkings", pilotId, { schemaVersion: 1, mode: "pilot", workspaceId: "coala", employeeId: uid, receiptId: pilotId, markingId: pilotId, sequence: 12, nsr: 12, workDate: "2026-10-22", recordedDate: "2026-10-22", hash: REP_P_PILOT_RECEIPT_PREVIEW_SNAPSHOT.hash, snapshot: REP_P_PILOT_RECEIPT_PREVIEW_SNAPSHOT, status: "issued", filename: "ensaio-ponto.pdf", pdf: bytes, sha256: hash, issuedAt: "2026-11-26T12:00:00.000Z" });
+    const pilots = await all("pilotReceipts"); assert.equal(pilots.length, 1); assert.equal(JSON.stringify(pilots).includes(REP_P_PILOT_RECEIPT_PREVIEW_SNAPSHOT.employeeCpf), false);
+    const pilot = await read("pilotReceipts", pilotId); assert.equal(pilot.status, 200); assert.deepEqual(Buffer.from(await pilot.arrayBuffer()), bytes);
+    assert.equal((await list("afd")).status, 403);
+    const managerPermissions = { ...extended, dp: { ...extended.dp, settings: { manageTime: true } } };
+    await profile.set({ permissions: managerPermissions });
+    assert.equal((await list("afd")).status, 403, "gestão fiscal exige escopo global");
+    await dbAdmin.collection("users").doc(uid).update({ unitAccessScope: "all" });
+    const supportId = "archive-fiscal-support", supportProfile = "archive-fiscal-support-profile";
+    const { DEVELOPER_VIEW_AS_EMAIL, DEVELOPER_VIEW_AS_HEADER } = await import("../../src/features/auth/developer-view-as.ts");
+    await authAdmin.createUser({ uid: supportId, email: DEVELOPER_VIEW_AS_EMAIL, password: "synthetic-support-password" });
+    t.after(() => authAdmin.deleteUser(supportId));
+    await authAdmin.setCustomUserClaims(supportId, { profileId: supportProfile, sessionVersion: 0 });
+    await seed(dbAdmin, "profiles", supportProfile, { permissions: {} });
+    await seed(dbAdmin, "users", supportId, { username: "Synthetic support", email: DEVELOPER_VIEW_AS_EMAIL, profileId: supportProfile, isActive: true, sessionVersion: 0, profileCompliance: { status: "complete", policyVersion: 1 } });
+    const supportSignIn = await fetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: DEVELOPER_VIEW_AS_EMAIL, password: "synthetic-support-password", returnSecureToken: true }) });
+    const { idToken: supportToken } = await supportSignIn.json();
+    for (const source of ["afd", "aej"]) {
+      const viewAsHeaders = { Authorization: `Bearer ${supportToken}`, [DEVELOPER_VIEW_AS_HEADER]: uid };
+      const viewedList = await contextList.GET(new NextRequest(`http://localhost/api/documents/archive/sources/${source}`, { headers: viewAsHeaders }), { params: Promise.resolve({ source }) });
+      const viewedFile = await contextFile.GET(new NextRequest(`http://localhost/api/documents/archive/sources/${source}/file?id=context-${source}`, { headers: viewAsHeaders }), { params: Promise.resolve({ source }) });
+      assert.equal(viewedList.status, 403, "perfil global do alvo não autoriza download coletivo no modo suporte");
+      assert.equal(viewedFile.status, 403);
+      assert.equal((await viewedList.json()).error.code, "ARCHIVE_FISCAL_VIEW_AS_FORBIDDEN");
+      assert.equal((await viewedFile.json()).error.code, "ARCHIVE_FISCAL_VIEW_AS_FORBIDDEN");
+    }
+    const oldFiscalBucket = process.env.REP_P_FISCAL_STORAGE_BUCKET;
+    process.env.REP_P_FISCAL_STORAGE_BUCKET = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+    t.after(() => { if (oldFiscalBucket === undefined) delete process.env.REP_P_FISCAL_STORAGE_BUCKET; else process.env.REP_P_FISCAL_STORAGE_BUCKET = oldFiscalBucket; });
+    const { createStoredZip } = await import("../../src/features/dp/rep-p/receipt-archive.ts");
+    const zipBytes = createStoredZip([{ name: "synthetic.txt", bytes: Buffer.from("Arquivo fiscal sintético de teste") }]);
+    const zipHash = createHash("sha256").update(zipBytes).digest("hex");
+    for (const [source, db, collection] of [["afd", repPDbAdmin, "repP_exportAudit"], ["aej", hrDbAdmin, "ptrp_aejExports"]]) {
+      const id = `context-${source}`, path = await put(`time-recording/fiscal-exports/coala/${source}/est-test/${id}/pacote-fiscal-${source}.zip`, zipBytes);
+      const [metadata] = await bucket.file(path).getMetadata();
+      await seed(db, collection, id, { workspaceId: "coala", establishmentId: "est-test", status: "exported", actorId: uid, artifacts: { bundle: { storageBucket: process.env.REP_P_FISCAL_STORAGE_BUCKET, storagePath: path, generation: String(metadata.generation), sha256: zipHash, size: zipBytes.length } } });
+      assert.equal((await all(source)).length, 1);
+      const zip = await read(source, id); assert.equal(zip.status, 200); assert.equal(zip.headers.get("content-type"), "application/zip"); assert.deepEqual(Buffer.from(await zip.arrayBuffer()), zipBytes);
+    }
+    await profile.set({ permissions: { hr: { formalization: { aso: { view: true } } } } });
+    assert.equal((await list("accountant")).status, 403);
+    assert.equal((await list("paymentProof")).status, 403);
+    await profile.set({ permissions });
+    await dbAdmin.collection("users").doc(uid).update({ unitAccessScope: "selected", unitAccessUnitIds: ["central-unit-a"] });
+  });
   for (let index = 0; index < 4; index++) await seed(dbAdmin, "generatedDocuments", `${uid}-generated-${index}`, {
     generatedAt: `2099-01-0${4 - index}T00:00:00.000Z`, status: "final", signatureStatus: index < 3 ? "signed" : "sent", templateName: "Contrato sintético",
   });
@@ -892,4 +1129,109 @@ test("central: autorização atual, paginação e proposta preservadas pelas API
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(previousEnv)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
   }
+});
+
+
+test("standalone archive refuses terminal state and publication if projection is discarded during download", async (t) => {
+  const { archiveAutentiqueSignedDocument } = await import("../../src/features/hr/documents/signature-workflow.server.ts");
+  const id = "synthetic-standalone-discard-during-download";
+  const generatedRef = dbAdmin.collection("generatedDocuments").doc(id);
+  const requestRef = hrDbAdmin.collection("hrSignatureRequests").doc(`signature_generated_${id}`);
+  const documentId = createHash("sha256").update(`signed-generated-document:${id}`).digest("hex").slice(0, 32);
+  const archiveRef = hrDbAdmin.collection("employeeDocuments").doc(documentId);
+  const bytes = Buffer.from("%PDF-synthetic-discard-during-download");
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  const path = `signed-documents/generated/${id}/${requestRef.id}/${hash}/signed.pdf`;
+  const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+  const originalFetch = globalThis.fetch;
+  t.after(async () => { globalThis.fetch = originalFetch; await Promise.all([generatedRef.delete(), requestRef.delete(), hrDbAdmin.recursiveDelete(archiveRef), bucket.file(path).delete({ ignoreNotFound: true })]); });
+  await generatedRef.set({ status: "final", employeeId: "synthetic-person", documentTypeCode: "VACATION_RECEIPT" });
+  await requestRef.set({ generatedDocumentId: id, storagePath: `signature-documents/${id}/prepared.pdf`, packageHash: "a".repeat(64), employeeId: "synthetic-person", documentTypeCode: "VACATION_RECEIPT", status: "sent", providerDocumentId: "synthetic-provider", subjectKeys: ["hr.employees:synthetic-person"] });
+  globalThis.fetch = async (input, init) => {
+    if (String(input) === "https://api.autentique.com.br/synthetic-discard.pdf") {
+      await generatedRef.update({ status: "discarded" });
+      return new Response(bytes, { headers: { "Content-Type": "application/pdf" } });
+    }
+    return originalFetch(input, init);
+  };
+  await assert.rejects(archiveAutentiqueSignedDocument({ signatureRequestId: requestRef.id, signedUrl: "https://api.autentique.com.br/synthetic-discard.pdf" }), /descartado/);
+  const request = await requestRef.get(), archived = await archiveRef.get();
+  assert.equal(request.get("status"), "sent");
+  assert.equal(request.get("archivedDocumentId"), undefined);
+  assert.equal(archived.exists, false, "discard during download must precede Acervo creation");
+  assert.equal((await bucket.file(path).exists())[0], false);
+  assert.equal((await generatedRef.get()).get("status"), "discarded");
+});
+
+
+test("standalone final projection failure cannot race terminal request or publication", async (t) => {
+  const { archiveAutentiqueSignedDocument } = await import("../../src/features/hr/documents/signature-workflow.server.ts");
+  const id = "synthetic-standalone-final-projection-failure";
+  const generatedRef = dbAdmin.collection("generatedDocuments").doc(id);
+  const requestRef = hrDbAdmin.collection("hrSignatureRequests").doc(`signature_generated_${id}`);
+  const documentId = createHash("sha256").update(`signed-generated-document:${id}`).digest("hex").slice(0, 32);
+  const archiveRef = hrDbAdmin.collection("employeeDocuments").doc(documentId);
+  const bytes = Buffer.from("%PDF-synthetic-final-projection-failure");
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  const path = `signed-documents/generated/${id}/${requestRef.id}/${hash}/signed.pdf`;
+  const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+  const originalFetch = globalThis.fetch, originalTransaction = dbAdmin.runTransaction;
+  t.after(async () => { globalThis.fetch = originalFetch; dbAdmin.runTransaction = originalTransaction; await Promise.all([generatedRef.delete(), requestRef.delete(), hrDbAdmin.recursiveDelete(archiveRef), bucket.file(path).delete({ ignoreNotFound: true })]); });
+  await generatedRef.set({ status: "final", employeeId: "synthetic-person", documentTypeCode: "VACATION_RECEIPT" });
+  await requestRef.set({ generatedDocumentId: id, storagePath: `signature-documents/${id}/prepared.pdf`, packageHash: "a".repeat(64), employeeId: "synthetic-person", documentTypeCode: "VACATION_RECEIPT", status: "sent", providerDocumentId: "synthetic-provider", subjectKeys: ["hr.employees:synthetic-person"] });
+  globalThis.fetch = async (input, init) => String(input) === "https://api.autentique.com.br/synthetic-projection-failure.pdf" ? new Response(bytes, { headers: { "Content-Type": "application/pdf" } }) : originalFetch(input, init);
+  let projectionTransactions = 0;
+  dbAdmin.runTransaction = async (...args) => {
+    if (++projectionTransactions === 3) throw new Error("synthetic final projection failure");
+    return originalTransaction.apply(dbAdmin, args);
+  };
+  await assert.rejects(archiveAutentiqueSignedDocument({ signatureRequestId: requestRef.id, signedUrl: "https://api.autentique.com.br/synthetic-projection-failure.pdf" }), /synthetic final projection failure/);
+  assert.equal(projectionTransactions, 3);
+  const request = await requestRef.get(), archived = await archiveRef.get();
+  assert.equal(request.get("status"), "sent");
+  assert.equal(request.get("archivedDocumentId"), undefined);
+  assert.equal(archived.exists, true, "the staged entry survives for explicit reconciliation");
+  assert.equal(archived.get("publication.status"), undefined);
+  assert.equal((await archiveRef.collection("audit").where("action", "==", "published").get()).size, 0);
+});
+
+
+test("standalone retries publication after terminal archive without downloading or duplicating", async (t) => {
+  const { archiveAutentiqueSignedDocument } = await import("../../src/features/hr/documents/signature-workflow.server.ts");
+  const id = "synthetic-standalone-publication-recovery";
+  const generatedRef = dbAdmin.collection("generatedDocuments").doc(id);
+  const requestRef = hrDbAdmin.collection("hrSignatureRequests").doc(`signature_generated_${id}`);
+  const documentId = createHash("sha256").update(`signed-generated-document:${id}`).digest("hex").slice(0, 32);
+  const archiveRef = hrDbAdmin.collection("employeeDocuments").doc(documentId);
+  const bytes = Buffer.from("%PDF-synthetic-publication-recovery");
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  const path = `signed-documents/generated/${id}/${requestRef.id}/${hash}/signed.pdf`;
+  const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+  const originalFetch = globalThis.fetch, originalTransaction = hrDbAdmin.runTransaction;
+  t.after(async () => { globalThis.fetch = originalFetch; hrDbAdmin.runTransaction = originalTransaction; await Promise.all([generatedRef.delete(), requestRef.delete(), hrDbAdmin.recursiveDelete(archiveRef), bucket.file(path).delete({ ignoreNotFound: true })]); });
+  await generatedRef.set({ status: "final", employeeId: "synthetic-person", documentTypeCode: "VACATION_RECEIPT" });
+  await requestRef.set({ generatedDocumentId: id, storagePath: `signature-documents/${id}/prepared.pdf`, packageHash: "a".repeat(64), employeeId: "synthetic-person", documentTypeCode: "VACATION_RECEIPT", status: "sent", providerDocumentId: "synthetic-provider", subjectKeys: ["hr.employees:synthetic-person"] });
+  let downloads = 0, hrTransactions = 0;
+  globalThis.fetch = async (input, init) => {
+    if (String(input) === "https://api.autentique.com.br/synthetic-publication-recovery.pdf") { downloads++; return new Response(bytes, { headers: { "Content-Type": "application/pdf" } }); }
+    return originalFetch(input, init);
+  };
+  hrDbAdmin.runTransaction = async (...args) => {
+    if (++hrTransactions === 2) throw new Error("synthetic publication failure after terminal write");
+    return originalTransaction.apply(hrDbAdmin, args);
+  };
+  const params = { signatureRequestId: requestRef.id, signedUrl: "https://api.autentique.com.br/synthetic-publication-recovery.pdf" };
+  await assert.rejects(archiveAutentiqueSignedDocument(params), /synthetic publication failure/);
+  assert.equal((await requestRef.get()).get("status"), "signed");
+  assert.equal((await requestRef.get()).get("archivedDocumentId"), documentId);
+  assert.equal((await archiveRef.get()).get("publication"), undefined);
+  hrDbAdmin.runTransaction = originalTransaction;
+  assert.equal(await archiveAutentiqueSignedDocument(params), documentId);
+  assert.equal((await archiveRef.get()).get("publication.status"), "published");
+  assert.equal(await archiveAutentiqueSignedDocument(params), documentId);
+  assert.equal(downloads, 1);
+  assert.equal((await archiveRef.collection("audit").where("action", "==", "DOCUMENT_PUBLISHED").get()).size, 1);
+  await generatedRef.update({ status: "discarded" });
+  await assert.rejects(archiveAutentiqueSignedDocument(params), /descartado/);
+  assert.equal(downloads, 1);
 });

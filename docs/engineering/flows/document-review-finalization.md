@@ -6,6 +6,8 @@
 
 ## Entrada e percurso
 
+26/11/2026 — a aprovação também pode começar na Revisão do gerador após conferir o PDF. Usa o mesmo `PATCH` e a mesma autorização de servidor descritos abaixo; **Iniciar fluxo** posterior apenas abre o documento selecionado na gestão operacional, onde finalização e eventual assinatura continuam ações distintas. Uma edição dos dados do gerador invalida localmente a prévia e aprovação exibida. `/dashboard/documents/generated/manage` apresenta **Fluxos e pendências**; a seleção por ID preserva acesso autorizado a registros terminais vindos do Histórico. `/dashboard/documents/history` segue como consulta.
+
 [`documents/generated/page.tsx`](../../../src/app/dashboard/documents/generated/page.tsx) carrega documentos pela [listagem](../../../src/app/api/documents/generated/route.ts), que exige `documents.view`, limita a consulta a 300 registros e oculta caminhos de Storage; `manualValues` depende de `sensitiveData.view`. A interface oferece gerar PDF, aprovar, finalizar e descartar conforme estado e permissão de revisão. A [rota do documento](../../../src/app/api/documents/generated/%5Bid%5D/route.ts) volta a verificar `documents.review` no servidor para todas essas mutações.
 
 1. Quando falta PDF, `POST /api/documents/generated/{id}` baixa o DOCX, converte em PDF e aplica papel timbrado. Salva o PDF no Storage e metadados/hash em `generatedDocuments/{id}`. Se o conversor não estiver disponível, marca `pdfGenerationStatus: unavailable` e responde 503. Se já há `pdfStoragePath`, reutiliza o registro. [Rota](../../../src/app/api/documents/generated/%5Bid%5D/route.ts).

@@ -1,14 +1,16 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 import {
   jobRoleCreateSchema,
   normalizeJobRoleInput,
   stripUndefined,
 } from "@/features/hr/lib/schemas";
-import {
-  assertHrAccess,
-  serializeHrValue,
-} from "@/features/hr/lib/server-access";
+import { rejectJobRole, requireJobRoleAccess } from "@/features/hr/lib/job-role-route.server";
+import { serializeHrValue, type HrAccess } from "@/features/hr/lib/server-access";
+import { createStandardSecurityEnforcer } from "@/lib/security/enforcer";
+import { parseRouteBody } from "@/lib/security/route-access.server";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { dbAdmin } from "@/lib/firebase-admin";
 import {
@@ -20,83 +22,94 @@ import { reconcileExecutiveJobRoleHierarchy } from "@/features/hr/lib/job-role-h
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(request: NextRequest) {
-  try {
-    await assertHrAccess(request, "view");
-    const snapshot = await hrDbAdmin.collection("jobRoles").orderBy("name").get();
+type StaticRouteContext = { params: Promise<Record<string, never>> };
+type CreateRoleInput = ReturnType<typeof jobRoleCreateSchema.parse>;
 
-    return NextResponse.json({
-      roles: snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...((serializeHrValue(doc.data()) as Record<string, unknown>) ?? {}),
-      })),
-    });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Erro ao carregar cargos.",
-      },
-      { status: 403 }
-    );
+const listContract = defineSecurityContract({
+  schemaVersion: 1,
+  id: "hr.job-roles.list",
+  version: 1,
+  surface: { method: "GET", path: "/api/hr/roles" },
+  exposure: "authenticated",
+  identity: { kind: "active-user" },
+  authorization: { kind: "permission", action: "hr.job-roles.view" },
+  resourceScope: { kind: "none" },
+  input: { kind: "none" },
+  effects: { mode: "read", audit: "none" },
+  errorExposure: "sanitized",
+});
+
+const createContract = defineSecurityContract({
+  schemaVersion: 1,
+  id: "hr.job-roles.create",
+  version: 1,
+  surface: { method: "POST", path: "/api/hr/roles" },
+  exposure: "authenticated",
+  identity: { kind: "active-user" },
+  authorization: { kind: "permission", action: "hr.job-roles.manage" },
+  resourceScope: { kind: "none" },
+  input: { kind: "schema", schema: "hr.job-roles.create-input", unknownFields: "strip" },
+  effects: { mode: "write", audit: "none" },
+  errorExposure: "sanitized",
+});
+
+export const GET = secureRoute({
+  contract: listContract,
+  enforcer: createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, HrAccess>(listContract, {
+    authenticate: ({ request }) => requireJobRoleAccess(request, "view"),
+    // `assertHrAccess` já confere a permissão do modo pedido.
+    authorize: () => undefined,
+  }),
+}, async () => {
+  const snapshot = await hrDbAdmin.collection("jobRoles").orderBy("name").get();
+  return NextResponse.json({
+    roles: snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...((serializeHrValue(doc.data()) as Record<string, unknown>) ?? {}),
+    })),
+  });
+});
+
+export const POST = secureRoute({
+  contract: createContract,
+  enforcer: createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, HrAccess, CreateRoleInput>(createContract, {
+    authenticate: ({ request }) => requireJobRoleAccess(request, "manage"),
+    parseInput: ({ request }) => parseRouteBody(request, jobRoleCreateSchema, "HR_JOB_ROLE"),
+    authorize: () => undefined,
+  }),
+}, async ({ security: { input } }) => {
+  const payload = normalizeJobRoleInput(input);
+  if (payload.isActive !== false && !payload.defaultProfileId) {
+    rejectJobRole("Todo cargo ativo deve possuir um perfil de acesso padrão.");
   }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    await assertHrAccess(request, "manage");
-    const payload = normalizeJobRoleInput(
-      jobRoleCreateSchema.parse(await request.json())
-    );
-    if (payload.isActive !== false && !payload.defaultProfileId) {
-      return NextResponse.json(
-        { error: "Todo cargo ativo deve possuir um perfil de acesso padrão." },
-        { status: 400 }
-      );
-    }
-    if (payload.defaultProfileId) {
-      const profile = await dbAdmin.collection("profiles").doc(payload.defaultProfileId).get();
-      if (!profile.exists) {
-        return NextResponse.json({ error: "Perfil de acesso não encontrado." }, { status: 400 });
-      }
-    }
-    const scoringBlock = getRecruitmentScoringBlockMessage(
-      applyRecruitmentScoring(payload.formQuestions ?? [], "role_100").snapshot
-    );
-    if (scoringBlock) {
-      return NextResponse.json({ error: scoringBlock }, { status: 400 });
-    }
-
-    const now = new Date().toISOString();
-    const data = stripUndefined({
-      ...payload,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    const ref = await hrDbAdmin.collection("jobRoles").add(data);
-    await reconcileExecutiveJobRoleHierarchy();
-    const saved = await ref.get();
-
-    return NextResponse.json(
-      {
-        role: {
-          id: saved.id,
-          ...((serializeHrValue(saved.data() ?? data) as Record<string, unknown>) ??
-            {}),
-        },
-      },
-      { status: 201 }
-    );
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Erro ao criar cargo.",
-      },
-      { status: 400 }
-    );
+  if (payload.defaultProfileId) {
+    const profile = await dbAdmin.collection("profiles").doc(payload.defaultProfileId).get();
+    if (!profile.exists) rejectJobRole("Perfil de acesso não encontrado.");
   }
-}
+  const scoringBlock = getRecruitmentScoringBlockMessage(
+    applyRecruitmentScoring(payload.formQuestions ?? [], "role_100").snapshot
+  );
+  if (scoringBlock) rejectJobRole(scoringBlock);
+
+  const now = new Date().toISOString();
+  const data = stripUndefined({
+    ...payload,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const ref = await hrDbAdmin.collection("jobRoles").add(data);
+  await reconcileExecutiveJobRoleHierarchy();
+  const saved = await ref.get();
+
+  return NextResponse.json(
+    {
+      role: {
+        id: saved.id,
+        ...((serializeHrValue(saved.data() ?? data) as Record<string, unknown>) ??
+          {}),
+      },
+    },
+    { status: 201 }
+  );
+});

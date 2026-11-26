@@ -1,3 +1,4 @@
+import { admissionDocumentError } from "./admission-document-error";
 export type AdmissionClosingComponent = {
   title: string;
   startPage?: number | null;
@@ -7,7 +8,7 @@ export type AdmissionClosingComponent = {
 export function admissionClosingComponentsSummary(
   components: readonly AdmissionClosingComponent[],
 ) {
-  if (!components.length) throw new Error("O termo de encerramento exige ao menos um componente.");
+  if (!components.length) throw admissionDocumentError("O termo de encerramento exige ao menos um componente.");
   return components.map((component, index) => {
     const pages = component.startPage && component.endPage
       ? component.startPage === component.endPage

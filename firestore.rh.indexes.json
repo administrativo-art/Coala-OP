@@ -402,9 +402,15 @@
     ] },
     { "collectionGroup": "ptrp_markingClassifications", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "employeeId", "order": "ASCENDING" }, { "fieldPath": "workDate", "order": "ASCENDING" }
-    ] }
+    ] },
+    {"collectionGroup": "repP_pilotMarkings","queryScope": "COLLECTION","fields": [{"fieldPath": "workspaceId","order": "ASCENDING"},{"fieldPath": "employeeId","order": "ASCENDING"},{"fieldPath": "__name__","order": "ASCENDING"}]}
   ],
   "fieldOverrides": [
+    {"collectionGroup":"documentStorageScopes","fieldPath":"subjectKeys","indexes":[{"arrayConfig":"CONTAINS","queryScope":"COLLECTION"},{"arrayConfig":"CONTAINS","queryScope":"COLLECTION_GROUP"}]},
+    {"collectionGroup":"documentFiles","fieldPath":"subjectKeys","indexes":[{"arrayConfig":"CONTAINS","queryScope":"COLLECTION"},{"arrayConfig":"CONTAINS","queryScope":"COLLECTION_GROUP"}]},
+    {"collectionGroup":"generatedDocuments","fieldPath":"generatedBy","indexes":[{"order":"ASCENDING","queryScope":"COLLECTION"},{"order":"DESCENDING","queryScope":"COLLECTION"},{"order":"ASCENDING","queryScope":"COLLECTION_GROUP"}]},
+    {"collectionGroup":"generatedDocuments","fieldPath":"kind","indexes":[{"order":"ASCENDING","queryScope":"COLLECTION"},{"order":"DESCENDING","queryScope":"COLLECTION"},{"order":"ASCENDING","queryScope":"COLLECTION_GROUP"}]},
+    {"collectionGroup":"audit","fieldPath":"actorKeys","indexes":[{"arrayConfig":"CONTAINS","queryScope":"COLLECTION"},{"arrayConfig":"CONTAINS","queryScope":"COLLECTION_GROUP"}]},
     {"collectionGroup":"repP_locationEvidence","fieldPath":"expiresAt","ttl":true,"indexes":[]},
     { "collectionGroup": "dp_journeyLocationEvents", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },
     { "collectionGroup": "dp_journeyLocationSessions", "fieldPath": "expiresAt", "ttl": true, "indexes": [] },

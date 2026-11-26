@@ -39,3 +39,8 @@ Cargo/função/perfil padrão e limites de propagação estão em [organograma](
 ## Evidências da etapa 2
 
 A [verificação por grupo](../flow-verification.md) aponta testes disponíveis e lacunas na main. Execuções do worktree de correções não certificam esta base; funções ou regras isoladas não certificam o percurso completo.
+
+
+### Liberação de tolerâncias e intrajornada
+
+A configuração pode ser preparada em rascunho. Enquanto `DP_TIME_POLICY_RULES_ENABLED` não estiver explicitamente liberado no servidor, publicar uma política com tolerâncias ou intrajornada retorna `DP_TIME_POLICY_RULES_PENDING`. A prévia e a apuração também ignoram esses campos de políticas já publicadas/arquivadas. Categorias e banco de horas anteriores continuam operacionais. A liberação exige encerrar os requisitos do plano de política de hora extra e autorização específica; o valor padrão é desligado e não há migração automática de políticas ou apurações. Resultados já congelados mantêm a versão e o conteúdo gravados.

@@ -1,3 +1,4 @@
+import { paymentRequestError } from "./business-error";
 export type SalaryPaymentInput = {
   sourceId: string;
   expenseId?: string;
@@ -34,32 +35,32 @@ export function assertSalaryPaymentTarget(
   workspaceId = "coala",
 ) {
   if (!input.expenseId || input.sourceId !== input.expenseId) {
-    throw new Error("O salário deve usar a própria despesa como origem.");
+    throw paymentRequestError("O salário deve usar a própria despesa como origem.");
   }
   if (input.beneficiaryReference.sourceType !== "employee") {
-    throw new Error("O favorecido do salário deve ser um colaborador.");
+    throw paymentRequestError("O favorecido do salário deve ser um colaborador.");
   }
   if (!input.scheduledFor) {
-    throw new Error("Informe a data programada do salário.");
+    throw paymentRequestError("Informe a data programada do salário.");
   }
   if (!expense || expense.workspaceId !== workspaceId) {
-    throw new Error("A despesa salarial não foi encontrada.");
+    throw paymentRequestError("A despesa salarial não foi encontrada.");
   }
   if (expense.provisionType !== "actual" || expense.payrollEarningType !== "salary") {
-    throw new Error("A despesa informada não é um salário efetivo.");
+    throw paymentRequestError("A despesa informada não é um salário efetivo.");
   }
   if (expense.status !== "pending") {
-    throw new Error("A despesa salarial não está pendente para pagamento.");
+    throw paymentRequestError("A despesa salarial não está pendente para pagamento.");
   }
   if (!Number.isSafeInteger(cents(expense.totalValue))
     || cents(expense.totalValue) !== cents(input.amount)) {
-    throw new Error("O valor do Pix diverge da despesa salarial.");
+    throw paymentRequestError("O valor do Pix diverge da despesa salarial.");
   }
   if (String(expense.description ?? "").trim() !== input.description.trim()) {
-    throw new Error("A descrição do Pix diverge da despesa salarial.");
+    throw paymentRequestError("A descrição do Pix diverge da despesa salarial.");
   }
   if (!employee || employee.id !== input.beneficiaryReference.sourceId) {
-    throw new Error("O cadastro funcional do favorecido não foi encontrado.");
+    throw paymentRequestError("O cadastro funcional do favorecido não foi encontrado.");
   }
   const expenseEmployeeId = String(expense.employeeId ?? "").trim();
   const employeeLinks = new Set([
@@ -68,6 +69,6 @@ export function assertSalaryPaymentTarget(
     String(employee.sourceUserId ?? "").trim(),
   ].filter(Boolean));
   if (!expenseEmployeeId || !employeeLinks.has(expenseEmployeeId)) {
-    throw new Error("O favorecido não corresponde ao colaborador da despesa salarial.");
+    throw paymentRequestError("O favorecido não corresponde ao colaborador da despesa salarial.");
   }
 }

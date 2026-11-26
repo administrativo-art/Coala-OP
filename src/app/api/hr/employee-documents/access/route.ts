@@ -1,3 +1,4 @@
+import { admissionRecordVisibility } from "@/lib/hr/admission-archive-lifecycle.server";
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
@@ -44,7 +45,7 @@ export const POST = secureRoute({ contract, enforcer }, async ({ security }) => 
     const { id, action } = security.input;
     const ref = hrDbAdmin.collection("employeeDocuments").doc(String(id ?? ""));
     const snap = await ref.get();
-    if (!snap.exists || snap.get("deletedAt")) return NextResponse.json({ error: "Documento não encontrado." }, { status: 404 });
+    if (!snap.exists || snap.get("deletedAt") || !await admissionRecordVisibility()(snap.data() ?? {})) return NextResponse.json({ error: "Documento não encontrado." }, { status: 404 });
     await assertEmployeeUnitAccess(access, String(snap.get("employeeId") ?? "")).catch(() => {
       throw new AppError({ code: "EMPLOYEE_DOCUMENT_UNIT_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Documento indisponível para seu acesso." });
     });

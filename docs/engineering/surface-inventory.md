@@ -1,8 +1,8 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **592 rotas de API** e **24 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **597 rotas de API** e **24 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
-Inclui **68 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
+Inclui **72 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
 ## Páginas fora do dashboard
 
@@ -100,6 +100,9 @@ Inclui **68 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/companies/document-signatories` | GET | [src/app/api/companies/document-signatories/route.ts](../../src/app/api/companies/document-signatories/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/dashboard/layouts` | GET, PUT, PATCH, DELETE | [src/app/api/dashboard/layouts/route.ts](../../src/app/api/dashboard/layouts/route.ts) | [platform-home](flows/platform-home.md) |
 | `/api/dev/transport-voucher-templates/[kind]` | GET | [src/app/api/dev/transport-voucher-templates/[kind]/route.ts](../../src/app/api/dev/transport-voucher-templates/%5Bkind%5D/route.ts) | [collaborator-requests](flows/collaborator-requests.md) |
+| `/api/documents/archive/generated` | GET | [src/app/api/documents/archive/generated/route.ts](../../src/app/api/documents/archive/generated/route.ts) | [document-central](flows/document-central.md) |
+| `/api/documents/archive/sources/[source]` | GET | [src/app/api/documents/archive/sources/[source]/route.ts](../../src/app/api/documents/archive/sources/%5Bsource%5D/route.ts) | [document-central](flows/document-central.md) |
+| `/api/documents/archive/sources/[source]/file` | GET | [src/app/api/documents/archive/sources/[source]/file/route.ts](../../src/app/api/documents/archive/sources/%5Bsource%5D/file/route.ts) | [document-central](flows/document-central.md) |
 | `/api/documents/collective-agreements` | GET, POST | [src/app/api/documents/collective-agreements/route.ts](../../src/app/api/documents/collective-agreements/route.ts) | [company-documents](flows/company-documents.md) |
 | `/api/documents/collective-agreements/[id]` | PATCH | [src/app/api/documents/collective-agreements/[id]/route.ts](../../src/app/api/documents/collective-agreements/%5Bid%5D/route.ts) | [company-documents](flows/company-documents.md) |
 | `/api/documents/company` | GET, POST, DELETE | [src/app/api/documents/company/route.ts](../../src/app/api/documents/company/route.ts) | [company-documents](flows/company-documents.md) |
@@ -126,6 +129,7 @@ Inclui **68 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/documents/generated/[id]` | POST, PATCH, DELETE | [src/app/api/documents/generated/[id]/route.ts](../../src/app/api/documents/generated/%5Bid%5D/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/generated/[id]/audit` | GET | [src/app/api/documents/generated/[id]/audit/route.ts](../../src/app/api/documents/generated/%5Bid%5D/audit/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/generated/[id]/file` | GET | [src/app/api/documents/generated/[id]/file/route.ts](../../src/app/api/documents/generated/%5Bid%5D/file/route.ts) | [document-generation](flows/document-generation.md) |
+| `/api/documents/generated/[id]/payment` | POST, GET | [src/app/api/documents/generated/[id]/payment/route.ts](../../src/app/api/documents/generated/%5Bid%5D/payment/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/generated/[id]/signature` | GET, POST | [src/app/api/documents/generated/[id]/signature/route.ts](../../src/app/api/documents/generated/%5Bid%5D/signature/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/generator/parties` | GET | [src/app/api/documents/generator/parties/route.ts](../../src/app/api/documents/generator/parties/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/generator/templates` | GET | [src/app/api/documents/generator/templates/route.ts](../../src/app/api/documents/generator/templates/route.ts) | [document-generation](flows/document-generation.md) |
@@ -501,6 +505,7 @@ Inclui **68 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/jobs/dp/time-recording/review-requests` | POST | [src/app/api/jobs/dp/time-recording/review-requests/route.ts](../../src/app/api/jobs/dp/time-recording/review-requests/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/jobs/financial-budgets/generate` | POST | [src/app/api/jobs/financial-budgets/generate/route.ts](../../src/app/api/jobs/financial-budgets/generate/route.ts) | [financial-budgets](flows/financial-budgets.md) |
 | `/api/jobs/financial-inbox/maintenance` | POST | [src/app/api/jobs/financial-inbox/maintenance/route.ts](../../src/app/api/jobs/financial-inbox/maintenance/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
+| `/api/jobs/hr/onboarding-document-discard` | POST | [src/app/api/jobs/hr/onboarding-document-discard/route.ts](../../src/app/api/jobs/hr/onboarding-document-discard/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/jobs/inter/cobrancas/reconcile` | POST | [src/app/api/jobs/inter/cobrancas/reconcile/route.ts](../../src/app/api/jobs/inter/cobrancas/reconcile/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/jobs/inter/reconcile` | POST | [src/app/api/jobs/inter/reconcile/route.ts](../../src/app/api/jobs/inter/reconcile/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/jobs/inter/statements/sync` | POST | [src/app/api/jobs/inter/statements/sync/route.ts](../../src/app/api/jobs/inter/statements/sync/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
@@ -655,6 +660,8 @@ Inclui **68 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `cleanupExpiredEmployeeDocumentBatches` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `createUser` | `onCall` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `deleteUser` | `onCall` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
+| `discardLateOnboardingEmployeeDocument` | `onDocumentWritten` | [functions/src/onboarding-document-discard.ts](../../functions/src/onboarding-document-discard.ts) | [runtime-surfaces](runtime-surfaces.md) |
+| `discardLateOnboardingObject` | `onObjectFinalized` | [functions/src/onboarding-document-discard.ts](../../functions/src/onboarding-document-discard.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `expireQuotations` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `financialBudgetGeneration` | `onSchedule` | [functions/src/financial-budget-jobs.ts](../../functions/src/financial-budget-jobs.ts) | [financial-budgets](flows/financial-budgets.md) |
 | `financialInboxMaintenance` | `onSchedule` | [functions/src/financial-inbox-jobs.ts](../../functions/src/financial-inbox-jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |
@@ -675,6 +682,7 @@ Inclui **68 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `onScheduleGoalEligibilityChange` | `onDocumentWritten` | [functions/src/schedule-goals.ts](../../functions/src/schedule-goals.ts) | [goals](flows/goals.md) |
 | `onTermination` | `onDocumentWritten` | [functions/src/rh/termination.ts](../../functions/src/rh/termination.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `onUserProfileChange` | `onDocumentWritten` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
+| `onboardingDocumentDiscardRequested` | `onDocumentWritten` | [functions/src/onboarding-document-discard.ts](../../functions/src/onboarding-document-discard.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `operationalFollowUpJob` | `onSchedule` | [functions/src/system-notice-jobs.ts](../../functions/src/system-notice-jobs.ts) | [people-access](flows/people-access.md) |
 | `reactivateUser` | `onCall` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `recalculateMinimumStock` | `onSchedule` | [functions/src/stock-min-recalc-schedule.ts](../../functions/src/stock-min-recalc-schedule.ts) | [runtime-surfaces](runtime-surfaces.md) |
@@ -682,6 +690,7 @@ Inclui **68 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `reconcilePdvSalesHistory` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `repPAvailabilityAlertRelay` | `onMessagePublished` | [functions/src/rep-p-availability.ts](../../functions/src/rep-p-availability.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `repPReceiptRetryJob` | `onSchedule` | [functions/src/system-notice-jobs.ts](../../functions/src/system-notice-jobs.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `retryOnboardingDocumentDiscard` | `onSchedule` | [functions/src/onboarding-document-discard.ts](../../functions/src/onboarding-document-discard.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `reviewFieldChangeRequest` | `onCall` | [functions/src/rh/field-update.ts](../../functions/src/rh/field-update.ts) | [dp-configuration](flows/dp-configuration.md) |
 | `scheduledDateAlerts` | `onSchedule` | [functions/src/rh/automations.ts](../../functions/src/rh/automations.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `scheduledProfileCompletion` | `onSchedule` | [functions/src/rh/automations.ts](../../functions/src/rh/automations.ts) | [runtime-surfaces](runtime-surfaces.md) |

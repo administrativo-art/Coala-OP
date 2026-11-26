@@ -5,6 +5,7 @@ import { FieldPath, type Firestore, type Transaction } from 'firebase-admin/fire
 
 import { readRepPMonthOfPerson } from '@/features/dp/rep-p/own-month.server';
 import { policyTargetOf } from '@/features/dp/time-config/policy-tolerance.server';
+import { activeOvertimePolicy } from '@/features/dp/time-config/rollout.server';
 import { readRepPMarkingsForMirror, readRepPPilotMarkingsForBank } from '@/features/dp/rep-p/service.server';
 import type { AbsenceRequestRecord } from '@/features/dp/absences/requests/workflow-types';
 import { competenceRange, sha256, type ClosureAdjustment, type ClosurePerson } from '@/features/dp/time-adjustments/closure-core';
@@ -23,7 +24,7 @@ import { canAccessUserByUnit, resolveUnitAccess } from '@/lib/unit-access';
 import type { DPAbsenceType, DPOvertimePolicy } from '@/types';
 
 import {
-  applyWeeklyOvertimeLimits, buildStatement, competencesBetween, computeBankDay, monthTotals, overnightWorkDate, TIME_BANK_ALGORITHM_VERSION,
+  applyWeeklyOvertimeLimits, buildStatement, competencesBetween, computeBankDay, monthTotals, overnightWorkDate, TIME_BANK_ALGORITHM_VERSION, isReadableTimeBankAlgorithmVersion,
   type BankAbsence, type BankDay, type BankManualMovement, type BankMonthRecord, type BankPolicy, type BankSettlement, type BankShift,
 } from './core';
 import { payrollReviewReason, type PayrollPersonStatus, type PayrollReadiness } from './payroll-readiness';
@@ -91,7 +92,7 @@ async function movementsFor(deps: Dependencies, workspaceId: string, uid: string
 async function readBankPolicies(deps: Dependencies) {
   const snapshot = await deps.mainDb.collection(OVERTIME_POLICIES).where('status', 'in', ['published', 'archived']).limit(POLICY_LIMIT + 1).get();
   if (snapshot.size > POLICY_LIMIT) throw fail('PTRP_BANK_POLICY_LIMIT', 'Há políticas de hora extra demais para resolver o banco com segurança.', 'CONFLICT');
-  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as DPOvertimePolicy);
+  return snapshot.docs.map((doc) => activeOvertimePolicy({ id: doc.id, ...doc.data() } as DPOvertimePolicy));
 }
 
 async function policiesAndTarget(deps: Dependencies, uid: string, published?: DPOvertimePolicy[]) {
@@ -238,7 +239,7 @@ async function bankMonthFor(deps: Dependencies, workspaceId: string, competence:
   if (closure.version !== version) throw fail('PTRP_CLOSURE_VERSION_CONFLICT', 'O fechamento mudou desde a sua leitura. Atualize e confira.', 'CONFLICT');
   const existing = saved.data() as BankMonthDocument | undefined;
   if (existing) {
-    if (existing.algorithmVersion !== TIME_BANK_ALGORITHM_VERSION) {
+    if (!isReadableTimeBankAlgorithmVersion(existing.algorithmVersion)) {
       throw fail('PTRP_BANK_ALGORITHM_OUTDATED', 'A apuração foi feita por uma regra anterior. Reabra e feche novamente a competência.', 'CONFLICT');
     }
     return existing;
@@ -342,7 +343,7 @@ export async function readPayrollReadiness(context: ServerUserContext, competenc
           return error ? { uid, status: 'failed', reason: String(error) } : { uid, status: 'missing', reason: 'Ainda sem apuração gravada nesta versão.' };
         }
         const month = doc.data() as BankMonthDocument;
-        if (month.algorithmVersion !== TIME_BANK_ALGORITHM_VERSION || month.closureVersion !== version || month.competence !== competence || month.uid !== uid || !Array.isArray(month.days)) {
+        if (!isReadableTimeBankAlgorithmVersion(month.algorithmVersion) || month.closureVersion !== version || month.competence !== competence || month.uid !== uid || !Array.isArray(month.days)) {
           return { uid, status: 'outdated', reason: 'Apuração incompatível. Reabra e feche a competência para gerar uma nova versão.' };
         }
         const breakDates = group[index].get('breakReviewDates') as string[] | undefined;
@@ -364,7 +365,7 @@ export async function readPayrollReadiness(context: ServerUserContext, competenc
           const priorRef = prior.ref.collection('versions').doc(String(priorVersion));
           const [bank, member] = await tx.getAll(bankMonths(priorRef).doc(uid), frozenPeople(priorRef).doc(uid));
           previous = bank.data() as BankMonthDocument | undefined;
-          if ((member.exists && !previous) || (previous && (previous.algorithmVersion !== TIME_BANK_ALGORITHM_VERSION || previous.closureVersion !== priorVersion || previous.competence !== priorMonth || !Array.isArray(previous.days)))) {
+          if ((member.exists && !previous) || (previous && (!isReadableTimeBankAlgorithmVersion(previous.algorithmVersion) || previous.closureVersion !== priorVersion || previous.competence !== priorMonth || !Array.isArray(previous.days)))) {
             return { uid, status: 'review', reason: 'Confira a apuração do mês anterior para calcular o limite semanal.' };
           }
         }
@@ -483,7 +484,7 @@ async function statementFor(deps: Dependencies, workspaceId: string, uid: string
     return tx ? tx.get(ref) : ref.get();
   }));
   const storedMonths = stored.filter((doc) => doc.exists).map((doc) => doc.data() as BankMonthDocument);
-  if (storedMonths.some((month) => month.algorithmVersion !== TIME_BANK_ALGORITHM_VERSION)) {
+  if (storedMonths.some((month) => !isReadableTimeBankAlgorithmVersion(month.algorithmVersion))) {
     throw fail('PTRP_BANK_ALGORITHM_OUTDATED', 'Há apuração feita por uma regra anterior. Reabra e feche novamente a competência.', 'CONFLICT');
   }
   const months: BankMonthRecord[] = storedMonths;

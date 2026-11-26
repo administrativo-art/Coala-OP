@@ -37,7 +37,7 @@ export function ReviewRequestSection({ day, today, review, readOnly, onMarkRevie
     if (day.date >= today || !onRequestReview) return null;
     if (review?.status === "open") {
       return (
-        <p className="flex items-start gap-2 rounded-ds-md border border-ds-info-border bg-ds-info-bg px-3 py-2.5 text-xs text-ds-ink-2">
+        <p className="flex items-start gap-2 rounded-ds-md border border-ds-info/20 bg-ds-info-bg px-3 py-2.5 text-xs text-ds-ink-2">
           <ClipboardCheck className="mt-0.5 h-4 w-4 shrink-0 text-ds-info" aria-hidden />
           Revisão pedida em {when(review.createdAt)}{review.reasonLabel ? ` · ${review.reasonLabel}` : " pela rotina diária"}.
         </p>
@@ -71,7 +71,7 @@ export function ReviewRequestSection({ day, today, review, readOnly, onMarkRevie
   if (review.status !== "open") return null;
   const allowed = canMarkReviewed(day);
   return (
-    <div className="space-y-2 rounded-ds-md border border-ds-info-border bg-ds-info-bg px-3 py-2.5">
+    <div className="space-y-2 rounded-ds-md border border-ds-info/20 bg-ds-info-bg px-3 py-2.5">
       <p className="flex items-center gap-2 text-sm font-bold text-ds-ink"><ClipboardCheck className="h-4 w-4 text-ds-info" aria-hidden /> Revise este dia</p>
       <p className="text-xs text-ds-ink-2">{review.reasonLabel ? `O DP pediu: ${review.reasonLabel.toLowerCase()}.` : "A rotina diária encontrou um ponto a conferir neste dia."}</p>
       {allowed ? (

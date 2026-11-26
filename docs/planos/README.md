@@ -47,3 +47,5 @@
 - [Visão do caixa — estágios do numerário](plano-visao-caixa-estagios-especie.md)
 
 - [Visão do caixa por fatura de cartão](plano-visao-caixa-faturas-cartao.md).
+
+| [Garantia de pastas documentais](plano-garantia-pastas-documentais.md) | Acervo, gerados, editor e recebidos a classificar |

@@ -3,9 +3,11 @@ import 'server-only';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 
 import { toReviewView, type TimeReviewRequest } from './core';
+import { timeReviewEnabled } from '../time-config/rollout.server';
 
 /** Pedidos de revisão do mês de uma pessoa (até 40), para a tela própria e a conferência. O chamador autoriza. */
 export async function listReviewRequestsOfPerson(workspaceId: string, employeeUid: string, month: string) {
+  if (!timeReviewEnabled()) return [];
   const snapshot = await hrDbAdmin.collection('dp_timeReviewRequests').where('workspaceId', '==', workspaceId)
     .where('employeeUid', '==', employeeUid).where('date', '>=', `${month}-01`).where('date', '<=', `${month}-31`)
     .orderBy('date').limit(40).get();

@@ -81,7 +81,13 @@ const child = spawn(
     "firebase.e2e.json",
     "--only",
     "auth,firestore",
-    process.argv.includes('--person-inventory-partial')
+    process.argv.includes('--point')
+      ? 'npm run test:e2e:playwright -- tests/e2e/hr/time-recording.spec.ts'
+      : process.argv.includes('--archive-folders')
+      ? 'npm run test:e2e:playwright -- tests/e2e/documents/archive.spec.ts --grep "Acervo inclui gerados"'
+      : process.argv.includes('--document-receipt')
+      ? 'npm run test:e2e:playwright -- tests/e2e/documents/receipt-payment.spec.ts'
+      : process.argv.includes('--person-inventory-partial')
       ? 'npm run test:e2e:playwright -- tests/e2e/settings/person-inventory.spec.ts --grep "inventário explicita"'
       : process.argv.includes('--purchasing')
       ? 'npm run test:e2e:playwright -- tests/e2e/purchasing/orders.spec.ts'

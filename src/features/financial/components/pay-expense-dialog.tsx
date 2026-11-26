@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorMessage } from '@/lib/api-error-message';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@/lib/zod-resolver";
@@ -357,7 +358,7 @@ export function PayExpenseDialog({
         }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || 'Falha ao criar solicitação bancária.');
+      if (!response.ok) throw new Error(apiErrorMessage(payload, 'Falha ao criar solicitação bancária.'));
       toast({ title: 'Solicitação criada para autorização do Financeiro.', description: 'A despesa permanece pendente até a confirmação do Banco Inter.' });
       onOpenChange(false); onSuccess?.();
     } catch (error) {
