@@ -330,3 +330,22 @@ test('pagamento do recibo: rota inicializa, rejeita campos extras e bloqueia env
   assert.equal(unavailable.status, 409);
   assert.equal((await payload(unavailable)).error.code, 'DOCUMENT_RECEIPT_PAYMENT_INTER_UNAVAILABLE');
 });
+
+
+test('payment creation preserves missing Pix and salary rule messages without a bank call', async () => {
+  const employee = hrDbAdmin.collection('employees').doc('routes-no-pix-beneficiary');
+  const { financialDbAdmin } = await import('../../src/lib/firebase-financial-admin.ts');
+  const expense = financialDbAdmin.collection('expenses').doc('routes-salary-expense');
+  await employee.set({ status: 'active' });
+  await employee.collection('field_values').doc('employee.cpf').set({ value_text: '12345678909' });
+  await expense.set({ workspaceId: 'coala', status: 'pending', provisionType: 'actual', payrollEarningType: 'salary', employeeId: employee.id, totalValue: 10, description: 'Synthetic salary' });
+  const input = { sourceType: 'salary', sourceId: expense.id, expenseId: expense.id, beneficiaryReference: { sourceType: 'employee', sourceId: employee.id }, amount: 10, description: 'Synthetic salary', scheduledFor: '2099-01-01' };
+  try {
+    const noPix = await payments.POST(request('POST', '/api/financial/payment-requests', admin, input), none);
+    assert.equal(noPix.status, 400);
+    assert.match((await payload(noPix)).error.message, /Pix/);
+    const wrongValue = await payments.POST(request('POST', '/api/financial/payment-requests', admin, { ...input, amount: 12 }), none);
+    assert.equal(wrongValue.status, 400);
+    assert.match((await payload(wrongValue)).error.message, /valor/i);
+  } finally { await hrDbAdmin.recursiveDelete(employee); await expense.delete(); }
+});

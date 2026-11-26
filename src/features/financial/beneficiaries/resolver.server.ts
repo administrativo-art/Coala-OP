@@ -1,3 +1,4 @@
+import { paymentRequestError } from "../payment-requests/business-error";
 import { createHash } from "node:crypto";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
@@ -35,15 +36,15 @@ async function resolveEmployee(sourceId: string): Promise<ResolvedPaymentBenefic
     employeeRef.collection("field_values").doc("employee.pix_key").get(),
     employeeRef.collection("field_values").doc("employee.pix_key_type").get(),
   ]);
-  if (!employee.exists) throw new Error("Colaborador favorecido não encontrado.");
-  if (employee.get("status") !== "active") throw new Error("O colaborador favorecido está inativo.");
+  if (!employee.exists) throw paymentRequestError("Colaborador favorecido não encontrado.");
+  if (employee.get("status") !== "active") throw paymentRequestError("O colaborador favorecido está inativo.");
   const document = normalizeBrazilianDocument(fieldText(cpf.data()));
   const pixKey = fieldText(pix.data());
-  if (document.length !== 11) throw new Error("O CPF do colaborador está incompleto.");
-  if (!pixKey) throw new Error("O colaborador não possui chave Pix cadastrada.");
+  if (document.length !== 11) throw paymentRequestError("O CPF do colaborador está incompleto.");
+  if (!pixKey) throw paymentRequestError("O colaborador não possui chave Pix cadastrada.");
   const pixKeyType = resolvePixKeyType(pixKey, fieldText(pixType.data()));
   if (!pixDocumentKeyMatchesHolder({ pixKey, pixKeyType, holderDocument: document })) {
-    throw new Error("A chave Pix documental não pertence ao CPF do colaborador.");
+    throw paymentRequestError("A chave Pix documental não pertence ao CPF do colaborador.");
   }
   const sourceUpdatedAt = [
     toIsoString(pix.get("updated_at")),
@@ -68,9 +69,9 @@ async function resolveEntity(sourceId: string, requireValidated = false): Promis
     dbAdmin.collection("entities").doc(sourceId).get(),
     financialDbAdmin.collection("supplierPaymentProfiles").doc(sourceId).get(),
   ]);
-  if (!entity.exists) throw new Error("Pessoa ou empresa favorecida não encontrada.");
-  if (entity.get("status") === "inactive") throw new Error("A pessoa ou empresa favorecida está inativa.");
-  if (!profile.exists) throw new Error("A pessoa ou empresa não possui chave Pix cadastrada.");
+  if (!entity.exists) throw paymentRequestError("Pessoa ou empresa favorecida não encontrada.");
+  if (entity.get("status") === "inactive") throw paymentRequestError("A pessoa ou empresa favorecida está inativa.");
+  if (!profile.exists) throw paymentRequestError("A pessoa ou empresa não possui chave Pix cadastrada.");
   const entityDocument = normalizeBrazilianDocument(entity.get("document") ?? entity.get("cnpj"));
   const isPerson = entityDocument.length === 11;
   const isCompany = entityDocument.length === 14;
@@ -83,19 +84,19 @@ async function resolveEntity(sourceId: string, requireValidated = false): Promis
     || !matchesPersonWorkspace(profile.data(), WORKSPACE_ID, true)
     || (isPerson ? profile.get("entityId") !== sourceId : profile.get("entityId") != null && profile.get("entityId") !== sourceId)
     || normalizeBrazilianDocument(profile.get("holderDocument")) !== entityDocument)) {
-    throw new Error("O perfil de pagamento precisa estar ativo e validado para o CPF/CNPJ cadastrado.");
+    throw paymentRequestError("O perfil de pagamento precisa estar ativo e validado para o CPF/CNPJ cadastrado.");
   }
   const paymentData = decryptPaymentDestination(String(profile.get("encryptedPaymentData") ?? ""));
   if (!paymentData.pixKey) {
-    throw new Error("A pessoa ou empresa não possui chave Pix cadastrada.");
+    throw paymentRequestError("A pessoa ou empresa não possui chave Pix cadastrada.");
   }
   const pixKeyType = profile.get("pixKeyType") ?? inferPixKeyType(paymentData.pixKey);
   if (requireValidated && (!profile.get("pixKeyType")
     || !normalizeValidatedPixKey(paymentData.pixKey, pixKeyType, entityDocument))) {
-    throw new Error("O tipo ou o valor da chave Pix validada é incompatível com o favorecido.");
+    throw paymentRequestError("O tipo ou o valor da chave Pix validada é incompatível com o favorecido.");
   }
   if (!pixDocumentKeyMatchesHolder({ pixKey: paymentData.pixKey, pixKeyType, holderDocument: entityDocument })) {
-    throw new Error("A chave Pix documental não pertence ao CPF/CNPJ do favorecido.");
+    throw paymentRequestError("A chave Pix documental não pertence ao CPF/CNPJ do favorecido.");
   }
   return {
     sourceType: "entity",
