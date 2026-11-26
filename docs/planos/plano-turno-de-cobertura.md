@@ -84,3 +84,22 @@ Assim, 6h trabalhadas num turno de 6h aparecem como 0:00 na tela do dia e −2h 
 4. **Regra de cobertura no contrato central:** limite de extensão, faixa de intervalo, novas ocorrências e texto "pode estender até HH:MM". Testes com turno de 6h e 8h, e com intervalo de 15 min, de 1h e de 1h acima da tolerância.
 5. **Falta automática sem desconto automático (decisão de 25/11/2026):** a falta continua registrada 24h depois do fim do turno, mas entra no banco e no fechamento como "a decidir pelo DP" (hoje vira `unexcused_absence` com desconto em `time-bank/service.server.ts` e `closure.server.ts`). O DP marca, por falta, se desconta ou não; até lá, o dia fica pendente no fechamento. Revisão de Doc Brown sobre o AEJ.
 6. **Documentação:** `docs/engineering/flows/dp-time-recording.md`, `docs/design/app.md` e verificadores exigidos por AGENTS.md.
+
+## 6. Estado da execução e como continuar (25/11/2026)
+
+- **Implementado e enviado (PR #988, não mesclado):** etapas 2 a 6 deste plano e do [plano de revisão antecipada](plano-revisao-antecipada-ponto.md): contrato central do dia, Política de jornada de cobertura, regra do dia v2, revisão antecipada e Coala Go. Cada etapa passou por Doc Brown antes do commit.
+- **Bloqueio:** o `quality` de todo PR falha em seis exceções de contrato vencidas em 24/11 (`hr/onboarding/public/[token]`, `client/bootstrap`, `financial/payment-requests`, `financial/payment-requests/[id]/submit`, `hr/roles`, `hr/roles/[roleId]`). A sétima (assinatura da admissão) foi migrada no PR #989. Decisão pendente: migrar ou prorrogar com prazo.
+- **Ordem de publicação** (cada passo com autorização):
+  1. #989 e depois #988 na `main`, e promoção para `production`;
+  2. nova versão da jornada com a política marcando "Líder de quiosque";
+  3. ciclo mensal `forfeit` na política (escrita em produção);
+  4. APK do Coala Go;
+  5. regravar os turnos de dezembro (escrita em produção, só depois do APK);
+  6. `timeReviewDailyJob`, só depois do advogado.
+- **Não implementado:**
+  - falta automática sem desconto automático (seção 3, item 5 das decisões de 25/11);
+  - minutos e evento de folha do intervalo suprimido (P2);
+  - linha de absorção no extrato do `forfeit`;
+  - chip por dia do app vindo do servidor;
+  - push direto para o Ponto.
+- Guia completo e registro do chamado ficam fora do repositório: `.ai-work-archive/development-technology/2026-11-25-ponto-cobertura-revisao/` (pasta-mãe dos worktrees).
