@@ -1,5 +1,9 @@
 # Compras: cotação, pedido, recebimento e estoque
 
+## População assistida e padrões recorrentes
+
+O agente consulta [Compras recorrentes](../../../instrucoes/compras-recorrentes/README.md) antes de pedir dados ou transcrever uma compra. O registro por CNPJ reúne vínculos verificados, embalagens e decisões de classificação/centro/destino aprovadas dentro de um escopo explícito. Novos padrões atualizam a mesma fonte no Git; identidades ambíguas ficam separadas. O [procedimento de população](../../../instrucoes/populacao-compras-codex.md) mantém a criação como `created`; confirmação, despesa e envio bancário dependem do pedido correspondente e dos serviços canônicos. O registro é instrução operacional de agentes, sem nova coleção, permissão ou automação implantada no aplicativo.
+
 **Mobile atual (2026-10-11):** somente [Coala Go Kotlin](../../../apps/coala-one-android/README.md), package `coalaone.go`, Android8+. Usuário confirmou ausência de usuários e autorizou retirar Expo/instalador antigo. Download preparado em `/app/CoalaGo.apk`, versão0.2.0/code4, página `/app` com botão "Baixar Coala Go". Trechos históricos que citam Expo/coala-notas descrevem a implementação retirada; IDs de negócio `coala-notas-android` permanecem por compatibilidade, sem migração de dados. Homologação física/integrada e publicação continuam separadas; ver [matriz](../coala-go-parity.md).
 
 ## Compra local pelo aplicativo — extensão em desenvolvimento (2026-10-09)

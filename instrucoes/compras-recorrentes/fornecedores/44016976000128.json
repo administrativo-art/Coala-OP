@@ -1,0 +1,566 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-11-26",
+  "scope": {
+    "recipientDocuments": [
+      "14276603000397",
+      "14276603000125"
+    ],
+    "currency": "BRL",
+    "purpose": "Compras para estoque destinadas à Matriz. Não cobre outras filiais/finalidades."
+  },
+  "defaults": {
+    "status": "approved",
+    "requiresFirstUseConfirmation": false,
+    "destinationKioskId": "matriz",
+    "destinationKioskName": "Centro de distribuição - Matriz",
+    "resultCenterId": "KNKNWZ7tdhIxnrlStRum",
+    "resultCenterName": "Centro administrativo - Renascença",
+    "approval": {
+      "by": "usuário nesta conversa",
+      "at": "2026-11-26T21:23:27.475861+00:00",
+      "decision": "Adotar esses padrões nas próximas compras equivalentes",
+      "scope": "Compras equivalentes para a Matriz, no escopo de destinatários e finalidade deste registro; alimentos do Cantinho em Insumos composição, pazinhas/copos/tampas em Embalagens de venda compradas para estoque; duas identidades ambíguas do Cantinho continuam pendentes."
+    }
+  },
+  "sourceEvidence": {
+    "verifiedAt": "2026-11-26",
+    "basis": "Consulta autenticada filtrada por fornecedor, documentos de origem e produtos por IDs exatos. Evidências detalhadas permanecem no chamado privado. Ausência em consulta limitada não comprova ausência universal."
+  },
+  "supplier": {
+    "document": "44016976000128",
+    "entityId": "1nlWnCjZeNSMHQvZlWkn",
+    "legalName": "Cantinho Distribuidora LTDA",
+    "displayName": "Cantinho Distribuidora",
+    "aliases": [
+      "Cantinho Doce"
+    ],
+    "status": "verified",
+    "aliasEvidence": "Nome alternativo usado pelo usuário e documentado nas compras anteriores do cadastro; conferido em 2026-11-26.",
+    "evidence": "Cadastro empresarial e documentos de origem conferidos em 2026-11-26; evidências detalhadas preservadas no chamado privado."
+  },
+  "items": [
+    {
+      "externalCode": "3497",
+      "invoiceDescription": "NUTELLA 650G FERRERO",
+      "baseItemId": "FU7qNHLXSNYGNhwVdl14",
+      "productId": "uJwW1CrGWHEemL51Ph9g",
+      "brand": "Ferrero",
+      "internalName": "Nutella",
+      "packageSize": 650,
+      "baseUnit": "g",
+      "operationalCategoryId": "insumo",
+      "operationalCategoryName": "Perecíveis",
+      "status": "verified",
+      "matchRequires": [
+        "supplierDocument",
+        "externalCode",
+        "brand",
+        "presentation"
+      ],
+      "purchase": {
+        "unit": "Pote",
+        "purchaseUnitType": "content",
+        "purchaseUnitLabel": "Pote",
+        "quantityMultiplier": 1,
+        "priceDivisor": 1,
+        "logisticMultiple": 1
+      },
+      "accounting": {
+        "accountPlanId": "OofGtZoVn15nmmy2xaI8",
+        "accountPlanName": "Insumos composição",
+        "status": "approved",
+        "approvalRef": "defaults.approval"
+      },
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    },
+    {
+      "externalCode": "5111",
+      "invoiceDescription": "COBERTURA P/SORVETE CHOCOLATE 1,3KG SELECTA",
+      "baseItemId": "OafDTZDh3LiZ4zShC23U",
+      "productId": "RqukGnuzvW8S0M8534wI",
+      "brand": "Selecta",
+      "internalName": "Cobertura de chocolate",
+      "packageSize": 1,
+      "baseUnit": "un",
+      "operationalCategoryId": "insumo",
+      "operationalCategoryName": "Perecíveis",
+      "status": "verified",
+      "matchRequires": [
+        "supplierDocument",
+        "externalCode",
+        "brand",
+        "presentation"
+      ],
+      "purchase": {
+        "unit": "Unidade",
+        "purchaseUnitType": "content",
+        "purchaseUnitLabel": "Unidade",
+        "quantityMultiplier": 1,
+        "priceDivisor": 1,
+        "logisticMultiple": 1
+      },
+      "accounting": {
+        "accountPlanId": "OofGtZoVn15nmmy2xaI8",
+        "accountPlanName": "Insumos composição",
+        "status": "approved",
+        "approvalRef": "defaults.approval"
+      },
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    },
+    {
+      "externalCode": "5112",
+      "invoiceDescription": "COBERTURA P/SORVETE MORANGO 1,3KG SELECTA",
+      "baseItemId": "4xAppciT9KJAmAXmTR5J",
+      "productId": "ZyYo1rev1dqFf9jJReKA",
+      "brand": "Selecta",
+      "internalName": "Cobertura de morango",
+      "packageSize": 1,
+      "baseUnit": "un",
+      "operationalCategoryId": "insumo",
+      "operationalCategoryName": "Perecíveis",
+      "status": "verified",
+      "matchRequires": [
+        "supplierDocument",
+        "externalCode",
+        "brand",
+        "presentation"
+      ],
+      "purchase": {
+        "unit": "Unidade",
+        "purchaseUnitType": "content",
+        "purchaseUnitLabel": "Unidade",
+        "quantityMultiplier": 1,
+        "priceDivisor": 1,
+        "logisticMultiple": 1
+      },
+      "accounting": {
+        "accountPlanId": "OofGtZoVn15nmmy2xaI8",
+        "accountPlanName": "Insumos composição",
+        "status": "approved",
+        "approvalRef": "defaults.approval"
+      },
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    },
+    {
+      "externalCode": "134254",
+      "invoiceDescription": "AMENDOIM TORRADO GRANULADO 1,05KG VABENE",
+      "baseItemId": "xeMEVoUWeKSqgcBkO0NH",
+      "productId": "JCVymoXMhNFNoiACpwfi",
+      "brand": "VaBene",
+      "internalName": "Amendoim torrado granulado",
+      "packageSize": 1050,
+      "baseUnit": "g",
+      "operationalCategoryId": "insumo",
+      "operationalCategoryName": "Perecíveis",
+      "status": "verified",
+      "matchRequires": [
+        "supplierDocument",
+        "externalCode",
+        "brand",
+        "presentation"
+      ],
+      "purchase": {
+        "unit": "Pacote",
+        "purchaseUnitType": "content",
+        "purchaseUnitLabel": "Pacote",
+        "quantityMultiplier": 1,
+        "priceDivisor": 1,
+        "logisticMultiple": 1
+      },
+      "accounting": {
+        "accountPlanId": "OofGtZoVn15nmmy2xaI8",
+        "accountPlanName": "Insumos composição",
+        "status": "approved",
+        "approvalRef": "defaults.approval"
+      },
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    },
+    {
+      "externalCode": "111663",
+      "invoiceDescription": "OVOMALTINE FLOCOS CROCANTES DE 10MM 750G",
+      "baseItemId": "mXKXxjRUh6hah4Fdp7Cx",
+      "productId": "mvPVCagXjzWBhZMLaoNW",
+      "brand": "Ovomaltine",
+      "internalName": "Ovomaltine",
+      "packageSize": 750,
+      "baseUnit": "g",
+      "operationalCategoryId": "insumo",
+      "operationalCategoryName": "Perecíveis",
+      "status": "verified",
+      "matchRequires": [
+        "supplierDocument",
+        "externalCode",
+        "brand",
+        "presentation"
+      ],
+      "purchase": {
+        "unit": "Pacote",
+        "purchaseUnitType": "content",
+        "purchaseUnitLabel": "Pacote",
+        "quantityMultiplier": 1,
+        "priceDivisor": 1,
+        "logisticMultiple": 1
+      },
+      "accounting": {
+        "accountPlanId": "OofGtZoVn15nmmy2xaI8",
+        "accountPlanName": "Insumos composição",
+        "status": "approved",
+        "approvalRef": "defaults.approval"
+      },
+      "observedExternalCodeVariant": {
+        "code": "11663",
+        "status": "requires_exact_presentation_check",
+        "reason": "Novembro usa11663, históricos usam111663. Não assumir equivalência só por diferença de um dígito; conferir descrição, marca e pacote750g. GTIN do histórico também diverge do cadastro; não corrigir globalmente."
+      },
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    },
+    {
+      "externalCode": "22327",
+      "invoiceDescription": "COLORETI MINI 500G JAZAM",
+      "baseItemId": "gGsZKfA9nZOzK0ynYNOp",
+      "productId": "ROl2fhpxMa2wddWreVvg",
+      "brand": "Jazam",
+      "internalName": "Coloreti",
+      "packageSize": 500,
+      "baseUnit": "g",
+      "operationalCategoryId": "insumo",
+      "operationalCategoryName": "Perecíveis",
+      "status": "verified",
+      "matchRequires": [
+        "supplierDocument",
+        "externalCode",
+        "brand",
+        "presentation"
+      ],
+      "purchase": {
+        "unit": "Pacote",
+        "purchaseUnitType": "content",
+        "purchaseUnitLabel": "Pacote",
+        "quantityMultiplier": 1,
+        "priceDivisor": 1,
+        "logisticMultiple": 1
+      },
+      "accounting": {
+        "accountPlanId": "OofGtZoVn15nmmy2xaI8",
+        "accountPlanName": "Insumos composição",
+        "status": "approved",
+        "approvalRef": "defaults.approval"
+      },
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    },
+    {
+      "externalCode": "1145932",
+      "invoiceDescription": "PAZINHA SORVETE COLORIDA C/100 ULTRA",
+      "baseItemId": "uzECpp8Wh2Aw4TGeDPtG",
+      "productId": "4mjiLSZa0qOKmVnDzqXU",
+      "brand": "Ultratalher",
+      "internalName": "Pazinha Sorvete",
+      "packageSize": 100,
+      "baseUnit": "un",
+      "operationalCategoryId": "UUcZTjxW2rSkFTN9og8V",
+      "operationalCategoryName": "Descartáveis",
+      "status": "verified",
+      "matchRequires": [
+        "supplierDocument",
+        "externalCode",
+        "brand",
+        "presentation"
+      ],
+      "purchase": {
+        "unit": "Pacote",
+        "purchaseUnitType": "content",
+        "purchaseUnitLabel": "Pacote",
+        "quantityMultiplier": 1,
+        "priceDivisor": 1,
+        "logisticMultiple": 1
+      },
+      "accounting": {
+        "accountPlanId": "gdNkWMam7BQbaRADNZTm",
+        "accountPlanName": "Embalagens de venda compradas para estoque",
+        "status": "approved",
+        "approvalRef": "defaults.approval"
+      },
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    },
+    {
+      "externalCode": "6509",
+      "invoiceDescription": "GRANULADO COLORIDO 500G 428 MAVALERIO",
+      "baseItemId": "pbxCzB23cmGppn40JsNk",
+      "productId": "SZdR01mcNWg8lDACohn2",
+      "brand": "Mavalério",
+      "internalName": "Granulado Colorido",
+      "packageSize": 500,
+      "baseUnit": "g",
+      "operationalCategoryId": "insumo",
+      "operationalCategoryName": "Perecíveis",
+      "status": "verified",
+      "matchRequires": [
+        "supplierDocument",
+        "externalCode",
+        "brand",
+        "presentation",
+        "explicit_colorido_description"
+      ],
+      "purchase": {
+        "unit": "Pacote",
+        "purchaseUnitType": "content",
+        "purchaseUnitLabel": "Pacote",
+        "quantityMultiplier": 1,
+        "priceDivisor": 1,
+        "logisticMultiple": 1
+      },
+      "accounting": {
+        "accountPlanId": "OofGtZoVn15nmmy2xaI8",
+        "accountPlanName": "Insumos composição",
+        "status": "approved",
+        "approvalRef": "defaults.approval"
+      },
+      "rule": "Não aceitar código26820 como alias; há vínculo contraditório para este outro código.",
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    },
+    {
+      "externalCode": "16683",
+      "invoiceDescription": "MINI BEIJOS DE MORANGO DISPLAY 12X15G UND FINI",
+      "baseItemId": "46W1BCd8ixQtyTCKAts2",
+      "productId": "yLEmsTru7x3Tgv91kuws",
+      "brand": "Fini",
+      "internalName": "Fini Beijos",
+      "packageSize": 15,
+      "baseUnit": "g",
+      "operationalCategoryId": "insumo",
+      "operationalCategoryName": "Perecíveis",
+      "status": "verified",
+      "matchRequires": [
+        "supplierDocument",
+        "externalCode",
+        "brand",
+        "presentation"
+      ],
+      "purchase": {
+        "unit": "Caixa",
+        "purchaseUnitType": "logistic",
+        "purchaseUnitLabel": "Caixa",
+        "quantityMultiplier": 1,
+        "priceDivisor": 1,
+        "logisticMultiple": 12
+      },
+      "accounting": {
+        "accountPlanId": "OofGtZoVn15nmmy2xaI8",
+        "accountPlanName": "Insumos composição",
+        "status": "approved",
+        "approvalRef": "defaults.approval"
+      },
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    },
+    {
+      "externalCode": "118432",
+      "invoiceDescription": "COBERTURA P/SORVETE CHOCOLATE MEIO AMARGO 1,3KG SELECTA",
+      "baseItemId": "OafDTZDh3LiZ4zShC23U",
+      "productId": "qpkDKvDBNRUGD8VZpLD7",
+      "brand": "Selecta",
+      "internalName": "Cobertura de chocolate meio amargo",
+      "packageSize": 1,
+      "baseUnit": "un",
+      "operationalCategoryId": "insumo",
+      "operationalCategoryName": "Perecíveis",
+      "status": "verified",
+      "matchRequires": [
+        "supplierDocument",
+        "externalCode",
+        "brand",
+        "presentation"
+      ],
+      "purchase": {
+        "unit": "Unidade",
+        "purchaseUnitType": "content",
+        "purchaseUnitLabel": "Unidade",
+        "quantityMultiplier": 1,
+        "priceDivisor": 1,
+        "logisticMultiple": 1
+      },
+      "accounting": {
+        "accountPlanId": "OofGtZoVn15nmmy2xaI8",
+        "accountPlanName": "Insumos composição",
+        "status": "approved",
+        "approvalRef": "defaults.approval"
+      },
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    },
+    {
+      "externalCode": "118418",
+      "invoiceDescription": "COBERTURA P/SORVETE CARAMELO 1,3KG SELECTA",
+      "baseItemId": "r8X4seZG9I9acOz53Rhb",
+      "productId": "4zahTCzFDQmT9FL2SxOp",
+      "brand": "Selecta",
+      "internalName": "Cobertura de caramelo",
+      "packageSize": 1,
+      "baseUnit": "un",
+      "operationalCategoryId": "insumo",
+      "operationalCategoryName": "Perecíveis",
+      "status": "verified",
+      "matchRequires": [
+        "supplierDocument",
+        "externalCode",
+        "brand",
+        "presentation"
+      ],
+      "purchase": {
+        "unit": "Unidade",
+        "purchaseUnitType": "content",
+        "purchaseUnitLabel": "Unidade",
+        "quantityMultiplier": 1,
+        "priceDivisor": 1,
+        "logisticMultiple": 1
+      },
+      "accounting": {
+        "accountPlanId": "OofGtZoVn15nmmy2xaI8",
+        "accountPlanName": "Insumos composição",
+        "status": "approved",
+        "approvalRef": "defaults.approval"
+      },
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    },
+    {
+      "externalCode": "1129015",
+      "invoiceDescription": "CASCAO C/120 NUTRILAR",
+      "baseItemId": "4wTEzi2yFQiI85DmpX94",
+      "productId": "m0Airknaiz99fOpq3REZ",
+      "brand": "Nutrilar",
+      "internalName": "Cascão ",
+      "packageSize": 1,
+      "baseUnit": "un",
+      "operationalCategoryId": "insumo",
+      "operationalCategoryName": "Perecíveis",
+      "status": "verified",
+      "matchRequires": [
+        "supplierDocument",
+        "externalCode",
+        "brand",
+        "presentation"
+      ],
+      "purchase": {
+        "unit": "Caixa",
+        "purchaseUnitType": "logistic",
+        "purchaseUnitLabel": "Caixa",
+        "quantityMultiplier": 1,
+        "priceDivisor": 1,
+        "logisticMultiple": 120
+      },
+      "accounting": {
+        "accountPlanId": "OofGtZoVn15nmmy2xaI8",
+        "accountPlanName": "Insumos composição",
+        "status": "approved",
+        "approvalRef": "defaults.approval"
+      },
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    },
+    {
+      "externalCode": "1129018",
+      "invoiceDescription": "CANUDINHO ROLINHO DE BIJU 1KG NUTRILAR",
+      "baseItemId": "EvB7vdgHhqUhPrDAU4UO",
+      "productId": "By10ajCQSKOLlOw1rPQH",
+      "brand": "Nutrilar",
+      "internalName": "Biju de Biscoito de Baunilha",
+      "packageSize": 300,
+      "baseUnit": "un",
+      "operationalCategoryId": "insumo",
+      "operationalCategoryName": "Perecíveis",
+      "status": "verified",
+      "matchRequires": [
+        "supplierDocument",
+        "externalCode",
+        "brand",
+        "presentation"
+      ],
+      "purchase": {
+        "unit": "Caixa",
+        "purchaseUnitType": "content",
+        "purchaseUnitLabel": "Caixa",
+        "quantityMultiplier": 1,
+        "priceDivisor": 1,
+        "logisticMultiple": 1,
+        "rule": "Produto de conteúdo já representa caixa com300un; NÃO multiplicar300 novamente por causa de multiplo_caixa300 legado. Não usar a conversão master6 da Marvi para esta marca/fornecedor."
+      },
+      "accounting": {
+        "accountPlanId": "OofGtZoVn15nmmy2xaI8",
+        "accountPlanName": "Insumos composição",
+        "status": "approved",
+        "approvalRef": "defaults.approval"
+      },
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    }
+  ],
+  "accounting": {
+    "status": "approved",
+    "goods": {
+      "id": "OofGtZoVn15nmmy2xaI8",
+      "name": "Insumos composição"
+    },
+    "salePackaging": {
+      "id": "gdNkWMam7BQbaRADNZTm",
+      "name": "Embalagens de venda compradas para estoque"
+    },
+    "rule": "Classificar por item: insumos de composição em conta patrimonial Insumos composição; pazinhas/descartáveis destinados à venda em Embalagens de venda compradas para estoque. Em compra mista, verificar rateio/separação canônica suportada antes da despesa; não lançar tudo na conta padrão do fornecedor. Não reclassificar documentos antigos.",
+    "legacyAccountName": "Insumos gerais",
+    "legacyRule": "Nome legado observado em1pedido; não replicar como conta ativa. Verificar a conta atual por ID e finalidade, conforme docs/plano-de-contas-dre.md.",
+    "approval": {
+      "by": "usuário nesta conversa",
+      "at": "2026-11-26T21:23:27.475861+00:00",
+      "decision": "Adotar esses padrões nas próximas compras equivalentes",
+      "scope": "Compras equivalentes para a Matriz, no escopo de destinatários e finalidade deste registro; alimentos do Cantinho em Insumos composição, pazinhas/copos/tampas em Embalagens de venda compradas para estoque; duas identidades ambíguas do Cantinho continuam pendentes."
+    }
+  },
+  "exceptions": [
+    {
+      "externalCode": "26820",
+      "status": "blocked_pending_identity_decision",
+      "description": "GRANULADO CROCANTE MIL CORES 500G MAVALERIO",
+      "candidates": [
+        {
+          "productId": "SZdR01mcNWg8lDACohn2",
+          "name": "Granulado Colorido Mavalério500g"
+        },
+        {
+          "productId": "z6VNAwik6DBLkPDM2bMj",
+          "name": "Granulado de chocolate Mavalério500g"
+        }
+      ],
+      "rule": "Mesmo código aparece com dois produtos internos diferentes; não escolher pelo vínculo mais recente. Confirmar identidade/apresentação antes de reutilizar; demais itens permanecem utilizáveis."
+    },
+    {
+      "externalCode": "96885",
+      "status": "blocked_pending_identity_decision",
+      "description": "TUBITOS750G POTE C/50UN JAZAM",
+      "historicalProductId": "vjbiosGMfTUA99WkTOEn",
+      "historicalInternalName": "Paçoca da Fazenda Jazam15g, múltiplo50",
+      "rule": "Descrições Tubitos e Paçoca da Fazenda divergem. Tamanho/quantidade/marca não provam identidade. Manter candidato pendente até confirmação; não cadastrar nem trocar produto automaticamente."
+    }
+  ]
+}
