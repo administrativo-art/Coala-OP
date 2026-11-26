@@ -9,6 +9,7 @@ enableServerOnlyTestImports('demo-coala-repository');
 for (const key of Object.keys(process.env)) if (key.startsWith('INTER_')) delete process.env[key];
 const { authAdmin, dbAdmin } = await import('../../src/lib/firebase-admin.ts');
 const { hrDbAdmin } = await import('../../src/lib/firebase-rh-admin.ts');
+const receiptPayment = await import('../../src/app/api/documents/generated/[id]/payment/route.ts');
 const payments = await import('../../src/app/api/financial/payment-requests/route.ts');
 const submit = await import('../../src/app/api/financial/payment-requests/[id]/submit/route.ts');
 const roles = await import('../../src/app/api/hr/roles/route.ts');
@@ -315,4 +316,17 @@ test('página pública de admissão: envio CLT completo', { timeout: 180_000 }, 
   } finally {
     await clt.delete();
   }
+});
+
+
+test('pagamento do recibo: rota inicializa, rejeita campos extras e bloqueia envio sem Inter', async () => {
+  const path = '/api/documents/generated/recibo-sintetico/payment';
+  const context = { params: Promise.resolve({ id: 'recibo-sintetico' }) };
+  assert.equal((await receiptPayment.POST(request('POST', path), context)).status, 401);
+  assert.equal((await receiptPayment.POST(request('POST', path, nobody), context)).status, 403);
+  assert.equal((await receiptPayment.POST(request('POST', path, admin, { amount: 10 }), context)).status, 400);
+  assert.equal((await receiptPayment.POST(request('POST', path + '?amount=10', admin), context)).status, 400);
+  const unavailable = await receiptPayment.POST(request('POST', path, admin), context);
+  assert.equal(unavailable.status, 409);
+  assert.equal((await payload(unavailable)).error.code, 'DOCUMENT_RECEIPT_PAYMENT_INTER_UNAVAILABLE');
 });

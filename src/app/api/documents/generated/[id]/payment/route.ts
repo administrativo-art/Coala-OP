@@ -20,13 +20,13 @@ const contract = defineSecurityContract({
 });
 const enforcer = defineSecurityEnforcer<NextRequest, Context, unknown, ServerUserContext, { id: string }, { workspaceId: string }>({
   id: "generated-receipt-payment-v1",
-  guarantees: ["authenticated-user", "active-user", "authorization:receipt-payment-financial-and-document", "workspace-scoped", "input-validated", "server-authoritative-audit"],
+  guarantees: ["authenticated-user", "active-user", "authorization:receipt-payment-financial-and-document", "workspace-scoped", "input-validated", "fields-allowlisted", "server-authoritative-audit"],
   async enforce({ request, routeContext }) {
     const actor = await requireUser(request).catch(rethrowServerAuthenticationFailure);
     if (!canSendDocumentReceiptPayment(actor)) {
       throw new AppError({ code: "DOCUMENT_RECEIPT_PAYMENT_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem permissão documental e financeira para enviar pagamento." });
     }
-    if ((await request.text()).trim()) throw new AppError({ code: "DOCUMENT_RECEIPT_PAYMENT_BODY_INVALID", kind: "VALIDATION", safeMessage: "Esta operação não aceita dados de pagamento enviados pelo navegador." });
+    if (request.nextUrl.searchParams.size || (await request.text()).trim()) throw new AppError({ code: "DOCUMENT_RECEIPT_PAYMENT_BODY_INVALID", kind: "VALIDATION", safeMessage: "Esta operação não aceita dados de pagamento enviados pelo navegador." });
     const { id } = await routeContext.params;
     if (!id || id.length > 180 || id.includes("/")) throw new AppError({ code: "DOCUMENT_RECEIPT_PAYMENT_ID_INVALID", kind: "VALIDATION", safeMessage: "Identificador do recibo inválido." });
     return { actor, input: { id }, resource: { workspaceId: actor.workspace_id } };
