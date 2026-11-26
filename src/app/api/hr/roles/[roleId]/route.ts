@@ -1,14 +1,16 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 import {
   jobRolePatchSchema,
   normalizeJobRolePatch,
   stripUndefined,
 } from "@/features/hr/lib/schemas";
-import {
-  assertHrAccess,
-  serializeHrValue,
-} from "@/features/hr/lib/server-access";
+import { rejectJobRole, requireJobRoleAccess } from "@/features/hr/lib/job-role-route.server";
+import { serializeHrValue, type HrAccess } from "@/features/hr/lib/server-access";
+import { createStandardSecurityEnforcer } from "@/lib/security/enforcer";
+import { parseRouteBody } from "@/lib/security/route-access.server";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { dbAdmin } from "@/lib/firebase-admin";
 import {
@@ -20,77 +22,68 @@ import { reconcileExecutiveJobRoleHierarchy } from "@/features/hr/lib/job-role-h
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ roleId: string }> }
-) {
-  try {
-    await assertHrAccess(request, "manage");
-    const { roleId } = await params;
-    const roleRef = hrDbAdmin.collection("jobRoles").doc(roleId);
-    const existing = await roleRef.get();
+type RouteContext = { params: Promise<{ roleId: string }> };
+type PatchRoleInput = ReturnType<typeof jobRolePatchSchema.parse>;
 
-    if (!existing.exists) {
-      return NextResponse.json({ error: "Cargo não encontrado." }, { status: 404 });
-    }
+const contract = defineSecurityContract({
+  schemaVersion: 1,
+  id: "hr.job-roles.update",
+  version: 1,
+  surface: { method: "PATCH", path: "/api/hr/roles/[roleId]" },
+  exposure: "authenticated",
+  identity: { kind: "active-user" },
+  authorization: { kind: "permission", action: "hr.job-roles.manage" },
+  resourceScope: { kind: "none" },
+  input: { kind: "schema", schema: "hr.job-roles.update-input", unknownFields: "strip" },
+  effects: { mode: "write", audit: "none" },
+  errorExposure: "sanitized",
+});
 
-    const payload = normalizeJobRolePatch(
-      jobRolePatchSchema.parse(await request.json())
+export const PATCH = secureRoute({
+  contract,
+  enforcer: createStandardSecurityEnforcer<NextRequest, RouteContext, unknown, HrAccess, PatchRoleInput>(contract, {
+    authenticate: ({ request }) => requireJobRoleAccess(request, "manage"),
+    parseInput: ({ request }) => parseRouteBody(request, jobRolePatchSchema, "HR_JOB_ROLE"),
+    // `assertHrAccess` já confere a permissão de gestão.
+    authorize: () => undefined,
+  }),
+}, async ({ routeContext, security: { input } }) => {
+  const { roleId } = await routeContext.params;
+  const roleRef = hrDbAdmin.collection("jobRoles").doc(roleId);
+  const existing = await roleRef.get();
+  if (!existing.exists) rejectJobRole("Cargo não encontrado.", "NOT_FOUND");
+
+  const payload = normalizeJobRolePatch(input);
+  if (payload.formQuestions !== undefined) {
+    const scoringBlock = getRecruitmentScoringBlockMessage(
+      applyRecruitmentScoring(payload.formQuestions, "role_100").snapshot
     );
-    if (payload.formQuestions !== undefined) {
-      const scoringBlock = getRecruitmentScoringBlockMessage(
-        applyRecruitmentScoring(payload.formQuestions, "role_100").snapshot
-      );
-      if (scoringBlock) {
-        return NextResponse.json({ error: scoringBlock }, { status: 400 });
-      }
-    }
-
-    if (payload.parentId === roleId || payload.reportsTo === roleId) {
-      return NextResponse.json(
-        { error: "Um cargo não pode ser pai dele mesmo." },
-        { status: 400 }
-      );
-    }
-    const current = existing.data() ?? {};
-    const nextData = stripUndefined({
-      ...current,
-      ...payload,
-      createdAt: current.createdAt ?? new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-
-    if (nextData.isActive !== false && !nextData.defaultProfileId) {
-      return NextResponse.json(
-        { error: "Todo cargo ativo deve possuir um perfil de acesso padrão." },
-        { status: 400 }
-      );
-    }
-    if (typeof nextData.defaultProfileId === "string") {
-      const profile = await dbAdmin.collection("profiles").doc(nextData.defaultProfileId).get();
-      if (!profile.exists) {
-        return NextResponse.json({ error: "Perfil de acesso não encontrado." }, { status: 400 });
-      }
-    }
-
-    await roleRef.set(nextData);
-    await reconcileExecutiveJobRoleHierarchy();
-    const saved = await roleRef.get();
-
-    return NextResponse.json({
-      role: {
-        id: saved.id,
-        ...((serializeHrValue(saved.data() ?? nextData) as Record<string, unknown>) ??
-          {}),
-      },
-    });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Erro ao atualizar cargo.",
-      },
-      { status: 400 }
-    );
+    if (scoringBlock) rejectJobRole(scoringBlock);
   }
-}
+  if (payload.parentId === roleId || payload.reportsTo === roleId) rejectJobRole("Um cargo não pode ser pai dele mesmo.");
+
+  const current = existing.data() ?? {};
+  const nextData = stripUndefined({
+    ...current,
+    ...payload,
+    createdAt: current.createdAt ?? new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  if (nextData.isActive !== false && !nextData.defaultProfileId) {
+    rejectJobRole("Todo cargo ativo deve possuir um perfil de acesso padrão.");
+  }
+  if (typeof nextData.defaultProfileId === "string") {
+    const profile = await dbAdmin.collection("profiles").doc(nextData.defaultProfileId).get();
+    if (!profile.exists) rejectJobRole("Perfil de acesso não encontrado.");
+  }
+
+  await roleRef.set(nextData);
+  await reconcileExecutiveJobRoleHierarchy();
+  const saved = await roleRef.get();
+  return NextResponse.json({
+    role: {
+      id: saved.id,
+      ...((serializeHrValue(saved.data() ?? nextData) as Record<string, unknown>) ?? {}),
+    },
+  });
+});

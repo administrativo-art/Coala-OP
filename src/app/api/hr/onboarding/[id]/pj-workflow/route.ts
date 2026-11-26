@@ -1,3 +1,6 @@
+import { redactOnboardingProcess } from "@/features/hr/onboarding/process-redaction.server";
+import { canAccessUnit } from "@/lib/unit-access";
+import { discardCancelledOnboardingDocuments } from "@/lib/hr/onboarding-document-discard.server";
 import { confirmedSubjectKeysForDocument } from "@/features/privacy/person-lookup.server";
 import { subjectKey } from "@/features/privacy/person-subject";
 import { createHash, randomUUID } from 'node:crypto';
@@ -208,7 +211,9 @@ const getEnforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown, H
     }
     const parsed = getInputSchema.safeParse({ asset: request.nextUrl.searchParams.get('asset') });
     if (!parsed.success) throw new AppError({ code: 'PJ_WORKFLOW_QUERY_INVALID', kind: 'VALIDATION' });
-    return { actor, input: parsed.data, resource: await pjResource(routeContext) };
+    const resource = await pjResource(routeContext);
+    if (resource.process.workspaceId != null && resource.process.workspaceId !== actor.workspaceId || !canAccessUnit(actor.userDoc, typeof resource.process.unitId === 'string' ? resource.process.unitId : null, { isDefaultAdmin: actor.isDefaultAdmin })) throw new AppError({ code: 'PJ_ONBOARDING_SCOPE_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Processo indisponível para esta unidade ou empresa.' });
+    return { actor, input: parsed.data, resource };
   },
 });
 const patchEnforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown, HrAccess,
@@ -220,14 +225,17 @@ const patchEnforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown,
     if (request.nextUrl.searchParams.size) throw new AppError({ code: 'PJ_WORKFLOW_QUERY_INVALID', kind: 'VALIDATION' });
     const parsed = patchInputSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) throw new AppError({ code: 'PJ_WORKFLOW_ACTION_INVALID', kind: 'VALIDATION', safeMessage: 'Ação inválida.' });
-    return { actor, input: parsed.data, resource: await pjResource(routeContext) };
+    const resource = await pjResource(routeContext);
+    if (resource.process.workspaceId != null && resource.process.workspaceId !== actor.workspaceId || !canAccessUnit(actor.userDoc, typeof resource.process.unitId === 'string' ? resource.process.unitId : null, { isDefaultAdmin: actor.isDefaultAdmin })) throw new AppError({ code: 'PJ_ONBOARDING_SCOPE_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Processo indisponível para esta unidade ou empresa.' });
+    return { actor, input: parsed.data, resource };
   },
 });
 
 export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer }, async ({ security }) => {
     const { id, process, workflow } = security.resource;
     const { asset } = security.input;
-    if (!asset) return NextResponse.json(serializeHrValue({ id, ...process }));
+    if (asset && (process.status === "cancelled" || process.documentDiscard)) return error("Arquivo indisponível.", 404);
+    if (!asset) return NextResponse.json(redactOnboardingProcess(serializeHrValue({ id, ...process }) as Record<string, unknown>, security.actor));
     const path = asset === 'signed_contract' ? workflow.contract?.signedStoragePath : workflow.contract?.storagePath;
     if (!path) return error('Arquivo ainda não disponível.', 404);
     const buffer = await readStorage(path);
@@ -247,6 +255,7 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
   const body = security.input;
   const { action } = body;
   try {
+    if (["cancelled", "completed"].includes(String(process.status)) || process.documentDiscard) throw new AppError({ code: "PJ_ONBOARDING_CLOSED", kind: "CONFLICT", safeMessage: "O processo foi encerrado e está disponível somente para consulta." });
     const now = new Date().toISOString();
     let nextWorkflow = structuredClone(workflow);
     const update: Record<string, unknown> = { updatedAt: now };
@@ -531,7 +540,11 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
     }
 
     update.pjWorkflow = nextWorkflow;
-    await ref.set(update, { merge: true });
+    await hrDbAdmin.runTransaction(async (tx) => {
+      const current = await tx.get(ref);
+      if (["cancelled", "completed"].includes(String(current.get("status"))) || current.get("documentDiscard")) throw new AppError({ code: "PJ_ONBOARDING_CLOSED", kind: "CONFLICT", safeMessage: "O processo foi encerrado." });
+      tx.set(ref, update, { merge: true });
+    });
     await logAction({
       user_id: access.decoded.uid,
       username: access.decoded.email ?? null,
@@ -541,8 +554,10 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
       ttl_days: 365,
     });
     const saved = await ref.get();
-    return NextResponse.json({ process: { id: saved.id, ...((serializeHrValue(saved.data()) as Record<string, unknown>) ?? {}) } });
+    return NextResponse.json({ process: redactOnboardingProcess({ id: saved.id, ...((serializeHrValue(saved.data()) as Record<string, unknown>) ?? {}) }, access) });
   } catch (cause) {
+    const current = await hrDbAdmin.collection("onboardingProcesses").doc(id).get();
+    if (current.get("status") === "cancelled") await discardCancelledOnboardingDocuments(id, "system:cancelled-pj-operation");
     if (cause instanceof AppError) throw cause;
     const message = cause instanceof Error ? cause.message : '';
     if ([

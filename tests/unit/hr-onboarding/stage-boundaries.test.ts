@@ -44,10 +44,8 @@ test('conclusão exige entrega do e-mail, primeiro acesso e integrações resolv
     new URL('../../../src/app/api/hr/onboarding/[id]/route.ts', import.meta.url),
     'utf8',
   );
-  const completionBlock = source.slice(
-    source.indexOf("action === 'complete'"),
-    source.indexOf("action === 'cancel'"),
-  );
+  const completionStart = source.indexOf("action === 'complete'");
+  const completionBlock = source.slice(completionStart, source.indexOf("action === 'cancel'", completionStart));
 
   assert.match(completionBlock, /accessEmail\.status !== 'delivered'/);
   assert.match(completionBlock, /firstAccess\.status !== 'used'/);

@@ -1,3 +1,4 @@
+import { admissionDocumentError } from "./admission-document-error";
 import type { DocumentPackageManifest } from "@/features/hr/documents/document-package-manifest";
 import type { AutentiqueSignerInput } from "@/lib/autentique-core";
 
@@ -11,7 +12,7 @@ export function admissionBundleSignerPositions(
     (component) => component.templateId === CLOSING_TEMPLATE_ID,
   );
   if (!closing) {
-    throw new Error("O termo final do kit não foi localizado para posicionar as assinaturas.");
+    throw admissionDocumentError("O termo final do kit não foi localizado para posicionar as assinaturas.");
   }
   return [{
     x: party === "employee" ? "16.0" : "62.0",

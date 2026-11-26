@@ -1,3 +1,4 @@
+import { admissionRecordVisibility } from "@/lib/hr/admission-archive-lifecycle.server";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
@@ -348,7 +349,9 @@ export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer },
     // Aplica a política de sigilo por documento; o usuário só recebe o que pode ver.
     const accessSettings = await loadEmployeeDocumentAccessSettings(access);
     const subject = buildEmployeeDocumentAccessSubject(access, accessSettings, employeeId);
-    const documents = page
+    const visibleAdmission = admissionRecordVisibility();
+    const eligible = (await Promise.all(page.map(async (doc) => await visibleAdmission(doc.data()) ? doc : null))).filter((doc) => doc !== null);
+    const documents = eligible
       .filter((doc) => !doc.get("deletedAt"))
       .filter((doc) => !paged || isPublishedToEmployee(doc.data()))
       .filter((doc) => canAccessDocument(

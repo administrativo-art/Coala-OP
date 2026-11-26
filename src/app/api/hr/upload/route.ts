@@ -1,3 +1,8 @@
+import { secureRoute } from "@/lib/security/secure-route.server";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { defineSecurityEnforcer } from "@/lib/security/enforcer";
+import { AppError } from "@/lib/observability/app-error";
+import { registerOnboardingUpload, finishOnboardingUpload } from "@/lib/hr/onboarding-upload-scope.server";
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash, randomUUID } from 'crypto';
 import { getStorage } from 'firebase-admin/storage';
@@ -235,15 +240,29 @@ async function analyzeOnboardingUpload(params: {
   return extraction;
 }
 
-export async function POST(request: NextRequest) {
-  const access = await assertHrAccess(request, 'view').catch(() => null);
-  const formData = await request.formData();
-
-  if (!access) {
-    const publicError = await assertPublicUploadAllowed(request, formData);
-    if (publicError) return publicError;
-  }
-
+const uploadContract = defineSecurityContract({
+  schemaVersion: 1, id: "hr.upload", version: 1, surface: { method: "POST", path: "/api/hr/upload" }, exposure: "public",
+  identity: { kind: "custom", strategy: "hr-session-or-public-form", guarantees: ["identity:hr-session-or-public-form"] },
+  authorization: { kind: "custom", strategy: "hr-session-or-public-form" }, resourceScope: { kind: "custom", strategy: "hr-upload-target" },
+  input: { kind: "schema", schema: "hr.upload.multipart", unknownFields: "reject" }, effects: { mode: "write", audit: "none" }, errorExposure: "sanitized",
+});
+const uploadEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, Awaited<ReturnType<typeof assertHrAccess>> | null, { formData: FormData }, undefined>({
+  id: "hr-upload-v1", guarantees: ["identity:hr-session-or-public-form", "authorization:hr-session-or-public-form", "scope:hr-upload-target", "input-validated", "fields-allowlisted"],
+  async enforce({ request }) {
+    const actor = await assertHrAccess(request, "view").catch(() => null);
+    const formData = await request.formData();
+    if ([...formData.keys()].some((key) => !["file", "website", "onboardingToken", "onboardingDocumentId", "talentPool", "slug"].includes(key))) throw new AppError({ code: "HR_UPLOAD_INVALID", kind: "VALIDATION", safeMessage: "Campo de envio inválido." });
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size > HR_RESUME_MAX_BYTES || !ALLOWED_MIME.has(file.type)) throw new AppError({ code: "HR_UPLOAD_INVALID", kind: "VALIDATION", safeMessage: "Envie PDF, JPG ou PNG com até 10 MB." });
+    if (!actor) {
+      const response = await assertPublicUploadAllowed(request, formData);
+      if (response) { const body = await response.json(); throw new AppError({ code: "HR_PUBLIC_UPLOAD_FORBIDDEN", kind: response.status === 404 ? "NOT_FOUND" : response.status === 400 ? "VALIDATION" : "AUTHORIZATION", safeMessage: body.error, httpStatus: response.status }); }
+    }
+    return { actor, input: { formData }, resource: undefined };
+  },
+});
+export const POST = secureRoute({ contract: uploadContract, enforcer: uploadEnforcer }, async ({ security }) => {
+  const access = security.actor, { formData } = security.input;
   const file = formData.get('file');
 
   if (!(file instanceof File)) return jsonError('Arquivo ausente.');
@@ -273,6 +292,7 @@ export async function POST(request: NextRequest) {
   }
 
   const contentHash = createHash('sha256').update(buffer).digest('hex');
+  const claim = onboardingToken ? await registerOnboardingUpload(onboardingToken, objectPath, onboardingDocumentId, contentHash) : null;
   await bucket.file(objectPath).save(buffer, {
     metadata: {
       contentType: file.type,
@@ -280,9 +300,20 @@ export async function POST(request: NextRequest) {
         firebaseStorageDownloadTokens: token,
         originalName: file.name.slice(0, 180),
         ...(onboardingDocumentId ? { onboardingDocumentId } : {}),
+        ...(claim ? { onboardingId: claim.parent.id, hashSha256: contentHash } : {}),
       },
     },
   });
+
+  if (claim && !await finishOnboardingUpload(claim)) {
+    const [metadata] = await bucket.file(objectPath).getMetadata();
+    await bucket.file(objectPath, { generation: metadata.generation }).delete({ ignoreNotFound: true });
+    await claim.file.update({ status: "purged" });
+    const { discardCancelledOnboardingDocuments } = await import("@/lib/hr/onboarding-document-discard.server");
+    const current = await claim.parent.get();
+    if (current.get("status") === "cancelled") await discardCancelledOnboardingDocuments(claim.parent.id, "system:cancelled-upload");
+    throw new AppError({ code: "ONBOARDING_UPLOAD_CLOSED", kind: "CONFLICT", safeMessage: "O processo foi encerrado; o arquivo foi excluído." });
+  }
 
   const extraction = onboardingToken && onboardingDocumentId
     ? await analyzeOnboardingUpload({
@@ -300,4 +331,4 @@ export async function POST(request: NextRequest) {
     sha256: contentHash,
     analysisStatus: extraction?.aiAnalysis.status ?? 'not_applicable',
   }, { status: 201 });
-}
+});

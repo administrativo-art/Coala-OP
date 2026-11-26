@@ -150,7 +150,7 @@ export function resolveDocumentFormSchema(
       if (field.required && (
         value === undefined
         || value === null
-        || value === ""
+        || (typeof value === "string" && !value.trim())
         || (Array.isArray(value) && value.length === 0)
       )) {
         missing.push(field.label);
@@ -195,7 +195,7 @@ export function resolveDocumentFormSchema(
         value.forEach((row, index) => {
           for (const itemField of field.itemFields ?? []) {
             const itemValue = record(row)[itemField.key];
-            if (itemField.required && (itemValue === undefined || itemValue === null || itemValue === "")) {
+            if (itemField.required && (itemValue === undefined || itemValue === null || (typeof itemValue === "string" && !itemValue.trim()))) {
               missing.push(`${field.label} ${index + 1}: ${itemField.label}`);
             }
           }

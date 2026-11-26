@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Check,
@@ -25,6 +25,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
+import { changeCurrencyInput, currencyDisplay, editCurrency, formatBrl, isCurrentPreviewResponse, missingGeneratorFields, parseBrl, reviewActions } from "@/components/documents/document-generator-review";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type {
   ManualFieldBinding,
@@ -85,7 +86,9 @@ function ManualInput(props: {
   binding: ManualFieldBinding;
   value: string;
   onChange: (value: string) => void;
+  missing?: boolean;
 }) {
+  if (props.binding.format === "currency_br") return <CurrencyInput value={props.value} missing={props.missing} onChange={(amount) => props.onChange(String(amount))} />;
   if (props.binding.format === "multiline") {
     return <textarea className="min-h-24 w-full rounded-md border bg-white p-2 text-sm" value={props.value} onChange={(event) => props.onChange(event.target.value)} />;
   }
@@ -134,6 +137,78 @@ function withValueAt(root: Record<string, unknown>, path: string, value: unknown
     else cursor = cursor[part] = record(cursor[part]);
   });
   return output;
+}
+
+function reviewValue(field: DocumentFormField, value: unknown): string {
+  if (field.kind === "party") {
+    const snapshot = record(record(value).snapshot);
+    return [snapshot.name, snapshot.document, snapshot.email].filter(Boolean).join(" · ") || "Não informado";
+  }
+  if (field.kind === "repeatable") {
+    if (!Array.isArray(value) || !value.length) return "Não informado";
+    return value.map((row, index) => {
+      const item = record(row);
+      return `${index + 1}. ${(field.itemFields ?? []).map((column) => `${column.label}: ${reviewValue(column, item[column.key])}`).join(" · ")}`;
+    }).join("\n");
+  }
+  if (field.kind === "currency") return formatBrl(value) || "Não informado";
+  if (field.kind === "boolean") return value === true ? "Sim" : value === false ? "Não" : "Não informado";
+  if (field.kind === "date" && typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-");
+    return `${day}/${month}/${year}`;
+  }
+  return value === "" || value == null ? "Não informado" : String(value);
+}
+
+function CurrencyInput({ value, onChange, missing }: { value: unknown; onChange: (value: number | "") => void; missing?: boolean }) {
+  const [display, setDisplay] = useState(() => currencyDisplay(value));
+  const focused = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const pendingSelection = useRef<{ start: number; end: number } | null>(null);
+  useEffect(() => { if (!focused.current) setDisplay(currencyDisplay(value)); }, [value]);
+  useLayoutEffect(() => {
+    const selection = pendingSelection.current;
+    if (!selection) return;
+    inputRef.current?.setSelectionRange(selection.start, selection.end);
+    pendingSelection.current = null;
+  }, [display]);
+  return <Input
+    ref={inputRef}
+    type="text"
+    inputMode="decimal"
+    aria-label="Valor em reais"
+    aria-invalid={missing || undefined}
+    placeholder="R$ 0,00"
+    value={display}
+    onFocus={(event) => { focused.current = true; if (display) event.target.setSelectionRange(display.indexOf(","), display.indexOf(",")); }}
+    onKeyDown={(event) => {
+      if (event.ctrlKey || event.metaKey || event.altKey || event.nativeEvent.isComposing) return;
+      if (!/^\d$/.test(event.key) && ![",", ".", "Backspace", "Delete"].includes(event.key)) return;
+      event.preventDefault();
+      const input = event.currentTarget;
+      const next = editCurrency(display, event.key, input.selectionStart ?? 0, input.selectionEnd ?? 0);
+      pendingSelection.current = { start: next.caret, end: next.selectionEnd ?? next.caret };
+      if (next.display === display) input.setSelectionRange(next.caret, next.selectionEnd ?? next.caret);
+      setDisplay(next.display);
+      onChange(next.amount);
+    }}
+    onPaste={(event) => {
+      event.preventDefault();
+      const amount = parseBrl(event.clipboardData.getData("text"));
+      const next = currencyDisplay(amount);
+      pendingSelection.current = { start: next.indexOf(","), end: next.indexOf(",") };
+      setDisplay(next);
+      onChange(amount);
+    }}
+    onChange={(event) => {
+      const next = changeCurrencyInput(display, event.target.value, event.target.selectionStart ?? event.target.value.length);
+      pendingSelection.current = { start: next.caret, end: next.selectionEnd ?? next.caret };
+      if (next.display === display) event.target.setSelectionRange(next.caret, next.selectionEnd ?? next.caret);
+      setDisplay(next.display);
+      onChange(next.amount);
+    }}
+    onBlur={() => { focused.current = false; }}
+  />;
 }
 
 function PartySearchSelect(props: {
@@ -269,8 +344,9 @@ function SchemaFieldInput(props: {
   formValues: Record<string, unknown>;
   partyOptions: PartyOption[];
   onChange: (values: Record<string, unknown>) => void;
+  missing: string[];
 }) {
-  const { field, formValues, partyOptions, onChange } = props;
+  const { field, formValues, partyOptions, onChange, missing } = props;
   if (!conditionMatches(field.condition, formValues) || field.kind === "calculated") return null;
   const current = valueAt(formValues, field.key);
   const set = (value: unknown) => onChange(withValueAt(formValues, field.key, value));
@@ -279,6 +355,7 @@ function SchemaFieldInput(props: {
       {field.label}{field.required ? " *" : ""}
     </span>
   );
+  const fieldMissing = missing.includes(field.label);
 
   if (field.kind === "party") {
     const party = record(current);
@@ -303,8 +380,10 @@ function SchemaFieldInput(props: {
       });
     };
     return (
-      <div className="space-y-2 rounded-lg border bg-slate-50 p-3">
+      <div className={`space-y-2 rounded-lg border p-3 ${fieldMissing ? "border-rose-300 bg-rose-50" : "bg-slate-50"}`}>
         {label}
+        {fieldMissing ? <p className="text-xs font-semibold text-rose-700">Obrigatório: selecione ou informe esta parte.</p> : null}
+        {missing.includes(`${field.label}: e-mail para assinatura`) ? <p className="text-xs font-semibold text-rose-700">Informe um e-mail válido para assinatura.</p> : null}
         <p className="text-[11px] text-slate-500">
           Selecione uma pessoa ou empresa cadastrada, ou informe uma parte avulsa.
         </p>
@@ -388,7 +467,7 @@ function SchemaFieldInput(props: {
   if (field.kind === "repeatable") {
     const rows = Array.isArray(current) ? current.map(record) : [];
     return (
-      <div className="space-y-2 rounded-lg border bg-slate-50 p-3">
+      <div className={`space-y-2 rounded-lg border p-3 ${fieldMissing || missing.some((item) => item.startsWith(`${field.label} `)) ? "border-rose-300 bg-rose-50" : "bg-slate-50"}`}>
         <div className="flex items-center justify-between gap-2">
           {label}
           <Button type="button" size="sm" variant="outline" onClick={() => set([...rows, {}])}>Adicionar item</Button>
@@ -398,21 +477,25 @@ function SchemaFieldInput(props: {
             {(field.itemFields ?? []).map((itemField) => (
               <label key={itemField.key} className="space-y-1">
                 <span className="text-[10px] font-bold text-slate-600">{itemField.label}</span>
-                <Input
-                  type={itemField.kind === "number" || itemField.kind === "currency" ? "number" : itemField.kind === "date" ? "date" : "text"}
-                  step={itemField.kind === "currency" ? "0.01" : undefined}
+                {itemField.kind === "currency" ? <CurrencyInput
+                  value={row[itemField.key]}
+                  missing={missing.includes(`${field.label} ${rowIndex + 1}: ${itemField.label}`)}
+                  onChange={(value) => {
+                    const next = [...rows];
+                    next[rowIndex] = { ...row, [itemField.key]: value };
+                    set(next);
+                  }}
+                /> : <Input
+                  type={itemField.kind === "number" ? "number" : itemField.kind === "date" ? "date" : "text"}
+                  aria-invalid={missing.includes(`${field.label} ${rowIndex + 1}: ${itemField.label}`) || undefined}
                   value={String(row[itemField.key] ?? "")}
                   onChange={(event) => {
                     const next = [...rows];
-                    next[rowIndex] = {
-                      ...row,
-                      [itemField.key]: itemField.kind === "number" || itemField.kind === "currency"
-                        ? Number(event.target.value)
-                        : event.target.value,
-                    };
+                    next[rowIndex] = { ...row, [itemField.key]: itemField.kind === "number" && event.target.value !== "" ? Number(event.target.value) : event.target.value };
                     set(next);
                   }}
-                />
+                />}
+                {missing.includes(`${field.label} ${rowIndex + 1}: ${itemField.label}`) ? <span className="text-[10px] font-semibold text-rose-700">Obrigatório</span> : null}
               </label>
             ))}
             <Button type="button" size="sm" variant="ghost" className="self-end text-rose-600" onClick={() => set(rows.filter((_, index) => index !== rowIndex))}>Remover</Button>
@@ -426,12 +509,13 @@ function SchemaFieldInput(props: {
     return (
       <label className="block space-y-1.5">
         {label}
-        <select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={String(current ?? "")} onChange={(event) => set(field.kind === "boolean" ? event.target.value === "true" : event.target.value)}>
+        <select aria-invalid={fieldMissing || undefined} className={`h-10 w-full rounded-md border bg-white px-3 text-sm ${fieldMissing ? "border-rose-400" : ""}`} value={String(current ?? "")} onChange={(event) => set(event.target.value === "" ? "" : field.kind === "boolean" ? event.target.value === "true" : event.target.value)}>
           <option value="">Selecione...</option>
           {field.kind === "boolean"
             ? <><option value="true">Sim</option><option value="false">Não</option></>
             : (field.options ?? []).map((option) => <option key={option} value={option}>{optionLabel(option)}</option>)}
         </select>
+        {fieldMissing ? <span className="text-xs font-semibold text-rose-700">Obrigatório</span> : null}
       </label>
     );
   }
@@ -440,16 +524,17 @@ function SchemaFieldInput(props: {
     <label className="block space-y-1.5">
       {label}
       {field.helpText ? <span className="block text-[11px] text-slate-500">{field.helpText}</span> : null}
-      {field.kind === "multiline" ? (
+      {field.kind === "currency" ? <CurrencyInput value={current} missing={fieldMissing} onChange={set} /> : field.kind === "multiline" ? (
         <textarea className="min-h-24 w-full rounded-md border bg-white p-2 text-sm" value={String(current ?? "")} onChange={(event) => set(event.target.value)} />
       ) : (
         <Input
-          type={field.kind === "date" ? "date" : field.kind === "number" || field.kind === "currency" ? "number" : "text"}
-          step={field.kind === "currency" ? "0.01" : undefined}
+          type={field.kind === "date" ? "date" : field.kind === "number" ? "number" : "text"}
+          aria-invalid={fieldMissing || undefined}
           value={String(current ?? "")}
-          onChange={(event) => set(field.kind === "number" || field.kind === "currency" ? Number(event.target.value) : event.target.value)}
+          onChange={(event) => set(field.kind === "number" && event.target.value !== "" ? Number(event.target.value) : event.target.value)}
         />
       )}
+      {fieldMissing ? <span className="text-xs font-semibold text-rose-700">Obrigatório</span> : null}
     </label>
   );
 }
@@ -462,6 +547,7 @@ export function DocumentGeneratorWorkspace(props: {
 } = {}) {
   const { firebaseUser, permissions, activeUsers } = useAuth();
   const canGenerate = hasFormalizationPermission(permissions, "documents.generate");
+  const canReview = hasFormalizationPermission(permissions, "documents.review");
   const [templates, setTemplates] = useState<Template[]>([]);
   const [partyOptions, setPartyOptions] = useState<PartyOption[]>([]);
   const [templateId, setTemplateId] = useState("");
@@ -473,9 +559,12 @@ export function DocumentGeneratorWorkspace(props: {
   const [schemaStep, setSchemaStep] = useState(0);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [approving, setApproving] = useState(false);
   const [message, setMessage] = useState("");
   const [notice, setNotice] = useState("");
   const [result, setResult] = useState<GeneratedResult | null>(null);
+  const inputRevision = useRef(0);
+  const invalidatePreview = () => { inputRevision.current += 1; setResult(null); setNotice(""); };
 
   const token = useCallback(async () => {
     if (!firebaseUser) throw new Error("Sessão expirada.");
@@ -527,12 +616,22 @@ export function DocumentGeneratorWorkspace(props: {
   }, [canGenerate, firebaseUser, props.initialTemplateId, token]);
 
   const selected = templates.find((template) => template.id === templateId) ?? null;
+  const missingFields = useMemo(() => {
+    if (!selected?.formSchema) return [];
+    return missingGeneratorFields(selected.formSchema, formValues);
+  }, [selected, formValues]);
+  const stepMissing = selected?.formSchema?.steps.map((step) => step.fields.some((field) =>
+    missingFields.some((item) => item === field.label || item.startsWith(`${field.label} `) || item.startsWith(`${field.label}:`))
+  )) ?? [];
+  const reviewStep = selected?.formSchema?.steps.length ?? 0;
+  const changeFormValues = (values: Record<string, unknown>) => { setFormValues(values); invalidatePreview(); };
   const manualFields = useMemo(
     () => Object.entries(selected?.fieldMapping ?? {}).filter(
       (entry): entry is [string, ManualFieldBinding] => entry[1].kind === "manual",
     ),
     [selected],
   );
+  const missingManualFields = manualFields.filter(([key, binding]) => binding.required && !(manualValues[key] ?? "").trim());
   const filteredTemplates = useMemo(() => {
     const term = templateSearch.trim().toLocaleLowerCase("pt-BR");
     return term
@@ -570,6 +669,8 @@ export function DocumentGeneratorWorkspace(props: {
     if (!selected) return;
     const needsEmployee = !selected.formSchema || selected.formSchema.anchor === "employee";
     if (needsEmployee && !employeeId) return;
+    if (missingFields.length || (!selected.formSchema && missingManualFields.length)) return;
+    const revision = inputRevision.current;
     setGenerating(true);
     setMessage("");
     setNotice("");
@@ -592,6 +693,7 @@ export function DocumentGeneratorWorkspace(props: {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Falha ao gerar documento.");
+      if (!isCurrentPreviewResponse(revision, inputRevision.current)) return;
       setResult(payload.document);
       props.onGenerated?.(payload.document);
       setNotice(
@@ -627,6 +729,30 @@ export function DocumentGeneratorWorkspace(props: {
     } catch (cause) {
       previewWindow?.close();
       setMessage(cause instanceof Error ? cause.message : "Falha ao abrir o PDF.");
+    }
+  }
+
+  async function approveGeneratedDocument() {
+    if (!result || !reviewActions({ ...result, canReview }).canApprove) return;
+    const documentId = result.id;
+    const revision = inputRevision.current;
+    setApproving(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/documents/generated/${encodeURIComponent(documentId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await token()}` },
+        body: JSON.stringify({ status: "approved" }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Falha ao aprovar o documento.");
+      if (!isCurrentPreviewResponse(revision, inputRevision.current)) return;
+      setResult((current) => current?.id === documentId ? { ...current, status: payload.document?.status ?? "approved" } : current);
+      setNotice("Documento aprovado. Abra o fluxo para continuar o trabalho.");
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Falha ao aprovar o documento.");
+    } finally {
+      setApproving(false);
     }
   }
 
@@ -674,7 +800,7 @@ export function DocumentGeneratorWorkspace(props: {
                       setManualValues({});
                       setFormValues({});
                       setSchemaStep(0);
-                      setResult(null);
+                      invalidatePreview();
                     }}
                   >
                     <span className="flex items-start gap-2">
@@ -703,23 +829,26 @@ export function DocumentGeneratorWorkspace(props: {
           ) : selected.formSchema ? (
             <div className="space-y-4 p-4">
               <div className="flex flex-wrap gap-2">
-                {selected.formSchema.steps.map((step, index) => (
-                  <button key={step.id} type="button" onClick={() => setSchemaStep(index)} className={`rounded-full px-3 py-1 text-[10px] font-bold ${schemaStep === index ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-600"}`}>
-                    {index + 1}. {step.title}
+                {[...selected.formSchema.steps.map((step) => step.title), "Revisão"].map((title, index) => (
+                  <button key={index} type="button" onClick={() => setSchemaStep(index)} aria-current={schemaStep === index ? "step" : undefined} className={`rounded-full px-3 py-1 text-[10px] font-bold ${schemaStep === index ? "bg-teal-700 text-white" : stepMissing[index] ? "bg-rose-50 text-rose-700 ring-1 ring-rose-300" : "bg-slate-100 text-slate-600"}`}>
+                    {index + 1}. {title}{stepMissing[index] ? " · falta preencher" : ""}
                   </button>
                 ))}
               </div>
+              {missingFields.length || (selected.formSchema.anchor === "employee" && !employeeId) ? (
+                <p className="text-xs font-semibold text-rose-700">Obrigatórios pendentes: {[...missingFields, ...(selected.formSchema.anchor === "employee" && !employeeId ? ["Colaborador"] : [])].join(", ")}.</p>
+              ) : null}
               {selected.formSchema.anchor !== "none" ? (
                 <label className="block space-y-1.5">
                   <span className="text-xs font-bold text-slate-700">Colaborador{selected.formSchema.anchor === "employee" ? " *" : ""}</span>
                   <Input placeholder="Buscar colaborador..." value={employeeSearch} onChange={(event) => setEmployeeSearch(event.target.value)} />
-                  <select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
+                  <select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={employeeId} onChange={(event) => { setEmployeeId(event.target.value); invalidatePreview(); }}>
                     <option value="">Selecione...</option>
                     {filteredEmployees.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
                   </select>
                 </label>
               ) : null}
-              <div className="space-y-3">
+              {schemaStep < reviewStep ? <div className="space-y-3">
                 <div>
                   <h3 className="text-sm font-black text-slate-900">{selected.formSchema.steps[schemaStep]?.title}</h3>
                   {selected.formSchema.steps[schemaStep]?.description ? <p className="text-xs text-slate-500">{selected.formSchema.steps[schemaStep].description}</p> : null}
@@ -730,16 +859,33 @@ export function DocumentGeneratorWorkspace(props: {
                     field={field}
                     formValues={formValues}
                     partyOptions={partyOptions}
-                    onChange={setFormValues}
+                    onChange={changeFormValues}
+                    missing={missingFields}
                   />
                 ))}
-              </div>
+              </div> : <div className="space-y-3 rounded-lg border bg-slate-50 p-4 text-xs">
+                <h3 className="text-sm font-black text-slate-900">Revisão dos dados</h3>
+                <p>Confira os dados preenchidos e gere o PDF. Use as etapas acima para corrigir qualquer campo.</p>
+                {selected.formSchema.anchor !== "none" ? <p><strong>Colaborador:</strong> {activeUsers.find((user) => user.id === employeeId)?.username ?? "Não informado"}</p> : null}
+                {selected.formSchema.steps.map((step, index) => <section key={step.id} className="rounded-md border bg-white px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="font-bold">{step.title} {stepMissing[index] ? <span className="text-rose-700">· falta preencher</span> : null}</h4>
+                    <button type="button" className="font-semibold text-teal-700 hover:underline" onClick={() => setSchemaStep(index)}>Editar etapa</button>
+                  </div>
+                  <dl className="mt-2 space-y-1">
+                    {step.fields.filter((field) => field.kind !== "calculated" && conditionMatches(field.condition, formValues)).map((field) => <div key={field.key} className="grid gap-1 sm:grid-cols-[140px_1fr]">
+                      <dt className="text-slate-500">{field.label}</dt>
+                      <dd className="whitespace-pre-line font-medium text-slate-900">{reviewValue(field, valueAt(formValues, field.key))}</dd>
+                    </div>)}
+                  </dl>
+                </section>)}
+              </div>}
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" className="h-9 min-w-24 px-4" disabled={schemaStep === 0} onClick={() => setSchemaStep((current) => Math.max(0, current - 1))}>Anterior</Button>
-                {schemaStep < selected.formSchema.steps.length - 1 ? (
-                  <Button type="button" className="h-9 min-w-24 px-4" onClick={() => setSchemaStep((current) => Math.min(selected.formSchema!.steps.length - 1, current + 1))}>Próximo</Button>
+                {schemaStep < reviewStep ? (
+                  <Button type="button" className="h-9 min-w-24 px-4" onClick={() => setSchemaStep((current) => Math.min(reviewStep, current + 1))}>Próximo</Button>
                 ) : (
-                  <Button className="h-9 min-w-32 gap-2 px-4" disabled={(selected.formSchema.anchor === "employee" && !employeeId) || generating} onClick={() => void generate()}>
+                  <Button className="h-9 min-w-32 gap-2 px-4" disabled={(selected.formSchema.anchor === "employee" && !employeeId) || missingFields.length > 0 || generating} onClick={() => void generate()}>
                     {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FilePlus2 className="h-4 w-4" />}
                     Gerar prévia
                   </Button>
@@ -753,22 +899,18 @@ export function DocumentGeneratorWorkspace(props: {
                   </p>
                   <p className="mt-1 text-[11px] text-slate-600">
                     {result.pdfAvailable
-                      ? "Abra o PDF, confira o conteúdo e depois volte à fila para aprovar."
+                      ? "Abra o PDF e confira o conteúdo antes de aprovar."
                       : "A conversão não foi concluída. O documento não poderá ser aprovado até o PDF existir."}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {result.pdfAvailable ? (
                       <Button size="sm" variant="outline" onClick={() => void openGeneratedPdf()}>
-                        <Eye className="mr-2 h-4 w-4" />Conferir PDF
+                        <Eye className="mr-2 h-4 w-4" />Ver PDF gerado
                       </Button>
                     ) : null}
-                    {props.onBack ? (
-                      <Button size="sm" variant="outline" onClick={props.onBack}>Voltar à fila</Button>
-                    ) : (
-                      <Button size="sm" variant="outline" asChild>
-                        <Link href="/dashboard/documents/generated">Abrir documentos gerados</Link>
-                      </Button>
-                    )}
+                    {reviewActions({ ...result, canReview }).canStart ? <Button size="sm" asChild><Link href={`/dashboard/documents/generated/manage?document=${encodeURIComponent(result.id)}`}>Iniciar fluxo</Link></Button>
+                      : canReview ? <Button size="sm" disabled={!reviewActions({ ...result, canReview }).canApprove || approving} onClick={() => void approveGeneratedDocument()}>{approving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Aprovar documento</Button>
+                        : <p className="self-center text-xs text-slate-600">Aprovação exige permissão de revisão documental.</p>}
                   </div>
                 </div>
               ) : null}
@@ -790,7 +932,7 @@ export function DocumentGeneratorWorkspace(props: {
               <label className="block space-y-1.5">
                 <span className="text-xs font-bold text-slate-700">Colaborador</span>
                 <Input placeholder="Buscar colaborador..." value={employeeSearch} onChange={(event) => setEmployeeSearch(event.target.value)} />
-                <select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
+                <select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={employeeId} onChange={(event) => { setEmployeeId(event.target.value); invalidatePreview(); }}>
                   <option value="">Selecione...</option>
                   {filteredEmployees.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
                 </select>
@@ -800,11 +942,13 @@ export function DocumentGeneratorWorkspace(props: {
                 <label key={placeholder} className="block space-y-1.5">
                   <span className="text-xs font-bold text-slate-700">{binding.label}{binding.required ? " *" : ""}</span>
                   {binding.helpText ? <span className="block text-[11px] text-slate-500">{binding.helpText}</span> : null}
-                  <ManualInput binding={binding} value={manualValues[placeholder] ?? ""} onChange={(value) => setManualValues((current) => ({ ...current, [placeholder]: value }))} />
+                  <ManualInput binding={binding} missing={missingManualFields.some(([key]) => key === placeholder)} value={manualValues[placeholder] ?? ""} onChange={(value) => { setManualValues((current) => ({ ...current, [placeholder]: value })); invalidatePreview(); }} />
+                  {missingManualFields.some(([key]) => key === placeholder) ? <span className="text-xs font-semibold text-rose-700">Obrigatório</span> : null}
                 </label>
               ))}
 
-              <Button className="w-full gap-2" disabled={!employeeId || generating} onClick={() => void generate()}>
+              {!employeeId ? <p className="text-xs font-semibold text-rose-700">Selecione o colaborador para gerar o documento.</p> : null}
+              <Button className="w-full gap-2" disabled={!employeeId || generating || missingManualFields.length > 0} onClick={() => void generate()}>
                 {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FilePlus2 className="h-4 w-4" />}
                 Gerar prévia
               </Button>
@@ -816,8 +960,10 @@ export function DocumentGeneratorWorkspace(props: {
                     Prévia registrada
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {result.pdfAvailable ? <Button size="sm" variant="outline" onClick={() => void openGeneratedPdf()}>Conferir PDF</Button> : null}
-                    <Button size="sm" variant="outline" asChild><Link href="/dashboard/documents/generated">Abrir documentos gerados</Link></Button>
+                    {result.pdfAvailable ? <Button size="sm" variant="outline" onClick={() => void openGeneratedPdf()}>Ver PDF gerado</Button> : null}
+                    {reviewActions({ ...result, canReview }).canStart ? <Button size="sm" asChild><Link href={`/dashboard/documents/generated/manage?document=${encodeURIComponent(result.id)}`}>Iniciar fluxo</Link></Button>
+                      : canReview ? <Button size="sm" disabled={!reviewActions({ ...result, canReview }).canApprove || approving} onClick={() => void approveGeneratedDocument()}>Aprovar documento</Button>
+                        : <p className="self-center text-xs text-slate-600">Aprovação exige permissão de revisão documental.</p>}
                   </div>
                 </div>
               ) : null}

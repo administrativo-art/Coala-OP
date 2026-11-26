@@ -1,3 +1,6 @@
+import { subjectKey } from "@/features/privacy/person-subject";
+import { canAccessUnit } from "@/lib/unit-access";
+import { discardCancelledOnboardingDocuments } from "@/lib/hr/onboarding-document-discard.server";
 import { provisionOnboardingAuth, checkpointOnboardingIdentities } from "@/features/privacy/onboarding-provisioning.server";
 import { prepareOnboardingPersonForWrite } from "@/features/privacy/onboarding-person.server";
 import { onboardingOrigin, readOnboardingPerson } from "@/features/privacy/onboarding-person";
@@ -104,7 +107,7 @@ const patchContract = defineSecurityContract({
   exposure: 'authenticated',
   identity: { kind: 'active-user' },
   authorization: { kind: 'custom', strategy: 'formalization-action' },
-  resourceScope: { kind: 'none' },
+  resourceScope: { kind: 'custom', strategy: 'onboarding-process-workspace-unit' },
   input: { kind: 'schema', schema: 'hr-onboarding-update', unknownFields: 'reject' },
   effects: { mode: 'write', audit: 'server-authoritative' },
   errorExposure: 'sanitized',
@@ -127,7 +130,7 @@ const getEnforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown, A
 
 const patchEnforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown, Awaited<ReturnType<typeof assertFormalizationAccess>>, { id: string; body: z.infer<typeof patchBodySchema> }, undefined>({
   id: 'hr-onboarding-update-v1',
-  guarantees: ['authenticated-user', 'active-user', 'authorization:formalization-action', 'input-validated', 'fields-allowlisted'],
+  guarantees: ['authenticated-user', 'active-user', 'authorization:formalization-action', 'scope:onboarding-process-workspace-unit', 'input-validated', 'fields-allowlisted'],
   async enforce({ request, routeContext }) {
     const [routeParams, rawBody] = await Promise.all([
       routeContext.params,
@@ -147,10 +150,16 @@ const patchEnforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown,
     const actor = await assertFormalizationAccess(request, requiredPermission).catch((cause) => {
       throw new AppError({ code: 'HR_ONBOARDING_UPDATE_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Sem permissão para executar esta ação na integração.', cause, reportable: false });
     });
+    const parent = await hrDbAdmin.collection("onboardingProcesses").doc(parsedId.data).get();
+    if (!parent.exists) throw new AppError({ code: "ONBOARDING_NOT_FOUND", kind: "NOT_FOUND", safeMessage: "Processo não encontrado." });
+    assertOnboardingMutationScope(actor, parent.data() ?? {});
     return { actor, input: { id: parsedId.data, body: parsedBody.data }, resource: undefined };
   },
 });
 
+function assertOnboardingMutationScope(actor: Awaited<ReturnType<typeof assertFormalizationAccess>>, process: Record<string, unknown>) {
+  if ((process.workspaceId != null && process.workspaceId !== actor.workspaceId) || !canAccessUnit(actor.userDoc, asString(process.unitId), { isDefaultAdmin: actor.isDefaultAdmin })) throw new AppError({ code: "ONBOARDING_SCOPE_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Processo indisponível para esta unidade ou empresa." });
+}
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
@@ -955,6 +964,12 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
 
   let process = snap.data() ?? {};
   if (process.status === 'cancelled') {
+    if (action === 'retry_document_discard' || action === 'cancel') {
+      if (!process.documentDiscard) await ref.set({ documentDiscard: { status: 'pending', requestedAt: new Date().toISOString(), requestedBy: access.decoded.uid, actorId: access.decoded.uid } }, { merge: true });
+      await discardCancelledOnboardingDocuments(id, access.decoded.uid, (process) => assertOnboardingMutationScope(access, process));
+      const saved = await ref.get();
+      return NextResponse.json({ process: redactOnboardingProcess({ id, ...((serializeHrValue(saved.data()) as Record<string, unknown>) ?? {}) }, access) });
+    }
     return jsonError('Esta integração foi encerrada e está disponível somente para consulta.', 409);
   }
   const now = new Date().toISOString();
@@ -1255,6 +1270,9 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
     }
     update.publicToken = null;
     update.publicTokenClosedAt = now;
+    update.asoClinicTokenHash = null;
+    update.asoCandidateTokenHash = null;
+    update.accountantTokenHash = null;
     update.integrationAlerts = isPj ? [] : await verifyAccessIntegrations({ process, collaboratorUserId: created.userId, now });
     update.firstAccess = {
       status: 'pending',
@@ -1396,6 +1414,10 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
     update.cancelledBy = access.decoded.uid;
     update.cancelledByEmail = access.decoded.email ?? null;
     update.publicTokenClosedAt = now;
+    update.asoClinicTokenHash = null;
+    update.asoCandidateTokenHash = null;
+    update.accountantTokenHash = null;
+    update.documentDiscard = { status: 'pending', requestedAt: now, requestedBy: access.decoded.uid, actorId: access.decoded.uid };
   } else {
     return jsonError('Ação inválida.');
   }
@@ -1415,7 +1437,14 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
     }
   }
 
-  await ref.set(update, { merge: true });
+  await hrDbAdmin.runTransaction(async (tx) => {
+    const current = await tx.get(ref);
+    assertOnboardingMutationScope(access, current.data() ?? {});
+    if (current.get('status') === 'cancelled' || action === 'cancel' && current.get('status') === 'completed') throw new AppError({ code: 'ONBOARDING_STATE_CHANGED', kind: 'CONFLICT', safeMessage: 'O processo mudou. Atualize a tela antes de continuar.' });
+    tx.set(ref, update, { merge: true });
+    if (action === 'cancel') tx.set(ref.collection('audit').doc(), { action: 'ADMISSION_DOCUMENT_DISCARD_REQUESTED', actorId: access.decoded.uid, actorKeys: [subjectKey({ namespace: 'main.users', id: access.decoded.uid })], at: now });
+  });
+  if (action === 'cancel') await discardCancelledOnboardingDocuments(id, access.decoded.uid, (process) => assertOnboardingMutationScope(access, process));
 
   await logAction({
     user_id: access.decoded.uid,
@@ -1459,7 +1488,7 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
   return NextResponse.json({
     process: {
       id: saved.id,
-      ...((serializeHrValue(saved.data()) as Record<string, unknown>) ?? {}),
+      ...redactOnboardingProcess((serializeHrValue(saved.data()) as Record<string, unknown>) ?? {}, access),
       ...(responseFirstAccessUrl ? { firstAccessUrl: responseFirstAccessUrl } : {}),
     },
   });

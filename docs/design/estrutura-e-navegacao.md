@@ -17,9 +17,13 @@ Adotar `PageContainer` em toda página interna é objetivo de longo prazo, não 
 
 ## Cabeçalho e retorno
 
-O destino é título 24/800, retorno quadrado de 36px e contexto no breadcrumb superior. Ações de listas ficam no painel de controle; formulários e detalhes sem lista podem manter ações no cabeçalho.
+Nas páginas internas com a navegação global, o caminho da página (breadcrumb) aparece somente na [faixa preta superior](../../src/components/header.tsx). O corpo começa com o cabeçalho que serve à tela: título simples ou painel contextual com ações, indicadores e filtros. Preserve a hierarquia do [PageHero](cabecalho-e-etapas.md) quando o título faz parte do painel da operação. A composição de corpo `← seção › título` de telas existentes, como **Entenda a meta**, deixa de ser referência para novas telas.
 
-O retorno deve preferir um `returnTo` interno validado, depois histórico comprovadamente interno, e por fim `fallbackHref`. `history.length` sozinho não prova origem. A implementação desse contrato em `PageHeader`, `BackButton` ou tracker fica fora deste PR.
+Quando houver um destino de retorno, coloque o [botão com o nome do destino](botoes.md#voltar-para-um-destino) junto ao início do conteúdo. O caminho global continua na faixa preta. Páginas externas sem a faixa global têm navegação própria quando necessário. Uma navegação interna ao conteúdo, como pastas virtuais de um acervo, continua descrevendo o recorte em que a pessoa está trabalhando.
+
+O destino nomeado deve ser explícito e interno. Use a rota correspondente ao rótulo e preserve a seleção que faz sentido para o retorno, como mês, unidade e StoneCode ao sair de uma revisão diária. Em entradas diretas, o botão deve levar ao mesmo destino rotulado. O tamanho do histórico do navegador não prova a origem e não deve decidir o destino desse botão.
+
+A [decisão 0009](decisoes/0009-caminho-global-e-retorno.md) substitui a orientação anterior de ícone quadrado e caminho no corpo. A migração de componentes e telas será tratada em trabalho próprio.
 
 ## Painel de controle
 

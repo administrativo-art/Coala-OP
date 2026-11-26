@@ -1,5 +1,7 @@
 "use client";
 
+import { archiveSourceHref } from "./archive-source-folders";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -85,7 +87,7 @@ const plural = (count: number, one: string, many: string) => `${count} ${count =
  */
 export function CollaboratorArchive() {
   const router = useRouter();
-  const { firebaseUser, user, activeUsers, terminatedUsers, permissions, isDefaultAdmin } = useAuth();
+  const { firebaseUser, user, activeUsers, terminatedUsers, permissions, isDefaultAdmin, viewAs } = useAuth();
   const canViewTeam = isDefaultAdmin || Boolean(permissions.settings?.manageUsers || permissions.dp?.collaborators?.view && !permissions.dp?.collaborators?.ownProfileOnly);
   const canManage = isDefaultAdmin || Boolean(permissions.settings?.manageUsers || permissions.dp?.collaborators?.edit);
   const canViewGenerated = hasFormalizationPermission(permissions, "documents.view", isDefaultAdmin);
@@ -176,11 +178,10 @@ export function CollaboratorArchive() {
         return;
       }
       const ids = JSON.parse(linkedIds) as string[];
-      const [uploads, profiles, generated, onboarding] = await Promise.all([
+      const [uploads, profiles, generated] = await Promise.all([
         Promise.allSettled(ids.map((id) => query(`/api/hr/employee-documents?employeeId=${encodeURIComponent(id)}`))),
         Promise.allSettled(ids.map((id) => query(`/api/hr/employee-document-folder-profile?employeeId=${encodeURIComponent(id)}`))),
-        Promise.allSettled(canViewGenerated ? ids.map((id) => query(`/api/documents/generated?employeeId=${encodeURIComponent(id)}`)) : []),
-        Promise.allSettled(canViewGenerated && onboardingId ? [query(`/api/hr/onboarding/${encodeURIComponent(onboardingId)}`)] : []),
+        Promise.allSettled(canViewGenerated ? ids.map((id) => query(`/api/documents/generated?archiveOnly=true&employeeId=${encodeURIComponent(id)}`)) : []),
       ]);
       if (sequence.current !== request) return;
       const rows = new Map<string, ArchiveDocument>();
@@ -189,15 +190,11 @@ export function CollaboratorArchive() {
         const id = `generated:${document.id}`;
         rows.set(id, { id, source: "generated", sourceId: document.id, status: document.status, category: "generated", displayName: document.templateName || document.originalName || "Documento gerado", originalName: document.originalName || "documento.docx", uploadedAt: document.generatedAt, pdfAvailable: document.pdfAvailable, archivePath: ["Documentos gerados"], originHref: `/dashboard/documents/generated?document=${encodeURIComponent(document.id)}` });
       }
-      for (const source of onboarding) if (source.status === "fulfilled") for (const document of (source.value.process?.documents ?? []) as OnboardingDocument[]) {
-        if (document.promotedDocumentId || !(document.fileUrl || document.filePath)) continue;
-        const id = `onboarding:${document.id}`;
-        rows.set(id, { id, source: "onboarding", sourceId: document.id, category: "admission", displayName: document.label, originalName: document.label, uploadedAt: document.receivedAt ?? undefined, archivePath: ["Admissão em andamento"], originHref: `/dashboard/hr/recruitment/integration?process=${encodeURIComponent(onboardingId!)}&document=${encodeURIComponent(document.id)}` });
-      }
+
       setDocuments(groupSignedAdmissionReferences([...rows.values()]));
       setTemplatePaths(profiles.flatMap((source) => source.status === "fulfilled" ? (source.value.folderProfile?.folders ?? []).map(templateFolderPath) : []));
       loadedFor.current = loadKey;
-      if ([...uploads, ...profiles, ...generated, ...onboarding].some((result) => result.status === "rejected")) setError("Uma ou mais origens não puderam ser consultadas. Os documentos exibidos podem estar incompletos; tente Atualizar.");
+      if ([...uploads, ...profiles, ...generated].some((result) => result.status === "rejected")) setError("Uma ou mais origens não puderam ser consultadas. Os documentos exibidos podem estar incompletos; tente Atualizar.");
       else if (generated.some((result) => result.status === "fulfilled" && result.value.documents?.length >= 300)) setError("A origem de documentos gerados atingiu o limite da consulta. Consulte a gestão documental para ver os demais.");
     } catch (cause) { if (sequence.current === request) setError(cause instanceof Error ? cause.message : "Falha ao consultar os documentos."); }
     finally { if (sequence.current === request) { setLoading(false); setRefreshing(false); } }
@@ -373,6 +370,14 @@ export function CollaboratorArchive() {
       ...employeeArchiveChildFolders(allPaths, path).map((name) => folderEntry([...path, name], false)),
       ...visible.filter((document) => { const folder = pathOf(document); return folder.length === path.length && path.every((part, index) => folder[index] === part); }).map((document) => fileEntry(document, false)),
     ];
+  }
+
+  if (own && (terms.length > 0 || path.length === 0)) {
+    const personalFolders = [
+      ...(!viewAs ? [{ id: "source:receipts", name: "Meus comprovantes de ponto", href: archiveSourceHref("receipts") }, { id: "source:pilotReceipts", name: "Meus comprovantes de ponto — ensaio", href: archiveSourceHref("pilotReceipts") }] : []),
+      { id: "source:uniforms", name: "Meus termos de uniforme", href: `${archiveSourceHref("uniforms")}&mine=true` },
+    ];
+    entries.push(...personalFolders.filter((folder) => matchesArchiveSearch(terms, [folder.name])).map((folder): ArchiveEntry => ({ id: folder.id, name: folder.name, kind: "folder", location: terms.length ? "Minha pasta" : undefined, open: () => router.push(folder.href) })));
   }
 
   const published = full ? visible.filter((document) => isPublishedToEmployee(document)).length : visible.length;

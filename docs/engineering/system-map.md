@@ -45,3 +45,6 @@ Entradas sem tela: [jobs, gatilhos e webhooks](runtime-surfaces.md); [autentica�
 Orçamentos por categoria/projeto, [comparação com despesas](../../src/app/dashboard/financial/budget-comparison/page.tsx) e simulação no caixa: [guia de orçamentos](flows/financial-budgets.md).
 
 Prestadores de serviço e Portal do Contador — [gestão e acesso](service-provider-access.md), [página administrativa](../../src/app/dashboard/dp/prestadores/page.tsx).
+
+
+26/11/2026 — Document Central também projeta fontes contextuais em pastas por origem e anexos por processo de admissão. Consultar document-central e plano-garantia-pastas-documentais para permissões, índices locais e limitações de legado/preparação; projeção de pasta não cria titular, cópia ou autorização.

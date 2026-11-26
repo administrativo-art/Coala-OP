@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "nonPersonalCollections": [
+    "onboardingDocumentDiscardQueue",
     "accounts",
     "dailySalesRefundWatches",
     "dp_units",

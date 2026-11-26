@@ -57,6 +57,7 @@ export function canViewPersonSource(actor: ServerUserContext, source: Source): b
 }
 /** Source-native scope fields; financial result centers never become operational units. */
 export function canViewPersonRecord(actor: ServerUserContext, source: Source, data: Record<string, unknown> | undefined): boolean {
+  if (["fiscal-afd-export-actors", "fiscal-aej-export-actors"].includes(source.id) && data?.workspaceId !== actor.workspace_id) return false;
   // Existing cash-withdrawal claims own their tenant under source, not at the root.
   if (source.id === "financial-source-settlement-updaters") {
     const native = (data?.source as { workspaceId?: unknown } | undefined)?.workspaceId;

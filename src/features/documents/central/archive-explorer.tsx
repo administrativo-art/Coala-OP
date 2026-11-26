@@ -31,6 +31,8 @@ import { cn } from "@/lib/utils";
 import { warmPdfjs } from "@/lib/pdf/pdfjs-client";
 import { ArchiveSearchInput } from "./archive-search-input";
 import { ArchivePreviewVariantContext } from "./archive-preview";
+import { CONTEXT_ARCHIVE_FOLDERS, managesUniformArchive } from "./context-archive-access";
+import { canViewArchiveSource } from "./archive-source-folders";
 
 export type ArchiveArea = "company" | "collaborators" | "financial" | "models" | "published";
 export type ArchiveAction = { label: string; run: () => void; destructive?: boolean };
@@ -51,9 +53,12 @@ export const COLLABORATOR_SEARCH_EXAMPLES = ["atestado agosto", "férias 2025", 
 export const PEOPLE_SEARCH_EXAMPLES = ["nome do colaborador", "sobrenome"] as const;
 
 export function useCompanyArchiveAccess() {
-  const { permissions, isDefaultAdmin } = useAuth();
+  const { permissions, isDefaultAdmin, user } = useAuth();
   return {
     documents: hasFormalizationPermission(permissions, "companyDocuments.view", isDefaultAdmin),
+    generated: hasFormalizationPermission(permissions, "documents.view", isDefaultAdmin),
+    editor: hasFormalizationPermission(permissions, "documents.generate", isDefaultAdmin),
+    contextual: (Object.keys(CONTEXT_ARCHIVE_FOLDERS) as Array<keyof typeof CONTEXT_ARCHIVE_FOLDERS>).some((source) => source !== "receipts" && source !== "pilotReceipts" && (source !== "uniforms" || managesUniformArchive({ permissions, isDefaultAdmin, userDoc: user ?? {} })) && canViewArchiveSource(source, permissions, isDefaultAdmin, user ?? {})),
     financial: isDefaultAdmin || Boolean(permissions.financial?.view && permissions.financial?.inbox?.view),
     models: hasFormalizationPermission(permissions, "templates.view", isDefaultAdmin),
     people: isDefaultAdmin || Boolean(permissions.settings?.manageUsers || permissions.dp?.collaborators?.view && !permissions.dp?.collaborators?.ownProfileOnly),
@@ -61,8 +66,8 @@ export function useCompanyArchiveAccess() {
 }
 
 /** A aba Empresa existe para quem vê alguma pasta da empresa; a aba Colaborador, para todos. */
-export function hasCompanyArchiveTab(access: ReturnType<typeof useCompanyArchiveAccess>) {
-  return access.documents || access.financial || access.models;
+export function hasCompanyArchiveTab(access: { documents: boolean; financial: boolean; models: boolean; generated?: boolean; editor?: boolean; contextual?: boolean }) {
+  return Boolean(access.documents || access.financial || access.models || access.generated || access.editor || access.contextual);
 }
 export function archiveAreaHref(area: ArchiveArea) {
   if (area === "company") return "/dashboard/documents";

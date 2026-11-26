@@ -13,6 +13,7 @@ export type GeneratedDocumentStatus = (typeof GENERATED_DOCUMENT_STATUSES)[numbe
 export const SIGNATURE_REQUEST_STATUSES = [
   "pending",
   "sending",
+  "send_unconfirmed",
   "sent",
   "viewed",
   "partially_signed",
@@ -77,6 +78,7 @@ export const DOCUMENT_STATUS_LABELS: Record<GeneratedDocumentStatus, string> = {
 export const SIGNATURE_STATUS_LABELS: Record<SignatureRequestStatus, string> = {
   pending: "Aguardando envio",
   sending: "Enviando",
+  send_unconfirmed: "Envio sem confirmação",
   sent: "Enviado",
   viewed: "Visualizado",
   partially_signed: "Parcialmente assinado",

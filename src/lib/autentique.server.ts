@@ -72,8 +72,7 @@ async function autentiqueGraphql<T>(query: string, variables: Record<string, unk
     errors?: GraphqlError[];
   } | null;
   if (!response.ok || payload?.errors?.length || !payload?.data) {
-    const detail = payload?.errors?.map((error) => error.message).filter(Boolean).join("; ");
-    throw new Error(detail || `Não foi possível acessar a Autentique (HTTP ${response.status}).`);
+    throw new AutentiqueProviderError(response.status);
   }
   return payload.data;
 }
@@ -115,7 +114,8 @@ export async function getAutentiqueDocumentSignatures(documentId: string) {
       signatures?: AutentiqueCreatedDocument["signatures"];
     };
   }>(query, { id: documentId });
-  if (!data.document) throw new Error("Documento não encontrado no Autentique.");
+  if (!data.document) throw new AutentiqueRuleError("Documento não encontrado no Autentique.");
+  if (data.document.id !== documentId) throw new AutentiqueProviderError();
   const signaturesCount = Number(data.document.signatures_count ?? 0);
   const signedCount = Number(data.document.signed_count ?? 0);
   const signedUrl = data.document.files?.signed ?? null;
@@ -134,7 +134,7 @@ export async function addAutentiqueSigner(params: {
   signer: AutentiqueSignerInput;
 }) {
   if (!params.signer.email && !params.signer.phone && !params.signer.name) {
-    throw new Error("O novo signatário precisa de e-mail, telefone ou nome.");
+    throw new AutentiqueRuleError("O novo signatário precisa de e-mail, telefone ou nome.");
   }
   const mutation = `mutation AddSigner($document_id: UUID!, $signer: SignerInput) {
     createSigner(document_id: $document_id, signer: $signer) {
@@ -160,18 +160,18 @@ export async function addAutentiqueSigner(params: {
       ...(params.signer.positions?.length ? { positions: params.signer.positions } : {}),
     },
   });
-  if (!data.createSigner) throw new Error("O Autentique não confirmou o novo signatário.");
+  if (!data.createSigner) throw new AutentiqueProviderError();
   return data.createSigner;
 }
 
 export async function resendAutentiqueSignatures(publicIds: string[]) {
-  if (!publicIds.length) throw new Error("Informe ao menos uma assinatura para reenviar.");
+  if (!publicIds.length) throw new AutentiqueRuleError("Informe ao menos uma assinatura para reenviar.");
   const data = await autentiqueGraphql<{ resendSignatures?: boolean }>(
     buildResendSignaturesMutation(),
     { public_ids: publicIds },
   );
   if (data.resendSignatures !== true) {
-    throw new Error("O Autentique não confirmou o reenvio da assinatura.");
+    throw new AutentiqueProviderError();
   }
 }
 
@@ -180,7 +180,7 @@ export async function createAutentiqueSignatureLink(publicId: string) {
     createLinkToSignature?: { short_link?: string | null };
   }>(buildCreateSignatureLinkMutation(), { public_id: publicId });
   const shortLink = data.createLinkToSignature?.short_link?.trim();
-  if (!shortLink) throw new Error("O Autentique não retornou o link de assinatura.");
+  if (!shortLink) throw new AutentiqueProviderError();
   return shortLink;
 }
 
@@ -193,7 +193,7 @@ export async function deleteAutentiqueSigner(params: {
     { public_id: params.publicId, document_id: params.documentId },
   );
   if (data.deleteSigner !== true) {
-    throw new Error("O Autentique não confirmou a remoção do signatário anterior.");
+    throw new AutentiqueProviderError();
   }
 }
 
@@ -224,10 +224,10 @@ export async function getAutentiqueDocumentStatus(documentId: string) {
   });
   const payload = await response.json().catch(() => null) as { data?: { document?: { id: string; signatures_count?: number; signed_count?: number; files?: { signed?: string | null } } }; errors?: GraphqlError[] } | null;
   if (!response.ok || payload?.errors?.length || !payload?.data?.document) {
-    const detail = payload?.errors?.map((error) => error.message).filter(Boolean).join("; ");
-    throw new Error(detail || `Não foi possível consultar a Autentique (HTTP ${response.status}).`);
+    throw new AutentiqueProviderError(response.status);
   }
   const document = payload.data.document;
+  if (document.id !== documentId) throw new AutentiqueProviderError();
   return {
     id: document.id,
     signaturesCount: Number(document.signatures_count ?? 0),
@@ -246,9 +246,9 @@ export async function createAutentiqueDocument(params: {
 }) {
   const token = process.env.AUTENTIQUE_API_TOKEN?.trim();
   if (!token) throw new Error("AUTENTIQUE_API_TOKEN não configurado.");
-  if (!params.signers.length) throw new Error("Informe ao menos um signatário.");
+  if (!params.signers.length) throw new AutentiqueRuleError("Informe ao menos um signatário.");
   if (params.signers.some((signer) => !signer.email && !signer.phone && !signer.name)) {
-    throw new Error("Todo signatário precisa de e-mail, telefone ou nome.");
+    throw new AutentiqueRuleError("Todo signatário precisa de e-mail, telefone ou nome.");
   }
 
   const sandbox = autentiqueSandboxEnabled();
@@ -307,14 +307,13 @@ export async function createAutentiqueDocument(params: {
       }
     | null;
   if (!response.ok || payload?.errors?.length || !payload?.data?.createDocument) {
-    const detail = payload?.errors
-      ?.map((error) => error.message)
-      .filter(Boolean)
-      .join("; ");
-    throw new Error(
-      detail || `Autentique recusou o envio (HTTP ${response.status}).`
-    );
+    throw new AutentiqueProviderError(response.status);
   }
 
   return { document: payload.data.createDocument, sandbox };
+}
+/** Controlled input/not-found rules; upstream response text is never a user message. */
+export class AutentiqueRuleError extends Error {}
+export class AutentiqueProviderError extends Error {
+  constructor(readonly status?: number) { super("Não foi possível confirmar o resultado da operação na Autentique."); }
 }
