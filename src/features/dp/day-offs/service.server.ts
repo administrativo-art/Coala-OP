@@ -109,6 +109,10 @@ function opaqueId(...parts: string[]) {
   return createHash('sha256').update(JSON.stringify(parts)).digest('hex').slice(0, 32);
 }
 
+export function dayOffOperationRef(workspaceId: string, userId: string, date: string) {
+  return dbAdmin.collection(OPERATIONS_COLLECTION).doc(opaqueId(workspaceId, userId, date));
+}
+
 function previousDates(date: string, count: number) {
   const cursor = new Date(`${date}T12:00:00.000Z`);
   return Array.from({ length: count }, (_, index) => {
@@ -153,7 +157,7 @@ function businessAudit(params: {
   };
 }
 
-function assertPublishPermission(context: ServerUserContext) {
+export function assertPublishDayOffPermission(context: ServerUserContext) {
   if (
     !context.isDefaultAdmin
     && (
@@ -219,10 +223,10 @@ async function prepareDayOff(params: {
   requestId: string;
 }): Promise<PreparedDayOff> {
   const { context, scheduleId, input, requestId } = params;
-  assertPublishPermission(context);
+  assertPublishDayOffPermission(context);
 
-  const operationId = opaqueId(context.workspace_id, input.userId, input.date);
-  const operationRef = dbAdmin.collection(OPERATIONS_COLLECTION).doc(operationId);
+  const operationRef = dayOffOperationRef(context.workspace_id, input.userId, input.date);
+  const operationId = operationRef.id;
   const scheduleRef = dbAdmin.collection('dp_schedules').doc(scheduleId);
   const userRef = dbAdmin.collection('users').doc(input.userId);
   const unitRef = dbAdmin.collection('dp_units').doc(input.unitId);
@@ -491,9 +495,6 @@ async function prepareDayOff(params: {
 
     const legacyPublicationFence = !revisionId ? await preparePublicationFenceAdvance(transaction,
       context.workspace_id, [input.userId]) : null;
-    if (operationalGuardRequested()) await guardOccupancyWrite(transaction, context.workspace_id,
-      [{ beneficiaryUid: input.userId, date: input.date, fromMinute: 0, toMinute: 1440, addsOccupancy: false }], 4);
-    legacyPublicationFence?.apply();
     const now = Timestamp.now();
     const confirmedAt = existingDayOff?.get('dayOffConfirmedAt') ?? now;
     const shiftPayload = {
@@ -516,12 +517,19 @@ async function prepareDayOff(params: {
       updatedAt: now,
       ...(!existingDayOff ? { createdAt: now } : {}),
     };
+    // Todas as leituras (revisão oficial) vêm antes de qualquer escrita; a proteção de ocupação lê e escreve ao final.
+    let overlay: Awaited<ReturnType<typeof prepareActiveRevisionOperationalChanges>> | null = null;
     if (revisionId) {
       const next = { ...(existingDayOff?.data() ?? {}), ...shiftPayload } as Record<string, unknown>;
       delete next.bizneoLastErrorCode;
-      const overlay = await prepareActiveRevisionOperationalChanges({ tx: transaction, schedule: scheduleSnapshot, workspaceId: context.workspace_id,
+      overlay = await prepareActiveRevisionOperationalChanges({ tx: transaction, schedule: scheduleSnapshot, workspaceId: context.workspace_id,
         changes: [{ shiftId: shiftRef.id, previous: existingDayOff?.data() ?? null, next }],
         actorId: context.decoded.uid, reason: 'day_off_publishing' });
+    }
+    if (operationalGuardRequested()) await guardOccupancyWrite(transaction, context.workspace_id,
+      [{ beneficiaryUid: input.userId, date: input.date, fromMinute: 0, toMinute: 1440, addsOccupancy: false }], 4);
+    legacyPublicationFence?.apply();
+    if (overlay) {
       overlay.apply();
     } else {
       transaction.set(shiftRef, shiftPayload, { merge: true });
@@ -761,10 +769,10 @@ async function prepareDayOffRemoval(params: {
   requestId: string;
 }): Promise<PreparedDayOffRemoval> {
   const { context, scheduleId, input, requestId } = params;
-  assertPublishPermission(context);
+  assertPublishDayOffPermission(context);
 
-  const operationId = opaqueId(context.workspace_id, input.userId, input.date);
-  const operationRef = dbAdmin.collection(OPERATIONS_COLLECTION).doc(operationId);
+  const operationRef = dayOffOperationRef(context.workspace_id, input.userId, input.date);
+  const operationId = operationRef.id;
   const scheduleRef = dbAdmin.collection('dp_schedules').doc(scheduleId);
   const shiftRef = scheduleRef.collection('shifts').doc(input.shiftId);
   const userRef = dbAdmin.collection('users').doc(input.userId);
@@ -859,8 +867,6 @@ async function prepareDayOffRemoval(params: {
       });
     }
 
-    if (operationalGuardRequested()) await guardOccupancyWrite(transaction, context.workspace_id,
-      [{ beneficiaryUid: input.userId, date: input.date, fromMinute: 0, toMinute: 1440, addsOccupancy: false }], 3);
     const now = Timestamp.now();
     const removing: Record<string, unknown> = { ...(shiftSnapshot.data() ?? {}), bizneoSyncStatus: 'removing',
       bizneoSyncUpdatedAt: now, updatedAt: now };
@@ -868,6 +874,8 @@ async function prepareDayOffRemoval(params: {
     const overlay = revisionId ? await prepareActiveRevisionOperationalChanges({ tx: transaction, schedule: scheduleSnapshot, workspaceId: context.workspace_id,
       changes: [{ shiftId: shiftRef.id, previous: shiftSnapshot.data() ?? null, next: removing }],
       actorId: context.decoded.uid, reason: 'day_off_removing' }) : null;
+    if (operationalGuardRequested()) await guardOccupancyWrite(transaction, context.workspace_id,
+      [{ beneficiaryUid: input.userId, date: input.date, fromMinute: 0, toMinute: 1440, addsOccupancy: false }], 3);
     if (overlay) overlay.apply(); else transaction.update(shiftRef, {
       bizneoSyncStatus: 'removing',
       bizneoSyncUpdatedAt: now,

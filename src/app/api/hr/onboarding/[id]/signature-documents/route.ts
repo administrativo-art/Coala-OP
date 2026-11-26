@@ -14,6 +14,7 @@ import {
   resendAdmissionParticipantSignature,
   reviewSignaturePackage,
   saveAdmissionSignaturePlacement,
+  setAdmissionFamilySalaryDecision,
   selectSignatureTemplates,
   sendSignatureDocuments,
 } from "@/features/hr/documents/signature-workflow.server";
@@ -189,7 +190,15 @@ export async function POST(
       return error("Os dados da ação sobre o signatário são inválidos.");
     }
     let result;
-    if (action === "select") {
+    if (action === "set_family_salary_decision") {
+      if (typeof body.grant !== "boolean") return error("Informe a decisão sobre a concessão do salário-família.");
+      result = await setAdmissionFamilySalaryDecision({
+        onboardingId: id,
+        grant: body.grant,
+        actorId: access.decoded.uid,
+        actorName: access.actorName,
+      });
+    } else if (action === "select") {
       result = await selectSignatureTemplates({
         onboardingId: id,
         templateIds: stringArray(body.templateIds),

@@ -8,6 +8,8 @@ import { format, getDaysInMonth, isToday, parseISO, parse, subDays } from 'date-
 import { ptBR } from 'date-fns/locale';
 
 import { useDP } from '@/components/dp-context';
+import { useDPStore } from '@/store/use-dp-store';
+import { countExpectedDPUnitDays } from '@/lib/dp-schedule-progress';
 import { notifyDPScheduleShiftsChanged, useDPShifts } from '@/hooks/use-dp-shifts';
 import { useDPHolidays } from '@/hooks/use-dp-holidays';
 import { useDPSiblingShifts } from '@/hooks/use-dp-sibling-shifts';
@@ -18,7 +20,10 @@ import { useAuth } from '@/hooks/use-auth';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { useKiosks } from '@/hooks/use-kiosks';
 import type { DPCoverageDemandWindow, DPSchedule, DPShift, DPUnit, DPVacationRecord, User } from '@/types';
+import { DPManualJourneyDialog } from './dp-manual-journey-dialog';
+import { reviewSplitJourney, validSplitJourneyShiftIds } from '@/features/dp/schedules/split-journey';
 import { discardDraftConflicts, fetchDraftScheduleShifts, fetchSchedule, publishDraftSchedule, subscribeToDPScheduleShiftChanges } from '@/features/dp/schedules/client';
+import { manualShiftDaySchema } from '@/features/dp/shifts/schemas';
 import { hasPublishedScheduleVersion, schedulePublicationStatus } from '@/lib/dp-schedule-publication';
 import { AbsencePreviewPanel } from '@/features/dp/absences/requests/preview-panel';
 import type { PublishDayOffResult, RemoveDayOffResult } from '@/features/dp/day-offs/schemas';
@@ -92,11 +97,10 @@ import {
   isDayOffShift,
   isWorkShift,
 } from '@/lib/dp-shift-rules';
-import { buildDailyUnitCoverage } from '@/lib/dp-operating-hours';
 import {
-  buildDailyOnDemandCoverage,
+  buildDailyEmptyUnitCoverage,
+  alertsWhenUnitEmpty,
   normalizeDPCoverageDemands,
-  resolveDPCoverageMode,
   saveCoverageDemandsSchema,
   type DPDailyCoverage,
 } from '@/lib/dp-coverage-demands';
@@ -184,6 +188,9 @@ const shiftSchema = z.object({
   unitId: z.string().min(1, 'Selecione uma unidade.'),
   date: z.string().min(1, 'Selecione a data.'),
   shiftDefinitionId: z.string().optional(),
+  manualDay: manualShiftDaySchema.nullish(),
+  manualBreakStart: z.string().optional(),
+  manualBreakEnd: z.string().optional(),
   startTime: z.string().min(1, 'Informe o horário de início.'),
   endTime: z.string().min(1, 'Informe o horário de fim.'),
   exceptionReason: z.string().optional(),
@@ -199,11 +206,14 @@ interface ShiftDialogProps {
   defaultDate?: string;
   defaultUnitId?: string;
   units: DPUnit[];
+  relatedUnits?: DPUnit[];
+  onEditJourney?: () => void;
   shiftDefinitions: DPShiftDefinition[];
   open: boolean;
   onOpenChange: (v: boolean) => void;
   /** userId → Set<date> of dates already occupied in sibling units */
   siblingOccupied?: Map<string, Set<string>>;
+  siblingDraftIds?: string[];
   /** userId → datas com folga explicitamente registrada */
   dayOffOccupied?: Map<string, Set<string>>;
   vacations: DPVacationRecord[];
@@ -211,7 +221,7 @@ interface ShiftDialogProps {
 }
 
 function ShiftDialog({
-  scheduleId, shift, defaultDate, defaultUnitId, units, shiftDefinitions, open, onOpenChange, siblingOccupied, dayOffOccupied, vacations, onDelete,
+  scheduleId, shift, defaultDate, defaultUnitId, units, relatedUnits, onEditJourney, shiftDefinitions, open, onOpenChange, siblingOccupied, siblingDraftIds, dayOffOccupied, vacations, onDelete,
 }: ShiftDialogProps) {
   const { activeUsers, permissions, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
@@ -250,6 +260,9 @@ function ShiftDialog({
       unitId: shift?.unitId ?? defaultUnitId ?? '',
       date: shift?.date ?? defaultDate ?? '',
       shiftDefinitionId: shift?.shiftDefinitionId ?? '',
+      manualDay: shift?.manualDay ?? null,
+      manualBreakStart: shift?.manualBreak?.start ?? '',
+      manualBreakEnd: shift?.manualBreak?.end ?? '',
       startTime: shift?.startTime ?? '',
       endTime: shift?.endTime ?? '',
       exceptionReason: shift?.exceptionReason ?? '',
@@ -263,10 +276,14 @@ function ShiftDialog({
         unitId: shift?.unitId ?? defaultUnitId ?? '',
         date: shift?.date ?? defaultDate ?? '',
         shiftDefinitionId: shift?.shiftDefinitionId ?? '',
+        manualDay: shift?.manualDay ?? null,
+        manualBreakStart: shift?.manualBreak?.start ?? '',
+        manualBreakEnd: shift?.manualBreak?.end ?? '',
         startTime: shift?.startTime ?? '',
         endTime: shift?.endTime ?? '',
         exceptionReason: shift?.exceptionReason ?? '',
       });
+      setDetachManualDay(false);
       const isExternal = shift?.assignmentKind === 'external_coverage';
       setExternalMode(isExternal);
       setCandidateSearch('');
@@ -295,6 +312,50 @@ function ShiftDialog({
   const selectedUnitId = form.watch('unitId');
   const selectedShiftDefinitionId = form.watch('shiftDefinitionId');
   const hasSelectedShiftDefinition = Boolean(selectedShiftDefinitionId);
+  const manualDay = form.watch('manualDay');
+  const [relatedDraft, setRelatedDraft] = useState<{
+    userId: string; date: string; periods: DPShift[]; error: boolean;
+  } | null>(null);
+  const [lookupPending, setLookupPending] = useState(false);
+  const [detachManualDay, setDetachManualDay] = useState(false);
+  const activeRelated = relatedDraft?.userId === selectedUserId && relatedDraft?.date === selectedDate
+    ? relatedDraft : null;
+  const linkedPeriod = activeRelated?.periods[0];
+  const linkedDay = detachManualDay ? null : linkedPeriod?.manualDay;
+  const linkConflict = activeRelated?.periods.some((period) =>
+    period.manualDayId !== linkedPeriod?.manualDayId || JSON.stringify(period.manualDay) !== JSON.stringify(linkedDay));
+  React.useEffect(() => {
+    if (!open || !selectedUserId || !selectedDate) return;
+    let cancelled = false;
+    void Promise.resolve().then(async () => {
+      if (cancelled) return;
+      setLookupPending(true);
+      try {
+        const relatedScheduleIds = [...new Set([scheduleId, ...(siblingDraftIds ?? [])])];
+        const drafts = await Promise.all(relatedScheduleIds.map(fetchDraftScheduleShifts));
+        if (!cancelled) setRelatedDraft({ userId: selectedUserId, date: selectedDate, error: false,
+          periods: drafts.flatMap((draft) => draft.shifts.filter((period) =>
+            period.userId === selectedUserId && period.date === selectedDate && Boolean(period.manualDay)
+            && !(period.scheduleId === scheduleId && period.id === shift?.id))) });
+      } catch {
+        if (!cancelled) setRelatedDraft({ userId: selectedUserId, date: selectedDate, error: true, periods: [] });
+      } finally {
+        if (!cancelled) setLookupPending(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [open, scheduleId, selectedDate, selectedUserId, shift?.id, siblingDraftIds]);
+  const manualBreakStart = form.watch('manualBreakStart');
+  const manualBreakEnd = form.watch('manualBreakEnd');
+  const currentSegmentId = 'current-period';
+  const relatedPeriods = activeRelated?.periods ?? [];
+  const splitReview = linkedDay && relatedPeriods.length
+    ? reviewSplitJourney([
+      ...relatedPeriods.map((period) => ({ ...period, id: `${period.scheduleId}:${period.id}` })),
+      { id: currentSegmentId, unitId: selectedUnitId, startTime: form.watch('startTime'), endTime: form.watch('endTime'),
+        manualOrder: shift?.manualOrder, manualDay: shift?.manualDay,
+        manualBreak: manualBreakStart && manualBreakEnd ? { start: manualBreakStart, end: manualBreakEnd } : null },
+    ]) : null;
   const vacationConflict = useMemo(
     () => findApprovedVacationForDate(vacations, selectedUserId, selectedDate),
     [selectedDate, selectedUserId, vacations],
@@ -306,6 +367,11 @@ function ShiftDialog({
 
   function handleDefinitionChange(defId: string) {
     form.setValue('shiftDefinitionId', defId);
+    if (defId) {
+      form.setValue('manualDay', null);
+      form.setValue('manualBreakStart', '');
+      form.setValue('manualBreakEnd', '');
+    }
     const def = shiftDefinitions.find(d => d.id === defId);
     if (def) {
       form.setValue('startTime', def.startTime);
@@ -349,8 +415,8 @@ function ShiftDialog({
     }
     if (dayOffOccupied?.get(values.userId)?.has(values.date)) {
       toast({
-        title: 'Existe um DSR confirmado nesta data.',
-        description: 'Remova o DSR e aguarde a confirmação do Bizneo antes de atribuir o turno.',
+        title: 'Existe um DSR nesta data.',
+        description: 'Remova o DSR antes de atribuir o turno.',
         variant: 'destructive',
       });
       return;
@@ -368,8 +434,21 @@ function ShiftDialog({
 
     const hasCrossConflict = !!siblingOccupied?.get(values.userId)?.has(values.date);
     const userName = selectedExternal?.username ?? activeUsers.find((user) => user.id === values.userId)?.username ?? shift?.userName;
+    if (!detachManualDay && !values.shiftDefinitionId && (values.manualDay || linkedDay) && (lookupPending || linkConflict || activeRelated?.error)) {
+      toast({ title: 'Confira os períodos das outras unidades antes de salvar a jornada manual.', variant: 'destructive' });
+      return;
+    }
+    const { manualBreakStart, manualBreakEnd, ...shiftFields } = values;
+    const manualConfiguration = values.shiftDefinitionId ? null : linkedDay ?? values.manualDay ?? null;
+    if (!values.shiftDefinitionId && (linkedDay || values.manualDay) && Boolean(manualBreakStart) !== Boolean(manualBreakEnd)) {
+      toast({ title: 'Informe o início e o fim do intervalo deste período.', variant: 'destructive' });
+      return;
+    }
     const payload = {
-      ...values,
+      ...shiftFields,
+      manualBreak: !values.shiftDefinitionId && (linkedDay || values.manualDay) && manualBreakStart && manualBreakEnd
+        ? { start: manualBreakStart, end: manualBreakEnd } : null,
+      manualDay: manualConfiguration,
       exceptionReason: externalMode ? values.exceptionReason?.trim() : undefined,
       scheduleId,
       ...(userName ? { userName } : {}),
@@ -570,6 +649,88 @@ function ShiftDialog({
               )} />
             </div>
 
+            {!hasSelectedShiftDefinition && (
+              <fieldset className="mt-4 space-y-2 rounded-md border p-3">
+                <legend className="px-1 text-xs font-semibold">Apuração do turno manual</legend>
+                {linkedDay && (
+                  <p className="text-xs text-ds-ink-muted">
+                    Jornada do dia já iniciada em {units.find((unit) => unit.id === linkedPeriod?.unitId)?.name ?? 'outra unidade'}.
+                  </p>
+                )}
+                <Select disabled={Boolean(linkedDay)} value={(linkedDay ?? manualDay)?.mode ?? 'journey'} onValueChange={(mode) => {
+                  const expectedBreakMinutes = manualDay?.expectedBreakMinutes ?? 0;
+                  form.setValue('manualDay', mode === 'fixed' ? { mode, expectedBreakMinutes }
+                    : mode === 'flexible' ? { mode, expectedWorkMinutes: 480, expectedBreakMinutes } : null);
+                }}>
+                  <SelectTrigger aria-label="Regime do turno manual"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="journey">Usar jornada vigente</SelectItem>
+                    <SelectItem value="fixed">Fixo</SelectItem>
+                    <SelectItem value="flexible">Flexível</SelectItem>
+                  </SelectContent>
+                </Select>
+                {linkedDay && <p className="text-xs">Intervalo no dia: {linkedDay.expectedBreakMinutes} min.{linkedDay.mode === 'flexible' ? ` Carga líquida: ${linkedDay.expectedWorkMinutes} min.` : ''}</p>}
+                {!linkedDay && manualDay && (
+                  <label className="block text-xs">Intervalo previsto no dia, em minutos
+                    <Input type="number" min={0} max={480} value={manualDay.expectedBreakMinutes}
+                      onChange={(event) => form.setValue('manualDay', { ...manualDay, expectedBreakMinutes: event.target.valueAsNumber })} />
+                  </label>
+                )}
+                {!linkedDay && manualDay?.mode === 'flexible' && (
+                  <label className="block text-xs">Carga líquida esperada no dia, em minutos
+                    <Input type="number" min={1} max={1439} value={manualDay.expectedWorkMinutes}
+                      onChange={(event) => form.setValue('manualDay', { ...manualDay, expectedWorkMinutes: event.target.valueAsNumber })} />
+                  </label>
+                )}
+                {(linkedDay ?? manualDay) && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block text-xs">Início do intervalo neste período
+                      <Input type="time" {...form.register('manualBreakStart')} />
+                    </label>
+                    <label className="block text-xs">Fim do intervalo neste período
+                      <Input type="time" {...form.register('manualBreakEnd')} />
+                    </label>
+                  </div>
+                )}
+                {(linkedDay ?? manualDay) && (
+                  <>
+                    {splitReview && (
+                      <div className="space-y-1 text-xs">
+                        <ol className="list-decimal pl-5">
+                          {splitReview.segments.map((segment) => (
+                            <li key={segment.id}>
+                              {(relatedUnits ?? units).find((unit) => unit.id === segment.unitId)?.name ?? 'Unidade não informada'}
+                              {' · '}{segment.startTime || '—'}–{segment.endTime || '—'}
+                            </li>
+                          ))}
+                        </ol>
+                        {splitReview.issues.length === 0 && (
+                          <p>{splitReview.journeyMinutes} min de jornada
+                            {' · '}{splitReview.breakMinutes} min de pausa</p>
+                        )}
+                        {splitReview.changes.some(({ minutes }) => minutes === 0) &&
+                          <p className="text-amber-700">Sem janela para a troca de unidade.</p>}
+                        {splitReview.segments.map((segment, index) => splitReview.issues
+                          .filter((issue) => issue.segmentId === segment.id)
+                          .map((issue) => <p key={`${segment.id}:${issue.code}`}>Trecho {index + 1}. {issue.message}</p>))}
+                      </div>
+                    )}
+                    <p className="text-xs text-ds-ink-muted">
+                      A escala fica em rascunho enquanto houver um período com esta configuração.
+                    </p>
+                    {isEdit && shift?.manualDay && (
+                      <Button type="button" variant="outline" size="sm" onClick={() => {
+                        setDetachManualDay(true);
+                        form.setValue('manualDay', null);
+                        form.setValue('manualBreakStart', '');
+                        form.setValue('manualBreakEnd', '');
+                      }}>Remover configuração manual</Button>
+                    )}
+                  </>
+                )}
+              </fieldset>
+            )}
+
             {vacationConflict && (
               <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -581,6 +742,7 @@ function ShiftDialog({
             )}
 
             <DialogFooter className="mt-6! flex! flex-row! items-center! justify-between! gap-3 sm:justify-between! sm:space-x-0!">
+          {onEditJourney && <Button type="button" variant="outline" onClick={onEditJourney}>Editar jornada do dia</Button>}
               {isEdit && shift && onDelete ? (
                 <Button type="button" variant="outline" onClick={() => onDelete(shift)} className="h-[34px] rounded-[10px] border-[#fbd0da] px-[13px] text-[12.5px] font-extrabold text-[#be123c] hover:border-[#f7a9bc] hover:bg-[#fef2f4] hover:text-[#be123c]">
                   Remover
@@ -600,7 +762,7 @@ function ShiftDialog({
   );
 }
 
-/** Escolha da pessoa no dia: DSR (publicado no Bizneo como folga) ou ausência (abre o pedido com a pessoa e a data). */
+/** Escolha da pessoa para adicionar o DSR ao rascunho ou abrir um pedido de ausência. */
 function ManualDayOffDialog({
   open,
   onOpenChange,
@@ -641,11 +803,11 @@ function ManualDayOffDialog({
     <Dialog open={open} onOpenChange={(nextOpen) => !submitting && onOpenChange(nextOpen)}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>{absence ? 'Lançar ausência' : 'Lançar DSR'}</DialogTitle>
+          <DialogTitle>{absence ? 'Lançar ausência' : 'Adicionar DSR ao rascunho'}</DialogTitle>
           <DialogDescription>
             {absence
               ? 'Escolha a pessoa e preencha o tipo de ausência em seguida. O efeito no ponto vem da configuração do tipo.'
-              : 'O descanso semanal remunerado será registrado no Coala One e publicado no Bizneo como folga.'}
+              : 'O DSR ficará no rascunho e será enviado ao Bizneo após a publicação da escala.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -674,7 +836,7 @@ function ManualDayOffDialog({
           <p className="text-xs text-muted-foreground">
             {absence
               ? 'Abono, atestado, falta e débito no banco são tipos de ausência; o DSR é lançado à parte.'
-              : 'Se existir um turno de trabalho nessa data, remova ou substitua o turno antes de lançar o DSR.'}
+              : 'Se houver um turno para a pessoa nesse dia, remova ou substitua o turno no rascunho antes de adicionar o DSR.'}
           </p>
         </div>
 
@@ -684,7 +846,7 @@ function ManualDayOffDialog({
           </Button>
           <Button type="button" disabled={!userId || submitting} onClick={() => void handleConfirm()}>
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {absence ? 'Continuar' : 'Confirmar DSR'}
+            {absence ? 'Continuar' : 'Adicionar ao rascunho'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -693,8 +855,9 @@ function ManualDayOffDialog({
 }
 
 /** Um botão por dia: o operador escolhe o que lançar (turno, DSR ou ausência), em vez de procurar botões separados. */
-function DayLaunchMenu({ canShift, canDayOff, canAbsence, onShift, onDayOff, onAbsence }: {
+function DayLaunchMenu({ canShift, canDayOff, canAbsence, onShift, onJourney, onDayOff, onAbsence, closed, onSetClosed }: {
   canShift: boolean; canDayOff: boolean; canAbsence: boolean; onShift: () => void; onDayOff: () => void; onAbsence: () => void;
+  closed?: boolean; onSetClosed?: () => void; onJourney?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const pick = (action: () => void) => () => { setOpen(false); action(); };
@@ -712,8 +875,12 @@ function DayLaunchMenu({ canShift, canDayOff, canAbsence, onShift, onDayOff, onA
       </PopoverTrigger>
       <PopoverContent className="w-48 p-1" align="start">
         {canShift ? <button type="button" className={item} onClick={pick(onShift)}><Clock3 className="h-3.5 w-3.5" />Turno</button> : null}
+        {canShift && onJourney ? <button type="button" className={item} onClick={pick(onJourney)}>Jornada manual</button> : null}
         {canDayOff ? <button type="button" className={item} onClick={pick(onDayOff)}><CalendarOff className="h-3.5 w-3.5" />DSR</button> : null}
         {canAbsence ? <button type="button" className={item} onClick={pick(onAbsence)}><CalendarDays className="h-3.5 w-3.5" />Ausência</button> : null}
+        {onSetClosed && <button type="button" className={item} onClick={pick(onSetClosed)}>
+          {closed ? 'Reabrir unidade neste dia' : 'Marcar unidade como fechada'}
+        </button>}
       </PopoverContent>
     </Popover>
   );
@@ -722,6 +889,7 @@ function DayLaunchMenu({ canShift, canDayOff, canAbsence, onShift, onDayOff, onA
 // ─── Shift Card ───────────────────────────────────────────────────────────────
 
 interface ShiftCardProps {
+  splitJourney?: boolean;
   shift: DPShift;
   originUnitName?: string;
   vacationConflict?: DPVacationRecord | null;
@@ -740,6 +908,7 @@ interface ShiftCardProps {
 
 function ShiftCard({
   shift,
+  splitJourney,
   originUnitName,
   vacationConflict,
   userName,
@@ -757,9 +926,14 @@ function ShiftCard({
   const accentColor = getUserColor(shift.userId, userColor);
   const hasVisibleConflict = shift.hasConflict || !!vacationConflict;
   const vacationPeriod = vacationConflict ? formatVacationPeriod(vacationConflict) : null;
-  const shiftLabel = shiftDef?.name?.trim() || 'Turno manual';
+  const regime = shift.manualDay?.mode === 'flexible' ? 'Flexível' : 'Fixo';
+  const shiftLabel = shift.manualOrder != null ? `Trecho ${shift.manualOrder + 1} · ${regime}`
+    : splitJourney ? 'Jornada dividida' : shiftDef?.name?.trim() || 'Turno manual';
+  const periodLabel = shift.manualOrder != null && shift.manualDay?.mode === 'flexible'
+    ? `${shift.manualDay.expectedWorkMinutes} min${shift.startTime && shift.endTime ? ` · Janela ${shift.startTime}–${shift.endTime}` : ''}`
+    : `${shift.startTime}–${shift.endTime}`;
   const externalCoverage = shift.assignmentKind === 'external_coverage';
-  const cardDetails = `${userName} · ${shiftLabel} · ${shift.startTime}–${shift.endTime}${externalCoverage ? ` · Cobertura externa${originUnitName ? ` de ${originUnitName}` : ''}, não participa das metas` : ''}${vacationPeriod ? ` · Conflito: férias aprovadas de ${vacationPeriod}` : ''}`;
+  const cardDetails = `${userName} · ${shiftLabel} · ${periodLabel}${externalCoverage ? ` · Cobertura externa${originUnitName ? ` de ${originUnitName}` : ''}, não participa das metas` : ''}${vacationPeriod ? ` · Conflito: férias aprovadas de ${vacationPeriod}` : ''}`;
   return (
     <div
       role={selectionMode ? 'button' : 'group'}
@@ -941,13 +1115,14 @@ function DayOffBadge({
   const needsRetry = hasFailed || isPendingRetry;
   const canAction = canPublish && !isPublished && !isPublishing && !isRemoving && !removalFailed;
   const canRemoveAction = canRemove && explicit && !isPublishing && !isRemoving;
-  const actionLabel = needsRetry ? 'Tentar novamente' : explicit ? 'Enviar ao Bizneo' : 'Confirmar DSR';
+  const actionLabel = needsRetry ? 'Tentar novamente' : explicit ? 'Enviar ao Bizneo' : 'Adicionar ao rascunho';
   // Toda folga da escala é o DSR (decisão do programador, 20/10/2026); outro abono é ausência.
   let badgeLabel = 'DSR';
   if (isRemoving) badgeLabel = 'Removendo';
   else if (removalFailed) badgeLabel = 'Falha ao remover';
   else if (isPublishing) badgeLabel = 'Enviando';
   else if (!explicit) badgeLabel = canAction ? actionLabel : 'DSR previsto';
+  else if (shift?.dayOffDraft) badgeLabel = 'DSR no rascunho';
   else if (isPublished) badgeLabel = 'DSR confirmado';
   else if (hasFailed) badgeLabel = 'Falha no Bizneo';
   else if (isPendingRetry) badgeLabel = 'Envio pendente';
@@ -1006,7 +1181,7 @@ function DayOffBadge({
             type="button"
             onClick={onRemove}
             className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-current/60 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            aria-label={removalFailed ? `Tentar remover novamente o DSR de ${user.username}` : `Remover DSR de ${user.username}`}
+            aria-label={removalFailed ? `Tentar remover novamente o DSR de ${user.username}` : shift?.dayOffDraft ? `Remover DSR de ${user.username} do rascunho` : `Remover DSR de ${user.username}`}
             title={removalFailed ? 'Tentar remover novamente' : 'Remover DSR'}
           >
             <Trash2 className="h-3 w-3" />
@@ -1026,6 +1201,11 @@ function CoverageStatus({
   canEditDemand: boolean;
   onEditDemand?: () => void;
 }) {
+  if (coverage.mode === 'empty_day') return coverage.gaps.length ? (
+    <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-2.5 py-2 text-[11px] font-semibold text-destructive">
+      Unidade sem ninguém escalado neste dia
+    </div>
+  ) : null;
   if (coverage.mode === 'fixed_hours' && coverage.gaps.length === 0) return null;
 
   if (coverage.mode === 'on_demand' && !coverage.hasDemand) {
@@ -1378,6 +1558,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const { toast } = useToast();
   const [publication, setPublication] = useState<DPSchedule>(schedule);
   const [publishing, setPublishing] = useState(false);
+  const [publicationGroup, setPublicationGroup] = useState<Array<{ scheduleId: string; expectedDraftVersion: number }> | null>(null);
   React.useEffect(() => { setPublication(schedule); }, [schedule]);
   React.useEffect(() => subscribeToDPScheduleShiftChanges([schedule.id], () => {
     void fetchSchedule(schedule.id).then((fresh) => {
@@ -1492,6 +1673,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   const canEdit = canManageSchedule && vacationDataReady;
   const canPublish = canManageSchedule && (isDefaultAdmin || permissions.dp?.schedules?.publish === true);
 
+  const [journeyDialog, setJourneyDialog] = useState<{ date: string; seed?: DPShift } | null>(null);
   const [addDialog, setAddDialog] = useState<{ date: string; unitId: string } | null>(null);
   const [manualDayOffDialog, setManualDayOffDialog] = useState<{ date: string; unitId: string } | null>(null);
   // Ausência lançada pela escala: primeiro a pessoa, depois o pedido com a data já preenchida.
@@ -1521,6 +1703,28 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   React.useEffect(() => {
     setCoverageDemands(normalizeDPCoverageDemands(publication.draftCoverageDemands ?? publication.coverageDemands));
   }, [publication.coverageDemands, publication.draftCoverageDemands, publication.id]);
+
+  async function editDraftDayOff(params: { userId: string; unitId: string; date: string }, action: 'add' | 'remove') {
+    const key = `${params.userId}::${params.date}`;
+    if (publishingDayOffKey) return false;
+    setPublishingDayOffKey(key);
+    try {
+      await api(`/api/dp/schedules/${encodeURIComponent(schedule.id)}/draft-shifts/day-off`, {
+        method: 'PATCH',
+        json: { ...params, action, expectedDraftVersion: draftVersion },
+        fallbackError: 'Falha ao atualizar o DSR no rascunho.',
+      });
+      notifyDPScheduleShiftsChanged(schedule.id);
+      toast({ title: action === 'add' ? 'DSR adicionado ao rascunho.' : 'DSR removido do rascunho.' });
+      return true;
+    } catch (caught) {
+      toast({ title: 'Não foi possível atualizar o DSR no rascunho.',
+        description: caught instanceof Error ? caught.message : 'Tente novamente.', variant: 'destructive' });
+      return false;
+    } finally {
+      setPublishingDayOffKey(null);
+    }
+  }
 
   async function handlePublishDayOff(params: {
     scheduleId?: string;
@@ -1596,25 +1800,42 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     }
   }
 
-  async function handlePublish() {
+  async function handlePublish(confirmedGroup?: NonNullable<typeof publicationGroup>) {
     if (!canPublish || publishing) return;
     setPublishing(true);
     try {
-      if (journeyValidation?.status === 'blocked') {
-        throw new Error(`Revise os repousos e as jornadas antes de publicar: ${journeyValidation.issues.filter((issue) => issue.blocking).slice(0, 3).map((issue) => issue.message).join(' ')}`);
+      const targets = confirmedGroup ?? [];
+      if (!confirmedGroup) {
+        const scheduleIds = new Set([schedule.id]);
+        for (const id of scheduleIds) {
+          const draft = await fetchDraftScheduleShifts(id);
+          if (draft.conflicts.length) throw new Error('Há conflitos em um dos rascunhos vinculados. Resolva-os antes de publicar.');
+          targets.push({ scheduleId: id, expectedDraftVersion: draft.draftVersion });
+          for (const linkedId of draft.linkedScheduleIds ?? []) scheduleIds.add(linkedId);
+          if (scheduleIds.size > 10) throw new Error('Há escalas demais vinculadas para publicar em conjunto.');
+        }
+        if (targets.length > 1) {
+          setPublicationGroup(targets);
+          return;
+        }
       }
-      const currentDraft = await fetchDraftScheduleShifts(schedule.id);
-      if (currentDraft.conflicts.length) throw new Error('Há turnos em conflito com alterações operacionais. Recarregue a escala antes de publicar.');
-      await publishDraftSchedule(schedule.id, currentDraft.draftVersion);
-      const fresh = await fetchSchedule(schedule.id);
-      setPublication(fresh);
-      setSchedules(schedules.map((item) => item.id === fresh.id ? fresh : item));
+      const [primary, ...companions] = targets;
+      const result = await publishDraftSchedule(primary.scheduleId, primary.expectedDraftVersion, companions);
+      const publishedIds = result.publishedScheduleIds ?? [primary.scheduleId];
+      const snapshots = await Promise.all(publishedIds.map((id) => fetchSchedule(id)));
+      const fresh = new Map(snapshots.map((item) => [item.id, item]));
+      setPublication(fresh.get(schedule.id) ?? publication);
+      setSchedules(useDPStore.getState().schedules.map((item) => fresh.get(item.id) ?? item));
       await reloadShifts();
-      notifyDPScheduleShiftsChanged(schedule.id);
-      toast({ title: 'Escala publicada.', description: 'Os demais módulos passam a usar a versão publicada.' });
+      publishedIds.forEach(notifyDPScheduleShiftsChanged);
+      toast({ title: publishedIds.length > 1 ? 'Escalas publicadas em conjunto.' : 'Escala publicada.',
+        description: result.dayOffSyncCount ? 'Os DSRs desta publicação serão enviados ao Bizneo.' : undefined });
     } catch (caught) {
       toast({ title: 'Não foi possível publicar a escala.', description: caught instanceof Error ? caught.message : 'Tente novamente.', variant: 'destructive' });
-    } finally { setPublishing(false); }
+    } finally {
+      if (confirmedGroup) setPublicationGroup(null);
+      setPublishing(false);
+    }
   }
 
   async function handleDiscardConflicts() {
@@ -1777,7 +1998,16 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       .map(s => s.id);
   }, [accessibleSchedules, isPerUnit, schedule.id, schedule.month, schedule.year, schedule.unitId, units]);
 
-  const { shifts: siblingShifts } = useDPSiblingShifts(siblingIds);
+  const journeySchedules = useMemo(() => {
+    if (!isPerUnit) return [];
+    const ids = new Set([schedule.id, ...siblingIds]);
+    return accessibleSchedules.flatMap((item) => {
+      const unit = accessibleUnits.find((candidate) => candidate.id === item.unitId);
+      return ids.has(item.id) && unit && !unit.isArchived ? [{ id: item.id, unitId: unit.id, name: unit.name }] : [];
+    });
+  }, [accessibleSchedules, accessibleUnits, isPerUnit, schedule.id, siblingIds]);
+
+  const { shifts: siblingShifts } = useDPSiblingShifts(siblingIds, canManageSchedule || (isDefaultAdmin && !isArchivedUnitSchedule));
   const workShifts = useMemo(() => shifts.filter(isWorkShift), [shifts]);
   const dayOffShifts = useMemo(() => shifts.filter(isDayOffShift), [shifts]);
   const prevWorkShifts = useMemo(() => prevShifts.filter(isWorkShift), [prevShifts]);
@@ -1939,10 +2169,13 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   // IDs of current-unit shifts that conflict with a sibling schedule (same user, same date).
   // This is intentionally derived from the live sibling listeners. A persisted
   // hasConflict may be stale after the conflicting shift is deleted elsewhere.
+  const splitJourneyIds = useMemo(() => validSplitJourneyShiftIds([...workShifts, ...siblingWorkShifts]),
+    [workShifts, siblingWorkShifts]);
   const crossConflictShiftIds = useMemo(() => {
     if (!isPerUnit) return new Set<string>();
-    return buildCrossUnitConflictShiftIds(workShifts, siblingWorkShifts);
-  }, [isPerUnit, siblingWorkShifts, workShifts]);
+    return new Set([...buildCrossUnitConflictShiftIds(workShifts, siblingWorkShifts)]
+      .filter((id) => !splitJourneyIds.has(id)));
+  }, [isPerUnit, siblingWorkShifts, splitJourneyIds, workShifts]);
 
   const prevCrossConflictShiftIds = useMemo(() => {
     if (!isPerUnit) return new Set<string>();
@@ -2090,23 +2323,65 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     [isPerUnit, siblingWorkShifts, workShifts],
   );
 
+  const closedDateKeys = useMemo(() => {
+    const editable = isDefaultAdmin || permissions.dp?.schedules?.edit === true;
+    const selected = accessibleSchedules.filter((candidate) => candidate.id !== publication.id
+      && candidate.month === schedule.month && candidate.year === schedule.year);
+    return new Set([...selected, publication].flatMap((candidate) =>
+      ((editable ? candidate.draftClosedDates ?? candidate.closedDates : candidate.closedDates) ?? [])
+        .map((date) => `${date}::${candidate.unitId}`)));
+  }, [accessibleSchedules, isDefaultAdmin, permissions.dp?.schedules?.edit, publication, schedule.month, schedule.year]);
+  const [savingClosedDay, setSavingClosedDay] = useState(false);
+  const activeUnitIds = new Set(activeOperationalUnits(units).map((unit) => unit.id));
+  const closureTargets = [...new Map([...accessibleSchedules, publication].filter((candidate) =>
+    candidate.month === schedule.month && candidate.year === schedule.year
+    && candidate.unitId && activeUnitIds.has(candidate.unitId))
+    .map((candidate) => [candidate.unitId, candidate])).values()];
+  const [manageDaysOpen, setManageDaysOpen] = useState(false);
+  const [managedDate, setManagedDate] = useState('');
+  const [managedScheduleIds, setManagedScheduleIds] = useState<string[]>([]);
+  const selectedClosureTargets = closureTargets.filter((candidate) => managedScheduleIds.includes(candidate.id));
+  const singleTarget = selectedClosureTargets.length === 1 ? selectedClosureTargets[0] : undefined;
+  const singleUnit = singleTarget && units.find((unit) => unit.id === singleTarget.unitId);
+  const singleClosedDates = singleTarget?.draftClosedDates ?? singleTarget?.closedDates ?? [];
+  const operatingDays = singleUnit ? countExpectedDPUnitDays({
+    unit: singleUnit, year: schedule.year, month: schedule.month, shiftDefinitions, closedDates: singleClosedDates,
+  }) : null;
+  async function setClosedDay(date: string, targets: DPSchedule[], closed: boolean) {
+    if (!targets.length || !days.some((day) => day.date === date)) return;
+    setSavingClosedDay(true);
+    try {
+      const result = await api<{ changed: string[] }>(`/api/dp/schedules/${encodeURIComponent(targets[0].id)}/coverage-demands/${date}`, {
+        method: 'PATCH',
+        json: { closed, schedules: targets.map((target) => ({ scheduleId: target.id, unitId: target.unitId })) },
+        fallbackError: 'Falha ao atualizar o funcionamento do dia.',
+      });
+      const fresh = new Map((await Promise.all(result.changed.map(fetchSchedule))).map((item) => [item.id, item]));
+      if (fresh.has(schedule.id)) setPublication(fresh.get(schedule.id)!);
+      setSchedules(useDPStore.getState().schedules.map((item) => fresh.get(item.id) ?? item));
+      result.changed.forEach(notifyDPScheduleShiftsChanged);
+      toast({ title: closed ? 'Fechamento salvo no rascunho.' : 'Unidade reaberta no rascunho.' });
+    } catch (error) {
+      toast({ title: error instanceof Error ? error.message : 'Falha ao atualizar o funcionamento do dia.', variant: 'destructive' });
+    } finally {
+      setSavingClosedDay(false);
+    }
+  }
   const coverageByCellKey = useMemo(() => {
     const coverage = new Map<string, DPDailyCoverage>();
     activeUnits.forEach((unit) => {
-      const mode = resolveDPCoverageMode(unit);
-      if (mode === 'disabled') return;
+      if (!alertsWhenUnitEmpty(unit)) return;
       const unitShifts = workShifts.filter((shift) => operationalUnitIdsMatch(unit.id, shift.unitId, units));
       days.forEach(({ date }) => {
-        const daily = mode === 'on_demand'
-          ? buildDailyOnDemandCoverage({ date, windows: coverageDemands[date] ?? [], shifts: unitShifts })
-          : buildDailyUnitCoverage({ date, operatingHours: unit.operatingHours, shifts: unitShifts });
-        if (mode === 'on_demand' || daily.gaps.length > 0) {
+        if (closedDateKeys.has(`${date}::${unit.id}`)) return;
+        const daily = buildDailyEmptyUnitCoverage({ date, shifts: unitShifts });
+        if (daily.gaps.length > 0) {
           coverage.set(`${date}::${unit.id}`, daily);
         }
       });
     });
     return coverage;
-  }, [activeUnits, coverageDemands, days, units, workShifts]);
+  }, [activeUnits, closedDateKeys, days, units, workShifts]);
 
   // Index shifts: [date][unitId] → DPShift[] (com filtros e contagem consecutiva)
   const shiftIndex = useMemo(() => {
@@ -2132,13 +2407,17 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         if (coverage?.gaps.length) {
           alerts.push({
             key: 'coverage',
-            label: coverage.gaps.length === 1 ? 'Cobertura incompleta' : `${coverage.gaps.length} lacunas de cobertura`,
+            label: 'Unidade sem ninguém escalado',
             tone: 'danger',
           });
         } else if (coverage?.hasUnplannedShifts) {
           alerts.push({ key: 'unplanned', label: 'Equipe escalada sem demanda', tone: 'warning' });
         }
 
+        if (closedDateKeys.has(`${date}::${unit.id}`)
+          && workShifts.some((shift) => shift.date === date && shift.unitId === unit.id)) {
+          alerts.push({ key: 'closed-work', label: 'Há turno em unidade fechada', tone: 'danger' });
+        }
         (shiftIndex[date]?.[unit.id] ?? []).forEach((shift) => {
           const userName = effectiveUserMap.get(shift.userId)?.username ?? shift.userName ?? 'Colaborador';
           if (shift.hasConflict) {
@@ -2174,7 +2453,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       });
     });
     return index;
-  }, [activeUnits, coverageByCellKey, dayOffIndex, days, effectiveUserMap, journeyValidation, shiftIndex, vacationConflictByShiftId, workDayOffConflictKeys]);
+  }, [activeUnits, closedDateKeys, coverageByCellKey, dayOffIndex, days, effectiveUserMap, journeyValidation, shiftIndex, vacationConflictByShiftId, workDayOffConflictKeys, workShifts]);
 
   const alertDates = useMemo(
     () => new Set(Array.from(alertsByCellKey.keys()).map((key) => key.slice(0, 10))),
@@ -2230,7 +2509,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     return issues.size;
   }, [crossConflictShiftIds, journeyValidation, vacationConflictByShiftId, workDayOffConflictKeys, workShifts]);
   const coverageAlertCount = useMemo(
-    () => [...coverageByCellKey.values()].filter((coverage) => coverage.gaps.length > 0).length,
+    () => new Set([...coverageByCellKey.values()].filter((coverage) => coverage.gaps.length > 0).map((coverage) => coverage.date)).size,
     [coverageByCellKey],
   );
   const uniqueCollaborators = useMemo(() => new Set(workShifts.map(s => s.userId)).size, [workShifts]);
@@ -2434,7 +2713,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         ) : !embedded && (
           <BackButton fallbackHref="/dashboard/dp/schedules" ariaLabel="Voltar à página anterior" iconOnly variant="ghost" size="icon" iconClassName="h-4 w-4" />
         )}
-        <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {embedded ? (
             <h1 className="dp-schedule-month-title text-[19px] font-black leading-6 tracking-[-0.02em] text-[#0f172a]">
               {MONTHS[schedule.month - 1]} de {schedule.year} · {scheduleUnit?.name ?? 'Todas as unidades'}
@@ -2445,23 +2724,23 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           {!embedded && (
             <p className="text-sm text-muted-foreground">{MONTHS[schedule.month - 1]} {schedule.year}</p>
           )}
+          {embedded && onPreviousMonth && onNextMonth && (
+            <div className="flex shrink-0 items-center overflow-hidden rounded-[10px] border border-[#e6ebf2]">
+              <Button type="button" variant="ghost" size="icon" aria-label="Mês anterior" className="h-8 w-8 rounded-none border-r border-[#eef1f6] text-[#64748b] hover:bg-[#f8fafc]" onClick={onPreviousMonth}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button type="button" variant="ghost" size="icon" aria-label="Próximo mês" disabled={!canGoNextMonth} className="h-8 w-8 rounded-none text-[#64748b] hover:bg-[#f8fafc]" onClick={onNextMonth}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
         <div className="col-span-full flex flex-wrap items-center justify-end gap-2">
-        {embedded && onPreviousMonth && onNextMonth && (
-          <div className="flex items-center overflow-hidden rounded-[10px] border border-[#e6ebf2]">
-            <Button type="button" variant="ghost" size="icon" aria-label="Mês anterior" className="h-8 w-8 rounded-none border-r border-[#eef1f6] text-[#64748b] hover:bg-[#f8fafc]" onClick={onPreviousMonth}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button type="button" variant="ghost" size="icon" aria-label="Próximo mês" disabled={!canGoNextMonth} className="h-8 w-8 rounded-none text-[#64748b] hover:bg-[#f8fafc]" onClick={onNextMonth}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
         <Badge className={publicationStatus === 'draft' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}>
           Situação: {publicationStatus === 'draft' ? 'RASCUNHO' : 'PUBLICADA'}
         </Badge>
         {canPublish && publicationStatus === 'draft' && (
-          <Button size="sm" onClick={handlePublish} disabled={publishing || loading || draftConflicts.length > 0} className="h-8 rounded-[10px] bg-emerald-600 px-3 text-[12.5px] font-bold text-white hover:bg-emerald-700">
+          <Button size="sm" onClick={() => void handlePublish()} disabled={publishing || loading || draftConflicts.length > 0} className="h-8 rounded-[10px] bg-emerald-600 px-3 text-[12.5px] font-bold text-white hover:bg-emerald-700">
             {publishing ? 'Publicando...' : hasPublishedVersion ? 'Publicar novamente' : 'Publicar escala'}
           </Button>
         )}
@@ -2479,6 +2758,15 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
             </Button>
           </div>
         )}
+        {canEdit && !bulkSelectionActive && !bulkCreateActive && closureTargets.length > 0 && (
+          <Button size="sm" variant="outline" onClick={() => {
+            setManagedDate(days[0]?.date ?? '');
+            setManagedScheduleIds(closureTargets.some((target) => target.id === schedule.id) ? [schedule.id] : []);
+            setManageDaysOpen(true);
+          }} className="h-8 rounded-[10px] px-3 text-[12.5px] font-bold">
+            <CalendarDays className="mr-2 h-4 w-4" />Gerenciar dias
+          </Button>
+        )}
         {canEdit && !bulkSelectionActive && !bulkCreateActive && (
           <Button
             size="sm"
@@ -2493,16 +2781,16 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       </div>
       <div className={cn('space-y-4', embedded && 'min-h-0 flex-1 overflow-y-auto')}>
       {publicationStatus === 'draft' && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          {hasPublishedVersion ? 'Alterações em rascunho. Colaboradores e demais módulos continuam usando a última versão publicada.' : 'Escala em rascunho. Ela ainda não gera efeitos no sistema.'}
-          {draftConflicts.length > 0 ? ` Há ${draftConflicts.length} turno(s) em conflito; revise antes de publicar.` : ''}
-          {canEdit && draftConflicts.length > 0 && <Button size="sm" variant="outline" onClick={handleDiscardConflicts}>Descartar alterações conflitantes</Button>}
-        </div>
-      )}
-      {publicationStatus === 'draft' && (
-        <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700">
-          As jornadas e conflitos operacionais serão validados ao publicar.
+        <div className="mx-4 flex flex-wrap items-start gap-2 pt-3">
+          <div className="inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            {hasPublishedVersion ? 'Alterações em rascunho. Colaboradores e demais módulos continuam usando a última versão publicada.' : 'Escala em rascunho. Ela ainda não gera efeitos no sistema.'}
+            {draftConflicts.length > 0 ? ` Há ${draftConflicts.length} turno(s) em conflito; revise antes de publicar.` : ''}
+            {canEdit && draftConflicts.length > 0 && <Button size="sm" variant="outline" onClick={handleDiscardConflicts}>Descartar alterações conflitantes</Button>}
+          </div>
+          <div className="inline-flex max-w-full rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-xs text-sky-700">
+            As jornadas e conflitos operacionais serão validados ao publicar.
+          </div>
         </div>
       )}
       {isArchivedUnitSchedule && (
@@ -2609,9 +2897,9 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           className={`rounded-[13px] border px-3 py-[10px] text-left transition-colors ${coverageAlertCount > 0 ? 'border-[#fde68a] bg-[#fffbeb]' : 'border-[#e3e9f1] bg-white hover:bg-[#f8fafc]'}`}
         >
           <div className={`mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] ${coverageAlertCount > 0 ? 'text-[#d97706]' : 'text-[#94a3b8]'}`}>
-            <span>Cobertura</span>
+            <span>Escala vazia</span>
           </div>
-          <p className="flex items-baseline gap-1.5"><span className={`text-[20px] font-black tracking-[-0.02em] ${coverageAlertCount > 0 ? 'text-[#d97706]' : 'text-[#0f172a]'}`}>{coverageAlertCount}</span><span className={`text-[11px] font-bold ${coverageAlertCount > 0 ? 'text-[#d6a037]' : 'text-[#a3aec0]'}`}>{coverageAlertCount > 0 ? 'dias com lacuna' : 'sem lacunas'}</span></p>
+          <p className="flex items-baseline gap-1.5"><span className={`text-[20px] font-black tracking-[-0.02em] ${coverageAlertCount > 0 ? 'text-[#d97706]' : 'text-[#0f172a]'}`}>{coverageAlertCount}</span><span className={`text-[11px] font-bold ${coverageAlertCount > 0 ? 'text-[#d6a037]' : 'text-[#a3aec0]'}`}>{coverageAlertCount > 0 ? 'dias sem escala' : 'todos com escala'}</span></p>
         </button>
         <button
           type="button"
@@ -2900,12 +3188,16 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                             Feriado
                           </span>
                         )}
+                        {isPerUnit && schedule.unitId && closedDateKeys.has(`${date}::${schedule.unitId}`) && (
+                          <Badge variant="secondary" className="text-[9px]">Fechado</Badge>
+                        )}
                       </div>
                     </td>
 
                     {/* Unit cells */}
                     {activeUnits.map(unit => {
                       const cellShifts = shiftIndex[date]?.[unit.id] ?? [];
+                      const closed = closedDateKeys.has(`${date}::${unit.id}`);
                       const coverageAlert = coverageByCellKey.get(`${date}::${unit.id}`);
                       const dayOffEntries = dayOffIndex[date]?.[unit.id] ?? [];
                       const ghosts = isPerUnit
@@ -2938,6 +3230,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                           <ShiftCard
                             key={`own-${shift.id}`}
                             shift={shift}
+                            splitJourney={splitJourneyIds.has(shift.id) && !shift.hasConflict}
                             originUnitName={shift.originUnitId ? units.find((item) => item.id === shift.originUnitId)?.name ?? shift.originUnitId : undefined}
                             vacationConflict={vacationConflictForShift(shift)}
                             userName={user?.username ?? 'Desconhecido'}
@@ -2949,8 +3242,14 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                             selectionMode={bulkSelectionActive}
                             selected={selectedShiftIds.includes(shift.id)}
                             onSelect={(selectedShift) => toggleSelectedShift(selectedShift.id)}
-                            onEdit={setEditShift}
-                            onDelete={setDeleteTarget}
+                            onEdit={(target) => {
+                              if (target.manualOrder != null || splitJourneyIds.has(target.id)) setJourneyDialog({ date: target.date, seed: target });
+                              else setEditShift(target);
+                            }}
+                            onDelete={(target) => {
+                              if (target.manualOrder != null) setJourneyDialog({ date: target.date, seed: target });
+                              else setDeleteTarget(target);
+                            }}
                           />
                         );
                       });
@@ -2996,7 +3295,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                         const shouldRetry = shift?.bizneoSyncStatus === 'failed'
                           || shift?.bizneoSyncStatus === 'publishing'
                           || shift?.bizneoSyncStatus === 'pending';
-                        const source = !explicit ? 'predicted' as const : shouldRetry ? 'retry' as const : 'manual' as const;
+                        const source = shouldRetry ? 'retry' as const : 'manual' as const;
                         return (
                           <DayOffBadge
                             key={`${date}-${unit.id}-${userId}-${explicit ? 'explicit' : 'predicted'}`}
@@ -3004,19 +3303,25 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                             shift={shift}
                             user={user}
                             contextLabel={sourceUnitId && !operationalUnitIdsMatch(sourceUnitId, unit.id, units) ? `DSR em ${sourceUnitName}` : undefined}
-                            canPublish={canPublishDayOff}
-                            canRemove={canPublishDayOff && explicit}
+                            canPublish={canPublishDayOff && !shift?.dayOffDraft && (explicit || canEdit)}
+                            canRemove={canPublishDayOff && explicit && Boolean(shift?.dayOffDraft ? shift.scheduleId === schedule.id : shift?.bizneoOperationId)}
                             publishing={publishingDayOffKey === `${userId}::${date}`}
                             removing={removingDayOffKey === `${userId}::${date}`}
-                            onPublish={() => void handlePublishDayOff({
-                              scheduleId: shift?.scheduleId,
-                              userId,
-                              unitId: shift?.unitId ?? unit.id,
-                              date,
-                              source,
-                            })}
+                            onPublish={() => !explicit
+                              ? void editDraftDayOff({ userId, unitId: unit.id, date }, 'add')
+                              : void handlePublishDayOff({
+                                scheduleId: shift?.scheduleId,
+                                userId,
+                                unitId: shift?.unitId ?? unit.id,
+                                date,
+                                source,
+                              })}
                             onRemove={() => {
                               if (!shift) return;
+                              if (shift.dayOffDraft) {
+                                void editDraftDayOff({ userId, unitId: shift.unitId, date }, 'remove');
+                                return;
+                              }
                               setDayOffRemovalTarget({ shift, userName: user.username, unitName: sourceUnitName });
                             }}
                             conflictsWithWork={workDayOffConflictKeys.has(`${userId}::${date}`)}
@@ -3030,13 +3335,18 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                           statusLabel={candidate.statusLabel}
                         />
                       ));
-                      const canAddDayOff = canPublishDayOff;
+                      const canAddDayOff = canEdit && canPublishDayOff;
                       const addShiftButton = canEdit || canAddDayOff || canLaunchAbsence ? (
                         <DayLaunchMenu
-                          canShift={canEdit}
+                          closed={closed}
+                          canShift={canEdit && !closed}
+                          onSetClosed={canEdit && !savingClosedDay && closureTargets.some((target) => target.unitId === unit.id)
+                            ? () => void setClosedDay(date, closureTargets.filter((target) => target.unitId === unit.id), !closed) : undefined}
                           canDayOff={canAddDayOff}
                           canAbsence={canLaunchAbsence}
                           onShift={() => setAddDialog({ date, unitId: unit.id })}
+                          onJourney={journeySchedules.some((item) => item.id === schedule.id)
+                            ? () => setJourneyDialog({ date }) : undefined}
                           onDayOff={() => setManualDayOffDialog({ date, unitId: unit.id })}
                           onAbsence={() => setAbsencePicker({ date, unitId: unit.id })}
                         />
@@ -3048,6 +3358,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                             <div className="grid min-h-[52px] grid-cols-[55%_32%_13%] divide-x divide-[#eef1f6]">
                             <div className="min-w-0 p-2">
                               <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-1">
+                                {closed && <span className="text-xs font-semibold text-muted-foreground">Fechado</span>}
                                 {workCards}
                                 {addShiftButton}
                               </div>
@@ -3070,7 +3381,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                               </div>
                               <div className="flex min-w-0 flex-col gap-1 p-2">
                                 {dayOffCards}
-                                {unassignedCards}
+                                {!closed && unassignedCards}
                               </div>
                               <div className="flex min-w-0 flex-col gap-1 p-2">
                                 {coverageAlert ? (
@@ -3097,7 +3408,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                                     </div>
                                   ))}
                                 {!coverageAlert && cellAlerts.length === 0 && (
-                                  <p className="px-1 py-2 text-[11px] text-muted-foreground">Sem alertas.</p>
+                                  <p className="px-1 py-2 text-[11px] text-muted-foreground">{closed ? 'Unidade fechada.' : 'Sem alertas.'}</p>
                                 )}
                               </div>
                             </div>
@@ -3138,6 +3449,48 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
 
       </div>
       </div>
+
+      <Dialog open={manageDaysOpen && canEdit} onOpenChange={setManageDaysOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Gerenciar dias</DialogTitle>
+            <DialogDescription>Defina o funcionamento da data nas unidades selecionadas.</DialogDescription>
+          </DialogHeader>
+          <label className="block space-y-1 text-sm font-medium">
+            <span>Data</span>
+            <Input type="date" min={days[0]?.date} max={days.at(-1)?.date}
+              value={managedDate} onChange={(event) => setManagedDate(event.target.value)} />
+          </label>
+          <fieldset className="max-h-52 space-y-1 overflow-y-auto">
+            <legend className="mb-1 text-sm font-medium">Unidades</legend>
+            {closureTargets.map((target) => (
+              <label key={target.id} className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-muted">
+                <input type="checkbox" checked={managedScheduleIds.includes(target.id)}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setManagedScheduleIds((ids) => checked ? [...ids, target.id] : ids.filter((id) => id !== target.id));
+                  }} />
+                <span className="flex-1">{units.find((unit) => unit.id === target.unitId)?.name ?? target.unitId}</span>
+                {closedDateKeys.has(`${managedDate}::${target.unitId}`) && <Badge variant="secondary">Fechado</Badge>}
+              </label>
+            ))}
+          </fieldset>
+          {singleTarget && (
+            <dl className="grid grid-cols-2 gap-2 rounded-lg border p-3 text-sm">
+              <div><dt className="text-muted-foreground">Dias de funcionamento</dt><dd className="text-xl font-bold">{operatingDays ?? '—'}</dd></div>
+              <div><dt className="text-muted-foreground">Dias fechados no mês</dt><dd className="text-xl font-bold">{singleClosedDates.length}</dd></div>
+            </dl>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={savingClosedDay || !days.some((day) => day.date === managedDate)
+              || !selectedClosureTargets.some((target) => closedDateKeys.has(`${managedDate}::${target.unitId}`))}
+              onClick={() => void setClosedDay(managedDate, selectedClosureTargets, false)}>Reabrir dia</Button>
+            <Button type="button" disabled={savingClosedDay || !days.some((day) => day.date === managedDate)
+              || !selectedClosureTargets.some((target) => !closedDateKeys.has(`${managedDate}::${target.unitId}`))}
+              onClick={() => void setClosedDay(managedDate, selectedClosureTargets, true)}>Fechar dia</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={canEdit && bulkSelectionActive && bulkEditDialogOpen} onOpenChange={setBulkEditDialogOpen}>
         <DialogContent flush hideClose className="max-h-[90vh] gap-0 overflow-hidden sm:max-w-[560px]">
@@ -3239,15 +3592,26 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         />
       ) : null}
 
+      {journeyDialog && <DPManualJourneyDialog
+        date={journeyDialog.date}
+        originScheduleId={schedule.id}
+        schedules={journeySchedules}
+        people={operationalUsers}
+        seed={journeyDialog.seed}
+        onClose={() => setJourneyDialog(null)}
+      />}
+
       <ShiftDialog
         scheduleId={schedule.id}
         defaultDate={addDialog?.date}
         defaultUnitId={addDialog?.unitId}
         units={activeUnits}
+        relatedUnits={accessibleUnits}
         shiftDefinitions={shiftDefinitions}
         open={!!addDialog}
         onOpenChange={open => { if (!open) setAddDialog(null); }}
         siblingOccupied={isPerUnit ? siblingOccupied : undefined}
+        siblingDraftIds={siblingIds}
         dayOffOccupied={dayOffOccupied}
         vacations={vacations}
       />
@@ -3277,22 +3641,27 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         date={manualDayOffDialog?.date ?? ''}
         unit={activeUnits.find((unit) => unit.id === manualDayOffDialog?.unitId)}
         users={manualDayOffUsers}
-        onConfirm={(userId) => handlePublishDayOff({
+        onConfirm={(userId) => editDraftDayOff({
           userId,
           unitId: manualDayOffDialog?.unitId ?? '',
           date: manualDayOffDialog?.date ?? '',
-          source: 'manual',
-        })}
+        }, 'add')}
       />
 
       <ShiftDialog
         scheduleId={schedule.id}
         shift={editShift}
+        onEditJourney={editShift && journeySchedules.some((item) => item.id === schedule.id) ? () => {
+          setJourneyDialog({ date: editShift.date, seed: editShift });
+          setEditShift(null);
+        } : undefined}
         units={activeUnits}
+        relatedUnits={accessibleUnits}
         shiftDefinitions={shiftDefinitions}
         open={!!editShift}
         onOpenChange={open => { if (!open) setEditShift(null); }}
         siblingOccupied={isPerUnit ? siblingOccupied : undefined}
+        siblingDraftIds={siblingIds}
         dayOffOccupied={dayOffOccupied}
         vacations={vacations}
         onDelete={(shift) => {
@@ -3300,6 +3669,28 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           setDeleteTarget(shift);
         }}
       />
+
+      <AlertDialog open={!!publicationGroup} onOpenChange={(open) => { if (!open && !publishing) setPublicationGroup(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Publicar escalas vinculadas?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Todos os rascunhos abaixo serão publicados juntos, incluindo as demais alterações que estiverem neles.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ul className="list-disc space-y-1 pl-5 text-sm">
+            {publicationGroup?.map(({ scheduleId }) => <li key={scheduleId}>
+              {units.find(({ id }) => id === schedules.find((item) => item.id === scheduleId)?.unitId)?.name ?? scheduleId}
+            </li>)}
+          </ul>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={publishing}>Cancelar</AlertDialogCancel>
+            <Button disabled={publishing || !publicationGroup} onClick={() => { if (publicationGroup) void handlePublish(publicationGroup); }}>
+              {publishing ? 'Publicando…' : 'Publicar em conjunto'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={!!dayOffRemovalTarget}

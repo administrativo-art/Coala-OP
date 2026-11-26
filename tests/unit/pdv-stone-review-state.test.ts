@@ -8,11 +8,11 @@ import {
 } from "../../src/features/financial/sales-reconciliation/review-state";
 import { salesBinding, salesRequest, reviewCoupons, reviewXml } from "../fixtures/pdv-stone-review";
 
-async function result() {
+async function result(stoneXml = reviewXml) {
   return queryDailySales(salesRequest, { isDefaultAdmin: true, workspace_id: "coala" }, {
     resolveBinding: async () => structuredClone(salesBinding) as SalesReviewBinding,
     readPdv: async () => structuredClone(reviewCoupons),
-    readStone: async () => reviewXml,
+    readStone: async () => stoneXml,
     now: () => new Date("2026-09-22T12:00:00Z"),
   });
 }
@@ -36,6 +36,42 @@ test("a complete comparison is closed once and the same evidence is idempotent",
   assert.equal(second.view.revision, 1);
   assert.equal(second.view.closedAt, first.view.closedAt);
   assert.equal(second.view.checkedAt, "2026-09-22T13:00:00.000Z");
+});
+
+test("recollecting a legacy settlement issue closes the day once and preserves the original event", async () => {
+  const capture = reviewXml.split("<FinancialTransactions>")[1].split("</FinancialTransactions>")[0];
+  const payment = capture.replace("<Captures>1</Captures><Payments>0", "<Captures>0</Captures><Payments>1");
+  const compared = await result(reviewXml.replace("</FinancialTransactionsAccounts>", payment + "</FinancialTransactionsAccounts>"));
+  assert.deepEqual(compared.issues, []);
+  assert.equal(compared.stoneEvents[1].events.Payments, 1);
+  const legacy = buildDailySalesReviewTransition({
+    result: { ...compared, issues: [{ source: "stone", reason: "non_capture_event",
+      reference: JSON.stringify([compared.stoneFileId, "FinancialTransactionsAccounts", "000123"]) }] },
+    actorId: "admin",
+    now: compared.collectedAt,
+  });
+  if (!legacy.write) assert.fail("legacy transition must persist");
+  assert.equal(legacy.view.status, "attention_required");
+  assert.equal(legacy.view.summary.sourceIssueCount, 1);
+  assert.equal(legacy.view.summary.attentionCount, 0);
+
+  const recollected = { ...compared, collectedAt: "2026-09-22T13:00:00.000Z" };
+  const refreshed = buildDailySalesReviewTransition({
+    result: recollected, actorId: "admin", now: recollected.collectedAt, previous: legacy.next,
+  });
+  if (!refreshed.write) assert.fail("reclassification must update the stored review");
+  assert.equal(refreshed.view.status, "closed");
+  assert.equal(refreshed.view.revision, 2);
+  assert.equal(refreshed.view.summary.sourceIssueCount, 0);
+  assert.equal(refreshed.view.summary.autoCheckedCount, 1);
+  assert.equal(refreshed.view.summary.pdvAmountCents, 600);
+  assert.equal(refreshed.view.summary.stoneAmountCents, 600);
+
+  const retry = buildDailySalesReviewTransition({
+    result: recollected, actorId: "admin", now: "2026-09-22T14:00:00.000Z", previous: refreshed.next,
+  });
+  assert.equal(retry.write, false);
+  assert.equal(retry.view.revision, 2);
 });
 
 test("a late source change reopens a previously closed day only when it creates a real pending case", async () => {

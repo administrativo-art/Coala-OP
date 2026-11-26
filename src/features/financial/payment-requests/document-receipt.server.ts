@@ -94,13 +94,13 @@ export async function sendDocumentReceiptPayment(id: string, actor: GenerationAc
   if (!created) {
     const existing = await ref.get();
     if (canResumePreparedReceiptPayment({ status: existing.get("status"), submissionStartedAt: existing.get("submissionStartedAt"), interRequestId: existing.get("interRequestId") })) {
-      const resumed = await submitPaymentRequest(requestId, actor, { receiptVerified: true });
+      const resumed = await submitPaymentRequest(requestId, actor, undefined, undefined, { receiptVerified: true });
       await dbAdmin.collection("generatedDocuments").doc(id).set({ receiptPaymentRequestId: requestId, receiptPaymentStatus: resumed.status }, { merge: true });
       return { request: { id: resumed.id, status: resumed.status, amount: resumed.amount, beneficiarySnapshot: resumed.beneficiarySnapshot }, reused: true };
     }
     return { request: { id: existing.id, status: existing.get("status"), amount: existing.get("amount"), beneficiarySnapshot: existing.get("beneficiarySnapshot") }, reused: true };
   }
-  const sent = await submitPaymentRequest(requestId, actor, { receiptVerified: true });
+  const sent = await submitPaymentRequest(requestId, actor, undefined, undefined, { receiptVerified: true });
   await dbAdmin.collection("generatedDocuments").doc(id).set({ receiptPaymentRequestId: requestId, receiptPaymentStatus: sent.status }, { merge: true });
   return { request: { id: sent.id, status: sent.status, amount: sent.amount, beneficiarySnapshot: sent.beneficiarySnapshot }, reused: false };
 }

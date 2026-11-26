@@ -4,6 +4,8 @@ import { fetchStoneAgendaXml } from "@/lib/integrations/stone/agenda-transport";
 import { queryDailySales } from "./query";
 import { readSalesReviewBinding } from "./mapping.server";
 import { readPixSalesSource } from "./pix-source.server";
+import { readPixRefundChecks } from "./pix-refunds.server";
+import { applyUnlinkedResolutions } from "./unlinked-resolution";
 import { saveDailySalesReview } from "./review-state.server";
 
 export async function collectDailySalesReview(input: unknown, context: { isDefaultAdmin: boolean; workspace_id: string },
@@ -12,6 +14,7 @@ export async function collectDailySalesReview(input: unknown, context: { isDefau
     signal,
     resolveBinding: readSalesReviewBinding,
     readPix: readPixSalesSource,
+    readPixRefundChecks,
     readPdv: query => fetchPdvCouponsReadOnly(query, { signal, credentials: {
       company: process.env.PDVLEGAL_COD_EMPRESA,
       token: process.env.PDVLEGAL_TOKEN,
@@ -21,5 +24,5 @@ export async function collectDailySalesReview(input: unknown, context: { isDefau
     readStone: query => fetchStoneAgendaXml(query, { apiKey: process.env.STONE_CONCILIATION_API_KEY, signal }),
   });
   const review = await saveDailySalesReview(result, actorId);
-  return { ...result, review };
+  return { ...result, cases: applyUnlinkedResolutions(result.cases, review.activeUnlinkedResolutions ?? []), review };
 }

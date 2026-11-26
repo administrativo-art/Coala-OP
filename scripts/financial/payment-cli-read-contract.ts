@@ -57,10 +57,10 @@ export function summarizePaymentRead(command: string, body: RecordValue) {
   if (command === "inspect") return { message: inboxSummary(body.message) };
   const doc = pick(body.doc, ["id", "status", "description", "supplier", "supplierId", "supplierName",
     "amount", "amountCents", "totalAmount", "totalValue", "dueDate", "competence", "competenceMonth", "competenceDate", "paymentDate",
-    "unitId", "unit", "accountPlan", "accountId", "resultCenter", "resultCenterId", "sourceType", "sourceId", "expenseId",
+    "workspaceId", "unitId", "unit", "accountPlan", "accountId", "resultCenter", "resultCenterId", "referenceResultCenterId", "isApportioned", "financialInboxMessageId", "sourceType", "sourceId", "expenseId",
     "paymentRequestId", "paymentRail", "barcodeSnapshot", "interRequestId", "bankStatus", "bankObservation", "submissionStartedAt",
     "financialDocumentIdentity", "installments", "isForecast", "provisionStatus", "paidAt", "resultCenterName", "accountPlanName",
-    "unitName", "purchaseOrderId", "purchaseExpenseRole", "apportionments", "accountAllocations", "provisionSeriesKey", "provisionKind", "provisionType", "provisionCompetence", "provisionReconciliationStatus", "reconciledExpenseId", "reconciledProvisionId", "name", "notes",
+    "unitName", "purchaseOrderId", "purchaseExpenseRole", "apportionments", "hasAccountAllocations", "accountAllocations", "provisionSeriesKey", "provisionKind", "provisionType", "provisionCompetence", "provisionReconciliationStatus", "reconciledExpenseId", "reconciledProvisionId", "name", "notes",
     "statementTransactionId", "bankTransactionId", "linkedTransactionId", "importedFrom", "documentNumber", "documentReference",
     "externalReference", "receiptNumber", "legalEntitySnapshot", "statementReconciliationStatus", "bankLiquidationObservedAt",
     "lastError", "submissionAttemptCount", "settlementRevision", "requestedSettlementAmount", "requestedLateChargeAmount",

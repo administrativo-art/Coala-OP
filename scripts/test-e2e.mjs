@@ -85,6 +85,10 @@ const child = spawn(
       ? 'npm run test:e2e:playwright -- tests/e2e/documents/receipt-payment.spec.ts'
       : process.argv.includes('--person-inventory-partial')
       ? 'npm run test:e2e:playwright -- tests/e2e/settings/person-inventory.spec.ts --grep "inventário explicita"'
+      : process.argv.includes('--purchasing')
+      ? 'npm run test:e2e:playwright -- tests/e2e/purchasing/orders.spec.ts'
+      : process.argv.includes('--goal-guide')
+      ? 'npm run test:e2e:playwright -- tests/e2e/goals/guide.spec.ts'
       : process.argv.includes('--person-inventory')
       ? 'npm run test:e2e:playwright -- tests/e2e/settings/person-inventory.spec.ts'
       : process.argv.includes('--archive-company')

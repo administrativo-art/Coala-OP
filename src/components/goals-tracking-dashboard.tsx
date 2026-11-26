@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { ControlPanel } from '@/components/patterns/control-panel';
 import { FilterChips } from '@/components/patterns/filter-chips';
 import { PanelStat } from '@/components/goals/goals-ui';
@@ -32,7 +33,7 @@ import { GoalTemplateFormModal } from '@/components/goal-template-form-modal';
 import { AddEmployeeGoalModal } from '@/components/add-employee-goal-modal';
 import { type GoalPeriod, type GoalPeriodDoc, type EmployeeGoal, type SalesReport } from '@/types';
 import { 
-  Target, Plus, RefreshCw, ChevronDown, ChevronLeft, Menu, BarChart2, Sparkles, Pencil, CheckCircle, Trash2, Flag, Store
+  Target, Plus, RefreshCw, ChevronDown, ChevronLeft, Menu, BarChart2, Sparkles, Pencil, CheckCircle, Trash2, Flag, Store, BookOpen
 } from 'lucide-react';
 import {
   format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay
@@ -42,6 +43,7 @@ import { GoalsAiAnalysisModal } from '@/components/goals-ai-analysis-modal';
 import { GoalsAnalysisOutputSchema } from '@/ai/flows/goals-schemas';
 import { getUserDisplayName, pickUserIdentitySnapshot, type UserIdentityLike } from '@/lib/user-display';
 import { calculateTieredGoalBonus, formatCurrencyBRL } from '@/lib/goal-methods';
+import { goalReliefBasisForStart } from '@/lib/goal-relief-basis';
 import { canAccessUnit } from '@/lib/unit-access';
 import {
   type GoalDistributionSnapshot,
@@ -890,6 +892,7 @@ type BonusParticipantRow = {
   roleKey: BonusRoleKey;
   roleLabel: string;
   coveredTurns: number;
+  coveredDays: number;
   prize: number;
 };
 
@@ -1824,13 +1827,17 @@ function BonusCalculationDetails({
         <div className={`rounded-ds-md border px-3 py-3 ${roleTone}`}>
           <p className="text-[10px] font-black uppercase tracking-[0.16em]">Divisão para folguista</p>
           <p className="mt-1">
-            Regra: a folguista recebe a parte proporcional aos turnos cobertos dentro do total de turnos do período.
+            {reliefSplit.basis === 'days'
+              ? 'Regra: a folguista recebe a parte proporcional aos dias trabalhados dentro dos dias da meta.'
+              : 'Regra: a folguista recebe a parte proporcional aos turnos cobertos dentro do total de turnos do período.'}
           </p>
           <p className="mt-1">
-            Turnos cobertos por {row.name}: {row.coveredTurns}. Total de turnos do período: {totalPeriodTurns}.
+            {reliefSplit.basis === 'days'
+              ? `Dias de ${row.name}: ${row.coveredDays}. Dias da meta: ${reliefSplit.totalPeriodDays}.`
+              : `Turnos cobertos por ${row.name}: ${row.coveredTurns}. Total de turnos do período: ${totalPeriodTurns}.`}
           </p>
           <p className="mt-1">
-            Cálculo: {row.coveredTurns} ÷ {totalPeriodTurns} x R$ {formatCurrencyBRL(preview.totalTeamBonus)} = R$ {formatCurrencyBRL(row.prize)}.
+            Cálculo: {reliefSplit.basis === 'days' ? row.coveredDays : row.coveredTurns} ÷ {reliefSplit.basis === 'days' ? reliefSplit.totalPeriodDays : totalPeriodTurns} x R$ {formatCurrencyBRL(preview.totalTeamBonus)} = R$ {formatCurrencyBRL(row.prize)}.
           </p>
           <p className="mt-2 font-black">Bonificação da folguista: R$ {formatCurrencyBRL(row.prize)}</p>
         </div>
@@ -2937,11 +2944,16 @@ export function GoalsTrackingDashboard() {
             <h1 className="text-2xl font-extrabold">Acompanhamento</h1>
             <p className="mt-1 text-[13px] font-semibold text-ds-on-dark-sub">Performance e projeção das metas de faturamento em tempo real.</p>
           </div>
-          {isManager && (
-            <Button variant="primary-page" size="md" onClick={() => setNewMetaOpen(true)}>
-              <Plus aria-hidden="true" className="mr-2 h-4 w-4" />Nova meta
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="on-dark-secondary" size="md">
+              <Link href="/dashboard/goals/guide"><BookOpen aria-hidden="true" className="mr-2 h-4 w-4" />Entenda a meta</Link>
             </Button>
-          )}
+            {isManager && (
+              <Button variant="primary-page" size="md" onClick={() => setNewMetaOpen(true)}>
+                <Plus aria-hidden="true" className="mr-2 h-4 w-4" />Nova meta
+              </Button>
+            )}
+          </div>
         </div>
 
         {periodGroups.length > 0 && (
@@ -3266,6 +3278,11 @@ export function GoalsTrackingDashboard() {
                         .filter(goal => goal.employeeId === id)
                         .reduce((sum, goal) => sum + (goal.scheduledTurnCount ?? 0), 0)
                     );
+                    const coveredDaysById = new Map(collaboratorIds.map(id => {
+                      const goals = periodEgs.filter(goal => goal.employeeId === id);
+                      const dates = new Set(goals.flatMap(goal => distributionSnapshot?.employeeDateKeysByGoalId[goal.id] ?? []));
+                      return [id, dates.size || Math.max(0, ...goals.map(goal => goal.scheduledDays ?? 0))] as const;
+                    }));
                     const bonusPreview = calculateTieredGoalBonus(
                       period.goalMethodSnapshot,
                       stats.value,
@@ -3275,6 +3292,9 @@ export function GoalsTrackingDashboard() {
                         reliefWorkerCount: reliefParticipantIds.length,
                         reliefWorkerCoveredTurnsByPerson: reliefCoveredTurnsByPerson,
                         totalPeriodTurns,
+                        reliefWorkerBasis: goalReliefBasisForStart(period.startDate),
+                        reliefWorkerCoveredDaysByPerson: reliefParticipantIds.map(id => coveredDaysById.get(id) ?? 0),
+                        totalPeriodDays: periodDateCount,
                       }
                     );
                     const reliefBonusById = new Map(reliefParticipantIds.map((id, index) => [
@@ -3303,6 +3323,7 @@ export function GoalsTrackingDashboard() {
                         roleKey,
                         roleLabel,
                         coveredTurns,
+                        coveredDays: coveredDaysById.get(id) ?? 0,
                         prize,
                       };
                     });

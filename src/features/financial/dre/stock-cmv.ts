@@ -30,6 +30,8 @@ export type DreStockUnitMonthSummary = {
 };
 
 export type DreStockCmvPayload = {
+  /** Units whose full range was read, including units with no outflow movements. */
+  kioskIds: string[];
   periods: string[];
   stockSummaries: DreStockUnitMonthSummary[];
   missingProductIds: string[];
@@ -42,6 +44,50 @@ export type DreStockCmvPayload = {
     effectiveCostDocuments: number;
   };
 };
+
+export type DreStockCmvSelection = Pick<DreStockUnitMonthSummary,
+  "consumptionCmv" | "lossesCmv" | "adjustmentsCmv" | "totalCmv" | "movementCount" | "unpricedMovementCount" | "movementDays"
+> & { coverage: "complete" | "incomplete" | "unavailable" };
+
+/** Missing source is not zero. A fully queried unit/month with no rows is known zero. */
+export function selectDreStockCmv(input: {
+  payload: DreStockCmvPayload | null | undefined;
+  monthKey: string;
+  kioskIds: string[];
+  sourceError?: boolean;
+  loading?: boolean;
+}): DreStockCmvSelection {
+  const result: DreStockCmvSelection = { consumptionCmv: 0, lossesCmv: 0, adjustmentsCmv: 0, totalCmv: 0,
+    movementCount: 0, unpricedMovementCount: 0, movementDays: 0, coverage: "complete" };
+  const amounts = ["consumptionCmv", "lossesCmv", "adjustmentsCmv", "totalCmv"] as const;
+  const unavailable = (coverage: "incomplete" | "unavailable") => {
+    result.coverage = coverage;
+    for (const key of amounts) result[key] = NaN;
+    return result;
+  };
+  const { payload, monthKey } = input;
+  const units = new Set(input.kioskIds);
+  if (input.sourceError || input.loading || !payload || units.size === 0 || !payload.periods.includes(monthKey)
+    || !Array.isArray(payload.kioskIds) || [...units].some(id => !payload.kioskIds.includes(id))) {
+    return unavailable("unavailable");
+  }
+  const seen = new Set<string>();
+  let complete = true;
+  for (const row of payload.stockSummaries) {
+    if (!units.has(row.kioskId) || `${row.year}-${String(row.month).padStart(2, "0")}` !== monthKey) continue;
+    if (seen.has(row.kioskId)) return unavailable("unavailable");
+    seen.add(row.kioskId);
+    if (amounts.some(key => !Number.isFinite(row[key]) || row[key] < 0)
+      || !Number.isSafeInteger(row.movementCount) || row.movementCount < 0
+      || !Number.isSafeInteger(row.unpricedMovementCount) || row.unpricedMovementCount < 0) return unavailable("incomplete");
+    for (const key of amounts) result[key] += row[key];
+    result.movementCount += row.movementCount;
+    result.unpricedMovementCount += row.unpricedMovementCount;
+    result.movementDays = Math.max(result.movementDays, row.movementDays);
+    if (row.unpricedMovementCount > 0) complete = false;
+  }
+  return complete ? result : unavailable("incomplete");
+}
 
 type StockMovementCategory = "consumption" | "losses" | "adjustments";
 

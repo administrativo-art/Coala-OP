@@ -104,6 +104,12 @@ test('inventory separates subject, actor and candidate linkage; enforces ACL and
   await hrDbAdmin.collection('employees').doc(employeeId).set({ auth_uid: uid });
   await hrDbAdmin.collection('employees').doc(employeeId).collection('consentimentos_imagem_voz_historico').doc('consent-1').set({ event: 'granted' });
   await dbAdmin.collection('dp_personScheduleIndex').doc('person-inventory-schedule-index').set({ userId: uid, competence: '2026-11', scheduleIds: ['schedule-1'] });
+  await dbAdmin.collection('dp_schedules').doc('person-inventory-schedule').set({ workspaceId: 'coala', unitId: 'unit-a',
+    year: 2026, month: 11, publishedBy: actors[1].uid });
+  await dbAdmin.collection('dp_schedules').doc('person-inventory-schedule').collection('shifts').doc('person-inventory-shift')
+    .set({ userId: uid, date: '2026-11-10', type: 'work' });
+  await dbAdmin.collection('dp_responsibilityTasks').doc('person-inventory-task').set({ workspaceId: 'coala', unitId: 'unit-a',
+    beneficiaryUid: uid, activity: 'schedules', kind: 'automatic_absence_restoration_review' });
   await hrDbAdmin.collection('candidates').doc(candidateId).set({});
   await hrDbAdmin.collection('candidates').doc('person-inventory-foreign-candidate').set({ workspaceId: 'foreign' });
   await hrDbAdmin.collection('employees').doc('person-inventory-foreign-employee').set({ workspaceId: 'foreign' });
@@ -128,6 +134,8 @@ test('inventory separates subject, actor and candidate linkage; enforces ACL and
     await Promise.all([hrDbAdmin.collection('employees').doc(employeeId).delete(), hrDbAdmin.collection('candidates').doc(candidateId).delete(), hrDbAdmin.collection('onboardingProcesses').doc('person-inventory-onboarding').delete(), hrDbAdmin.collection('onboardingProcesses').doc('person-inventory-collision').delete()]);
     await Promise.all([hrDbAdmin.collection('candidates').doc('person-inventory-foreign-candidate').delete(), hrDbAdmin.collection('employees').doc('person-inventory-foreign-employee').delete(), hrDbAdmin.collection('candidates').doc('person-inventory-cross-candidate').delete(), hrDbAdmin.collection('onboardingProcesses').doc('person-inventory-cross-process').delete(), dbAdmin.collection('users').doc('person-inventory-cross-user').delete()]);
     await Promise.all([hrDbAdmin.collection('employees').doc(employeeId).collection('consentimentos_imagem_voz_historico').doc('consent-1').delete(), dbAdmin.collection('dp_personScheduleIndex').doc('person-inventory-schedule-index').delete()]);
+    await Promise.all([dbAdmin.collection('dp_schedules').doc('person-inventory-schedule').collection('shifts').doc('person-inventory-shift').delete(),
+      dbAdmin.collection('dp_schedules').doc('person-inventory-schedule').delete(), dbAdmin.collection('dp_responsibilityTasks').doc('person-inventory-task').delete()]);
     await Promise.all(['person-inventory-entity-payment', 'person-inventory-vacation-payment', 'person-inventory-salary-payment', 'person-inventory-termination-payment'].map((id) => financialDbAdmin.collection('bankPaymentRequests').doc(id).delete()));
     await Promise.all(['person-inventory-vacation-expense', 'person-inventory-other-expense'].map((id) => financialDbAdmin.collection('expenses').doc(id).delete()));
     await hrDbAdmin.collection('employeeDocuments').doc('person-inventory-health-document').delete();
@@ -190,6 +198,12 @@ test('inventory separates subject, actor and candidate linkage; enforces ACL and
   assert.equal(consents.status, 200); assert.equal(consents.body.items[0].recordPath, `employees/${employeeId}/consentimentos_imagem_voz_historico/consent-1`);
   const schedules = await get(`/api/privacy/person-inventory?namespace=main.users&id=${uid}&source=schedule-index`, admin);
   assert.equal(schedules.status, 200); assert.deepEqual(schedules.body.items.map((item) => item.id), ['person-inventory-schedule-index']);
+  const shifts = await get(`/api/privacy/person-inventory?namespace=main.users&id=${uid}&source=schedule-shift-subjects`, admin);
+  assert.equal(shifts.status, 200); assert.deepEqual(shifts.body.items.map((item) => item.id), ['person-inventory-shift']);
+  const tasks = await get(`/api/privacy/person-inventory?namespace=main.users&id=${uid}&source=schedule-responsibility-subjects`, admin);
+  assert.equal(tasks.status, 200); assert.deepEqual(tasks.body.items.map((item) => item.id), ['person-inventory-task']);
+  const publishers = await get(`/api/privacy/person-inventory?namespace=main.users&id=${actors[1].uid}&source=schedule-publishers`, admin);
+  assert.equal(publishers.status, 200); assert.deepEqual(publishers.body.items.map((item) => item.id), ['person-inventory-schedule']);
   await dbAdmin.collection('users').doc('person-inventory-foreign-user').set({ workspaceId: 'foreign', unitAccessScope: 'all' });
   const foreignTarget = await get('/api/privacy/person-inventory?namespace=main.users&id=person-inventory-foreign-user', admin);
   assert.equal(foreignTarget.status, 403);

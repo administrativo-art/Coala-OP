@@ -15,8 +15,8 @@ test("solicitação de pagamento aceita a rescisão como origem protegida", () =
   assert.equal(result.amount, 1234.56);
 });
 
-test("solicitação de pagamento aceita pedido de compra como origem", () => {
-  const result = createPaymentRequestSchema.parse({
+test("API geral recusa criação arbitrária de Pix por pedido de compra", () => {
+  const result = createPaymentRequestSchema.safeParse({
     sourceType: "purchase_order",
     sourceId: "purchase-test",
     expenseId: "expense-test",
@@ -24,8 +24,7 @@ test("solicitação de pagamento aceita pedido de compra como origem", () => {
     amount: 2547.86,
     description: "Compra Cantinho | Pedido 157.816",
   });
-  assert.equal(result.sourceType, "purchase_order");
-  assert.equal(result.expenseId, "expense-test");
+  assert.equal(result.success, false);
 });
 
 test("solicitação de pagamento aceita salário como origem", () => {

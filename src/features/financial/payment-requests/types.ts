@@ -5,8 +5,8 @@ export type BankPaymentRequestStatus =
   | "awaiting_bank_approval" | "scheduled" | "processing" | "awaiting_statement" | "paid" | "rejected"
   | "approval_expired" | "failed" | "cancelled";
 
-export type BankPaymentSourceType = "aso" | "generated_receipt" | "document_receipt" | "termination" | "vacation" | "purchase_order" | "salary" | "expense_complement" | "financial_inbox" | "expense_boleto";
-export type LegacyBankPaymentSourceType = Exclude<BankPaymentSourceType, "financial_inbox" | "expense_boleto">;
+export type BankPaymentSourceType = "aso" | "generated_receipt" | "document_receipt" | "termination" | "vacation" | "purchase_order" | "salary" | "expense_complement" | "consultancy_provision" | "financial_inbox" | "expense_boleto" | "expense_supplier_pix";
+export type LegacyBankPaymentSourceType = Exclude<BankPaymentSourceType, "financial_inbox" | "expense_boleto" | "expense_supplier_pix">;
 export type BankPaymentRail = "pix" | "barcode" | "pix_copy_paste";
 
 export type BarcodePaymentSnapshot = {
@@ -66,8 +66,10 @@ type BankPaymentRequestBase = {
   requestedSettlementAmount?: number | null;
   requestedLateChargeAmount?: number | null;
   settlementRevision?: {
-    source: "confirmed_document";
-    evidenceSource: "manual_document_review";
+    source: "confirmed_document" | "inter_rejection";
+    evidenceSource: "manual_document_review" | "inter_rejection";
+    interQuoteAmountCents?: number;
+    interQuoteObservedAt?: string;
     sourceAttachmentId: string;
     sourceAttachmentSha256: string;
     barcode: string;
@@ -95,6 +97,7 @@ type BankPaymentRequestBase = {
   authorizedAt?: string;
   submissionStartedAt?: string;
   submissionAttemptCount?: number;
+  submissionReservationId?: string;
   submittedAt?: string;
   bankApprovalObservedAt?: string;
   bankSchedulingObservedAt?: string;
@@ -142,12 +145,19 @@ type BankPaymentRequestBase = {
 };
 
 export type PixBankPaymentRequest = BankPaymentRequestBase & {
-  sourceType: LegacyBankPaymentSourceType;
+  sourceType: LegacyBankPaymentSourceType | "expense_supplier_pix";
   paymentRail?: "pix";
   beneficiaryReference: PaymentBeneficiaryReference;
   beneficiarySnapshot: BeneficiarySnapshot;
   barcodeSnapshot?: never;
   pixCopyPasteSnapshot?: never;
+  supplierPixConfirmation?: {
+    competenceMonth: string;
+    previousPaidRequestId: string;
+    replacedBoletoHash?: string;
+  };
+  purchasePixIndication?: import("./purchase-supplier-pix.server").PurchasePixIndication;
+  purchasePixSource?: import("./purchase-supplier-pix.server").PurchasePixSourceSnapshot;
   status: Exclude<BankPaymentRequestStatus, "awaiting_statement">;
 };
 

@@ -419,6 +419,24 @@ Eventos, fechamento/reabertura, envio versionado, retorno, conciliação e defin
 
 Reaproveitar o fechamento integrado já especificado nas seções 9–11; publicar espelhos e versões correspondentes na pasta do colaborador e nas consultas app/web, preservando versões anteriores identificadas.
 
+#### Conteúdo do Portal do Contador (decisão de 23/11/2026)
+
+O contador consulta as informações do fechamento de cada colaborador nas empresas e competências que o administrador liberar. A navegação segue empresa, competência e colaborador. Ao abrir uma pessoa, apresenta o resumo apurado para a folha, faltas e ausências consideradas, horas extras por percentual, movimentos e saldo do banco de horas, espelho e documentos associados ao fechamento disponibilizado.
+
+A liberação deve identificar a pessoa e a versão fechada que originou as informações. O portal precisa conferir se o colaborador pertence ao empregador autorizado no período e preservar a identificação da versão após reabertura. O conteúdo segue o fechamento liberado pelo administrador. A entrega individual e a consulta estão implementadas localmente, com prévia e confirmação, vínculo por data, revisão imutável, auditoria e suspensão após alteração de fontes ou reabertura. O espelho é consultado por marcações e o contracheque vinculado à versão pode ser selecionado para download. Publicação e homologação com dados reais continuam pendentes.
+
+#### Acompanhamento do fechamento por competência (22/11/2026)
+
+| Item | Situação | Entrega e próximo passo |
+| --- | --- | --- |
+| 1. Equipe do mês | Implementado | O fechamento considera o vínculo e a vigência no mês, o cadastro legado e as pessoas com ocorrências. A versão fechada preserva a equipe. |
+| 2. Alertas graves | Bloqueio e liberação implementados | O fechamento exige que o RH/DP autorizado justifique cada dia com alerta grave ou corrija o ponto. Devolução individual e em lote implementada localmente, com resposta do colaborador no One/Go, decisão do DP e histórico imutável. Testes dirigidos e compilação aprovados em 23/11/2026. Faltam homologação visual e publicação. |
+| 3. Banco de horas e extras | Apuração por pessoa implementada | O DP vê o resultado da versão fechada, o motivo de falhas, a opção de repetir o cálculo individual e as pendências que afetam a folha. Intervalo liberado com alerta continua sinalizado para conferência. Falta registrar o desfecho financeiro de um intervalo confirmado como suprimido. |
+| 4. Acesso do contador | Parcial | Implementados localmente o diretório de prestadores, logins individuais, concessões e consulta por empresa/competência/colaborador. O RH confere e libera cada entrega versionada, com resumo, marcações do espelho e contracheque opcional. Reabertura ou alteração de fonte suspende a entrega anterior. Faltam publicação, comparação visual entre revisões e validação com o contador dos eventos e do formato de importação. |
+| 5. Conferência do contracheque | Implementado localmente no escopo de tempo | RH vincula o PDF ativo mais recente à pessoa, competência e entrega imutável; transcreve parcelas e compara extras por percentual, descontos, créditos vencidos e banco para folha em minutos. Divergência ou fonte alterada bloqueia novo envio/reenvio para assinatura; nova conferência preserva a anterior. Faltas e noturno são referências, sem conversão remuneratória inferida. Faltam publicação, homologação real e acordo de rubricas/conversões para ampliar a cobertura. |
+| 6. Acompanhamento e assinaturas | Implementado localmente | Situações e filtros distinguem documento, conferência, divergência, fonte alterada, pronto sob revalidação, contato/cadastro pendente, preparo, espera, atraso, recusa, falha e assinatura concluída. Grade usa metadados limitados; gates completos de envio preservados. Faltam publicação e homologação real. |
+| 7. Conciliação financeira | Implementado localmente | Líquido lido no PDF exato comparado ao valor a pagar do título salarial existente, mantendo nominal separado. Guia FGTS/DARF previdenciário revisada com contribuinte e número confirmados comparada à individualização por pessoa/conta/natureza e total do título. Revisões imutáveis e reservas impedem conferência duplicada por este fluxo. Não cria lançamento ou pagamento; mudança de pendente para pago preserva a conferência documental. Dados sem prova ficam pendentes. Faltam publicação e homologação real. |
+
 ### Fase 6 — Validação integrada
 
 Competência sintética completa com casos esperados aprovados pelo DP/contador e revisão jurídica dos casos sensíveis. Incluir falhas, recuperação, mudança contratual, férias, ausência parcial, desligamento e retroatividade.

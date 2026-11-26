@@ -91,6 +91,42 @@ test("não permite frete separado sem favorecido", () => {
   );
 });
 
+test("classifica a taxa de serviço paga junto sem duplicar a despesa", () => {
+  const components = buildPurchaseExpenseComponents({
+    ...base,
+    totalValue: 7_612.9,
+    serviceFee: 12.9,
+    serviceFeePaymentMode: "included_with_goods",
+    serviceFeeAccountPlanId: "service",
+    serviceFeeAccountPlanName: "Taxa de serviço da compra on-line",
+    freightPaymentMode: "included_with_goods",
+  });
+  assert.equal(components.length, 1);
+  assert.equal(components[0].totalValue, 7_612.9);
+  assert.deepEqual(components[0].accountAllocations?.map(({ accountPlanId, amount }) => ({ accountPlanId, amount })), [
+    { accountPlanId: "goods", amount: 6_800 },
+    { accountPlanId: "freight", amount: 800 },
+    { accountPlanId: "service", amount: 12.9 },
+  ]);
+});
+
+test("cria despesa vinculada própria para taxa paga separadamente", () => {
+  const components = buildPurchaseExpenseComponents({
+    ...base,
+    totalValue: 7_612.9,
+    serviceFee: 12.9,
+    serviceFeePaymentMode: "separate",
+    serviceFeeAccountPlanId: "service",
+    serviceFeeAccountPlanName: "Taxa de serviço da compra on-line",
+    freightPaymentMode: "separate",
+  });
+  assert.deepEqual(components.map(({ role, totalValue }) => ({ role, totalValue })), [
+    { role: "goods", totalValue: 6_800 },
+    { role: "freight", totalValue: 800 },
+    { role: "service_fee", totalValue: 12.9 },
+  ]);
+});
+
 test("coloca a compra no crédito na competência da compra com vencimento no mês seguinte", () => {
   const plan = buildPurchaseExpensePaymentPlan({
     paymentMethod: "card_credit",

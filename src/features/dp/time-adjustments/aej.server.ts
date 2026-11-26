@@ -14,7 +14,7 @@ import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { AppError } from '@/lib/observability/app-error';
 
-import { aejShiftOf, generateAej, type AejAbsence, type AejEmployee, type AejShift } from './aej';
+import { aejContractSchedules, generateAej, type AejAbsence, type AejEmployee } from './aej';
 import type { AejExportInput } from './schemas';
 import { AEJ_EXPORTS, CLOSURES, closureKey, TREATMENTS } from './service.server';
 
@@ -103,8 +103,15 @@ export async function exportAej(context: ServerUserContext, input: AejExportInpu
   const employees: AejEmployee[] = await Promise.all(persons.map(async (person, index) => {
     const ids = [person.uid, typeof users[index]?.get('hrEmployeeId') === 'string' ? String(users[index].get('hrEmployeeId')) : null];
     const months = await Promise.all(competences.map((competence) => readRepPMonthOfPerson(ids, competence, { db: deps.mainDb })));
-    const shifts = months.flatMap((month) => month.shifts)
-      .map(aejShiftOf).filter((shift): shift is AejShift => shift !== null && shift.date >= input.startDate && shift.date <= input.endDate);
+    const { schedules: shifts, unresolved } = aejContractSchedules(months.flatMap((month) => month.shifts)
+      .filter((shift) => shift.date >= input.startDate && shift.date <= input.endDate));
+    const pendingContract = unresolved[0];
+    if (pendingContract) {
+      const date = pendingContract.date.split('-').reverse().join('/');
+      const load = pendingContract.plannedMinutes === null ? '' : ` Carga prevista: ${pendingContract.plannedMinutes} minutos.`;
+      throw fail('PTRP_AEJ_CONTRACT_SCHEDULE_UNRESOLVED',
+        `O horário contratual de ${date} precisa ser conferido antes de gerar o AEJ.${load}`, 'CONFLICT');
+    }
     // Registro 07: folga sem trabalho como DSR, falta não justificada como "2" e, por dia, a soma dos créditos (inclusão) e dos
     // débitos (compensação) do banco apurado. Qual folga é o DSR da semana e a natureza do débito são pendências do plano.
     const [bank, movements] = await Promise.all([

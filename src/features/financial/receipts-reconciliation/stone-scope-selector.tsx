@@ -1,6 +1,7 @@
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { MappingView } from "../agent/configuration";
 
 type StoneScopeSelectorProps = {
@@ -15,46 +16,57 @@ type StoneScopeSelectorProps = {
   onStoneCodeChange: (stoneCode: string) => void;
   onRefresh: () => void;
   onLoadMore?: () => void;
+  /** Ações extras do escopo (por exemplo, configurar vínculos), no mesmo estilo secundário. */
+  actions?: React.ReactNode;
+  /** Oferece "Todos os vínculos" (visão consolidada); o valor do vínculo passa a ser `STONE_ALL_MAPPINGS`. */
+  allowAll?: boolean;
 };
+
+export const STONE_ALL_MAPPINGS = "__all__";
 
 function dateLabel(value: string | null | undefined) {
   return value ? value.split("-").reverse().join("/") : "sem data final";
 }
 
 export function StoneScopeSelector({
-  mappings, mappingId, stoneCode, busy = false, loaded, error, cursor, onMappingChange, onStoneCodeChange, onRefresh, onLoadMore,
+  mappings, mappingId, stoneCode, busy = false, loaded, error, cursor, onMappingChange, onStoneCodeChange, onRefresh, onLoadMore, actions, allowAll = false,
 }: StoneScopeSelectorProps) {
+  const everything = allowAll && mappingId === STONE_ALL_MAPPINGS;
   const mapping = mappings.find(item => item.id === mappingId);
   return <Card className="rounded-2xl border-ds-border bg-white">
     <CardContent className="p-4 sm:p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint">Escopo da consulta</p>
-          <p className="mt-1 text-sm text-muted-foreground">A unidade, a conta e o StoneCode valem para toda a etapa atual.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Escolha onde a venda ocorreu. A unidade, a conta e o StoneCode valem para todas as etapas.</p>
         </div>
         <div className="flex gap-2">
-          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={onRefresh}>
-            <RefreshCw className={`mr-2 h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} aria-hidden="true" />
+          {actions}
+          <Button type="button" size="sm" variant="ds-secondary" disabled={busy} onClick={onRefresh}>
+            <RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} aria-hidden="true" />
             {loaded ? "Atualizar vínculos" : "Carregar vínculos"}
           </Button>
-          {cursor && onLoadMore ? <Button type="button" size="sm" variant="outline" disabled={busy} onClick={onLoadMore}>Mais vínculos</Button> : null}
+          {cursor && onLoadMore ? <Button type="button" size="sm" variant="ds-secondary" disabled={busy} onClick={onLoadMore}>Mais vínculos</Button> : null}
         </div>
       </div>
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(180px,0.85fr)_minmax(0,1fr)] lg:items-end">
-        <label className="grid gap-1.5 text-sm font-semibold text-ds-ink-2">Unidade / conta bancária
-          <select aria-label="Vínculo oficial" disabled={busy || !mappings.length} className="h-11 rounded-xl border border-ds-border bg-ds-input px-3 text-sm font-semibold text-ds-ink outline-hidden focus:ring-2 focus:ring-ds-accent" value={mappingId} onChange={event => onMappingChange(event.target.value)}>
-            <option value="">{mappings.length ? "Selecione o vínculo oficial" : "Nenhum vínculo carregado"}</option>
-            {mappings.map(item => <option key={item.id} value={item.id}>{item.kioskName} — {item.accountName}</option>)}
-          </select>
-        </label>
-        <label className="grid gap-1.5 text-sm font-semibold text-ds-ink-2">StoneCode
-          <select aria-label="StoneCode" disabled={busy || !mapping} className="h-11 rounded-xl border border-ds-border bg-ds-input px-3 text-sm font-semibold text-ds-ink outline-hidden focus:ring-2 focus:ring-ds-accent disabled:text-muted-foreground" value={stoneCode} onChange={event => onStoneCodeChange(event.target.value)}>
-            <option value="">{mapping ? "Selecione" : "Selecione a unidade primeiro"}</option>
-            {mapping?.stoneCodes.map(item => <option key={item} value={item}>{item}</option>)}
-          </select>
-        </label>
-        <div className="rounded-xl bg-ds-input px-3 py-2.5 text-xs leading-5 text-ds-ink-muted">
-          {mapping ? <><strong className="block text-sm text-ds-ink-2">Vínculo vigente</strong>{dateLabel(mapping.validFrom)} a {dateLabel(mapping.validTo)}.</> : "Selecione um vínculo para conferir sua vigência e os StoneCodes disponíveis."}
+        <div className="grid gap-1.5">
+          <span className="text-xs font-bold text-ds-ink-2">Unidade e conta vinculada</span>
+          <Select value={mappingId || undefined} onValueChange={onMappingChange} disabled={busy || !mappings.length}>
+            <SelectTrigger aria-label="Vínculo oficial" className="font-semibold"><SelectValue placeholder={mappings.length ? "Selecione o vínculo oficial" : "Nenhum vínculo carregado"} /></SelectTrigger>
+            <SelectContent>{allowAll && mappings.length > 1 ? <SelectItem value={STONE_ALL_MAPPINGS}>Todos os vínculos ({mappings.length})</SelectItem> : null}{mappings.map(item => <SelectItem key={item.id} value={item.id}>{item.kioskName} — {item.accountName}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-1.5">
+          <span className="text-xs font-bold text-ds-ink-2">Identificador na Stone (StoneCode)</span>
+          <Select value={everything ? "__every__" : stoneCode || undefined} onValueChange={onStoneCodeChange} disabled={busy || !mapping}>
+            <SelectTrigger aria-label="StoneCode" className="font-semibold"><SelectValue placeholder={mapping ? "Selecione" : "Selecione a unidade primeiro"} /></SelectTrigger>
+            {everything ? <SelectContent><SelectItem value="__every__">Todos</SelectItem></SelectContent> : null}
+            {everything ? null : <SelectContent>{mapping?.stoneCodes.map(item => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>}
+          </Select>
+        </div>
+        <div className="flex min-h-10 flex-col justify-center rounded-ds-md bg-ds-input px-3 py-1.5 text-xs leading-5 text-ds-ink-muted">
+          {everything ? <><strong className="block text-sm text-ds-ink-2">Consulta consolidada</strong>{mappings.length} vínculos carregados.</> : mapping ? <><strong className="block text-sm text-ds-ink-2">Vínculo vigente</strong>{dateLabel(mapping.validFrom)} a {dateLabel(mapping.validTo)}.</> : "Selecione um vínculo para conferir sua vigência e os StoneCodes disponíveis."}
         </div>
       </div>
       {error ? <p role="alert" className="mt-3 text-sm text-destructive">{error}</p> : null}

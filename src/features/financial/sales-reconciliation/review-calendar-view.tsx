@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, CalendarDays, CheckCircle2, CircleAlert, Clock3, Loader2, RefreshCw, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { StatusPill } from "@/components/ui/status-pill";
 import { cn } from "@/lib/utils";
 import { money } from "./review-view";
 import { salesReviewDayLabels, type SalesReviewCalendarDay, type SalesReviewDayState, type SalesReviewMonth } from "./review-calendar";
 
 const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-const shortWeekdays = ["D", "S", "T", "Q", "Q", "S", "S"];
 
 const statusStyles: Record<SalesReviewDayState, string> = {
   closed: "border-ds-border bg-ds-ok-bg text-ds-ok",
@@ -15,8 +16,8 @@ const statusStyles: Record<SalesReviewDayState, string> = {
   awaiting_source: "border-ds-alert-border bg-ds-warn-bg text-ds-alert-ink",
   reopened: "border-ds-border bg-ds-info-bg text-ds-info",
   not_reviewed: "border-ds-border bg-white text-ds-ink-muted",
-  outside_scope: "border-transparent bg-ds-muted text-ds-ink-faint",
-  not_available: "border-transparent bg-ds-muted text-ds-ink-faint",
+  outside_scope: "border-transparent bg-ds-muted text-ds-ink-muted",
+  not_available: "border border-dashed border-ds-border bg-ds-surface text-ds-ink-muted",
 };
 
 const dotStyles: Record<SalesReviewDayState, string> = {
@@ -47,51 +48,49 @@ function isClickable(day: SalesReviewCalendarDay) {
 }
 
 function MiniDay({ day, href }: { day: SalesReviewCalendarDay; href: string }) {
-  const content = <>
-    <span>{day.day}</span>
-    <span aria-hidden="true" className={cn("h-1.5 w-1.5 rounded-full", dotStyles[day.state])} />
-  </>;
   const label = `${day.day}: ${salesReviewDayLabels[day.state]}`;
-  if (!isClickable(day)) return <span aria-label={label} className={cn("flex h-8 items-center justify-center gap-1 rounded-lg text-[11px] font-bold", statusStyles[day.state])}>{content}</span>;
+  const className = cn("relative grid h-8 place-items-center rounded-md border text-xs font-semibold tabular-nums", statusStyles[day.state]);
+  if (!isClickable(day)) return <span aria-label={label} title={salesReviewDayLabels[day.state]} className={className}>{day.day}</span>;
   return <Link href={href} aria-label={label} title={salesReviewDayLabels[day.state]}
-    className={cn("flex h-8 items-center justify-center gap-1 rounded-lg border text-[11px] font-bold transition hover:-translate-y-0.5 hover:shadow-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent", statusStyles[day.state])}>
-    {content}
+    className={cn(className, "transition-colors hover:border-ds-accent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent")}>
+    {day.day}
+    <span aria-hidden="true" className={cn("absolute right-1 top-1 size-1 rounded-full", dotStyles[day.state])} />
   </Link>;
 }
 
 function MonthCard({ month, monthHref, dayHref }: { month: SalesReviewMonth; monthHref: string; dayHref: (date: string) => string }) {
   const pending = month.counts.attention_required + month.counts.awaiting_source + month.counts.reopened;
-  const outsideScope = month.days.every(day => day.state === "outside_scope");
+  const monthName = monthLabel(month.year, month.month);
   const badge = pending ? `${pending} pendente${pending === 1 ? "" : "s"}`
     : month.counts.not_reviewed ? `${month.counts.not_reviewed} a verificar`
-      : !month.eligibleCount ? outsideScope ? "Fora da vigência" : "Aguardando dados"
+      : !month.eligibleCount ? "Aguardando dados"
         : "Mês fechado";
-  return <article className="group overflow-hidden rounded-[20px] border border-ds-border bg-ds-warm shadow-[0_2px_12px_rgba(15,23,42,.045)] transition hover:-translate-y-0.5 hover:border-ds-accent-soft hover:shadow-[0_12px_30px_rgba(15,23,42,.08)]">
-    <div className="flex items-start justify-between gap-3 px-4 pb-3 pt-4">
+  return <article className="flex min-w-0 flex-col gap-3 rounded-2xl border border-ds-border bg-ds-surface p-3 shadow-xs">
+    <header className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
       <div>
-        <Link href={monthHref} className="inline-flex items-center gap-2 text-[15px] font-black tracking-tight hover:text-ds-accent-ink">
-          <CalendarDays className="h-4 w-4 text-ds-accent-ink" />{monthLabel(month.year, month.month)}
-        </Link>
-        <p className="mt-1 text-[11px] font-semibold text-ds-ink-faint">{month.reviewedCount} de {month.eligibleCount} dias verificados</p>
+        <h3 className="text-sm font-extrabold text-ds-ink">{monthName}</h3>
+        <p className="mt-0.5 text-xs text-ds-ink-muted">{month.reviewedCount} de {month.eligibleCount} dias verificados</p>
       </div>
-      <span className={cn("rounded-full px-2.5 py-1 text-[10px] font-black",
-        pending ? "bg-ds-danger-bg text-ds-danger" : month.counts.not_reviewed || !month.eligibleCount ? "bg-ds-muted text-ds-ink-muted" : "bg-ds-ok-bg text-ds-ok")}>
+      <StatusPill variant={pending ? "danger" : month.counts.not_reviewed || !month.eligibleCount ? "neutral" : "ok"}>
         {badge}
-      </span>
+      </StatusPill>
+    </header>
+    <div role="progressbar" aria-label={`Dias elegíveis fechados em ${monthName}`} aria-valuenow={month.closedPercent}
+      className="h-1 overflow-hidden rounded-full bg-ds-muted">
+      <div className="h-full bg-ds-ok" style={{ width: `${month.closedPercent}%` }} />
     </div>
-    <div className="mx-4 flex h-1.5 overflow-hidden rounded-full bg-ds-muted" aria-label={`${month.closedPercent}% dos dias elegíveis fechados`}>
-      <span className="bg-ds-ok" style={{ width: `${month.closedPercent}%` }} />
-    </div>
-    <div className="p-4 pt-3">
-      <div className="mb-1 grid grid-cols-7 gap-1">{shortWeekdays.map((day, index) => <span key={`${day}-${index}`} className="text-center text-[9px] font-black uppercase text-ds-ink-faint">{day}</span>)}</div>
+    <div>
+      <div className="mb-1 grid grid-cols-7 gap-1">
+        {WEEKDAYS.map(day => <span key={day} className="text-center text-[10px] font-semibold text-ds-ink-muted">{day}</span>)}
+      </div>
       <div className="grid grid-cols-7 gap-1">
         {Array.from({ length: month.offset }, (_, index) => <span key={`empty-${index}`} />)}
         {month.days.map(day => <MiniDay key={day.date} day={day} href={dayHref(day.date)} />)}
       </div>
     </div>
-    <Link href={monthHref} className="flex h-10 items-center justify-between border-t border-ds-border px-4 text-[11.5px] font-extrabold text-ds-ink-muted hover:bg-ds-accent-soft hover:text-ds-accent-ink">
-      Abrir calendário do mês <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-    </Link>
+    <Button asChild variant="ds-ghost" size="xs" className="mt-auto w-full justify-between">
+      <Link href={monthHref}>Abrir calendário do mês <ArrowRight aria-hidden="true" className="size-3.5" /></Link>
+    </Button>
   </article>;
 }
 
@@ -124,7 +123,7 @@ function MonthCalendar({ month, yearHref, previousHref, nextHref, dayHref }: {
       {[
         ["Dias fechados", String(month.counts.closed), `${month.closedPercent}% dos dias elegíveis`, "text-ds-ok"],
         ["Pendências", String(pending), pending ? "Priorize os dias destacados" : "Nenhuma pendência registrada", pending ? "text-ds-danger" : "text-ds-ok"],
-        ["Não verificados", String(month.counts.not_reviewed), "Backfill automático em andamento", "text-ds-ink-2"],
+        ["Não verificados", String(month.counts.not_reviewed), "Aguardando conferência automática", "text-ds-ink-2"],
         ["Diferença acumulada", money(difference), "Stone − PDV nos dias verificados", difference ? "text-ds-danger" : "text-ds-ok"],
       ].map(([title, value, detail, tone]) => <div key={title} className="rounded-2xl border border-ds-border bg-white px-4 py-3.5">
         <p className="text-[10px] font-black uppercase tracking-[.11em] text-ds-ink-faint">{title}</p>
@@ -176,6 +175,11 @@ export function SalesReviewCalendarView({ months, selectedMonth, loading, error,
   </div>;
   if (loading) return <div aria-live="polite" className="grid min-h-72 place-items-center rounded-[20px] border border-ds-border bg-white"><span className="inline-flex items-center gap-2 text-sm font-bold text-ds-ink-muted"><Loader2 className="h-4 w-4 animate-spin text-ds-accent-ink" />Carregando calendário…</span></div>;
   if (error) return <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-ds-confirm-border bg-ds-danger-bg px-5 py-4 text-ds-confirm-ink"><div><p className="text-sm font-black">Não foi possível carregar o calendário</p><p className="mt-1 text-xs">{error}</p></div><button type="button" onClick={onRetry} className="inline-flex h-9 items-center gap-2 rounded-xl border border-ds-confirm-border bg-white px-3 text-xs font-black"><RefreshCw className="h-3.5 w-3.5" />Tentar novamente</button></div>;
+  if (!months.length) return <section className="rounded-2xl border border-ds-border bg-ds-surface px-6 py-12 text-center">
+    <CalendarDays aria-hidden="true" className="mx-auto size-6 text-ds-ink-muted" />
+    <h2 className="mt-3 text-base font-extrabold text-ds-ink">Nenhum mês dentro da vigência</h2>
+    <p className="mt-1 text-sm text-ds-ink-muted">A vigência deste vínculo não abrange o período exibido no calendário.</p>
+  </section>;
   const month = selectedMonth ? months.find(item => item.key === selectedMonth) ?? null : null;
   if (selectedMonth && month) {
     const index = months.findIndex(item => item.key === selectedMonth);
@@ -188,18 +192,21 @@ export function SalesReviewCalendarView({ months, selectedMonth, loading, error,
     closed: summary.closed + monthItem.counts.closed,
     pending: summary.pending + monthItem.counts.attention_required + monthItem.counts.awaiting_source + monthItem.counts.reopened,
     notReviewed: summary.notReviewed + monthItem.counts.not_reviewed,
-    eligible: summary.eligible + monthItem.eligibleCount,
-  }), { closed: 0, pending: 0, notReviewed: 0, eligible: 0 });
-  return <section className="space-y-4" aria-label="Conciliação por mês">
-    <div className="flex flex-wrap items-end justify-between gap-3">
-      <div><h2 className="text-xl font-black tracking-tight">Visão anual</h2><p className="mt-1 text-sm text-ds-ink-muted">Janeiro até o mês atual. Abra um mês ou vá direto ao dia.</p></div>
-      <div className="flex flex-wrap gap-2 text-[10.5px] font-black">
-        <span className="rounded-full bg-ds-ok-bg px-2.5 py-1.5 text-ds-ok">{totals.closed} fechados</span>
-        <span className="rounded-full bg-ds-danger-bg px-2.5 py-1.5 text-ds-danger">{totals.pending} pendentes</span>
-        <span className="rounded-full bg-ds-muted px-2.5 py-1.5 text-ds-ink-muted">{totals.notReviewed} não verificados</span>
+  }), { closed: 0, pending: 0, notReviewed: 0 });
+  return <section className="space-y-3" aria-label="Conciliação por mês">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <h2 className="text-lg font-extrabold tracking-tight text-ds-ink">Visão anual</h2>
+      <div className="flex flex-wrap gap-2">
+        <StatusPill variant="ok">{totals.closed} {totals.closed === 1 ? "fechado" : "fechados"}</StatusPill>
+        <StatusPill variant={totals.pending ? "danger" : "neutral"}>{totals.pending} {totals.pending === 1 ? "pendente" : "pendentes"}</StatusPill>
+        <StatusPill>{totals.notReviewed} {totals.notReviewed === 1 ? "não verificado" : "não verificados"}</StatusPill>
       </div>
     </div>
-    <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+    <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-ds-ink-muted">
+      <Legend state="closed" /><Legend state="attention_required" /><Legend state="awaiting_source" />
+      <Legend state="reopened" /><Legend state="not_reviewed" /><Legend state="outside_scope" /><Legend state="not_available" />
+    </div>
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {months.map(monthItem => <MonthCard key={monthItem.key} month={monthItem} monthHref={monthHref(monthItem.key)} dayHref={dayHref} />)}
     </div>
   </section>;

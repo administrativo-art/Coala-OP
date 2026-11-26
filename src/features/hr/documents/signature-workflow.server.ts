@@ -10,7 +10,10 @@ import { getStorage } from "firebase-admin/storage";
 import { PDFDocument } from "pdf-lib";
 
 import { admissionClosingComponentsSummary } from "@/features/hr/documents/admission-closing-term";
+import { admissionDependentConditions } from "@/features/hr/documents/admission-dependent-conditions";
 import {
+  ADMISSION_FAMILY_SALARY_TEMPLATE_ID,
+  ADMISSION_INCOME_TAX_TEMPLATE_ID,
   admissionSignaturePackageTemplateIds,
   compareAdmissionSignatureOrder,
   isCompleteAdmissionSignaturePackage,
@@ -125,12 +128,20 @@ function assertCompleteAdmissionPackage(
   process: RecordValue,
   templates: Array<{ templateId: unknown }>,
 ) {
+  const dependents = admissionDependentConditions(process);
+  if (dependents.familySalaryDecisionRequired && dependents.familySalaryDecision === null) {
+    throw new Error("Registre a decisão do operador sobre o salário-família antes de preparar o kit.");
+  }
+  if (dependents.familySalaryDecision === true && !dependents.familyRows.length) {
+    throw new Error("Informe os dados dos dependentes para gerar o termo de salário-família.");
+  }
   const templateIds = templates
     .map((template) => text(template.templateId))
     .filter((templateId): templateId is string => Boolean(templateId));
   if (!isCompleteAdmissionSignaturePackage(
     templateIds,
     transportVoucherAnswer(process),
+    dependents.conditions,
   )) {
     throw new Error(
       "O kit admissional é indivisível. Gere, revise e envie todos os documentos aplicáveis em uma única operação.",
@@ -850,8 +861,12 @@ export async function listSignatureWorkflow(
       .doc(admissionSignatureRequestId(onboardingId))
       .get(),
   ]);
+  const dependentAnalysis = admissionDependentConditions(process.data);
   const packageTemplateIds = new Set<string>(
-    admissionSignaturePackageTemplateIds(transportVoucherAnswer(process.data)),
+    admissionSignaturePackageTemplateIds(
+      transportVoucherAnswer(process.data),
+      dependentAnalysis.conditions,
+    ),
   );
   const systemTemplates = effectiveSystemTemplates
     .filter(isSelectableAdmissionSignatureTemplate)
@@ -873,6 +888,9 @@ export async function listSignatureWorkflow(
     templates: systemTemplates,
     documents,
     packageTemplateIds: systemTemplates.map((template) => template.id),
+    familySalaryAssessment: dependentAnalysis.familySalaryAssessment,
+    familySalaryDecision: dependentAnalysis.familySalaryDecision,
+    familySalaryDecisionRequired: dependentAnalysis.familySalaryDecisionRequired,
     signaturePackage: admissionSignaturePackageState(
       signatureRequest,
       options.includeSensitive === true,
@@ -880,11 +898,63 @@ export async function listSignatureWorkflow(
   };
 }
 
+export async function setAdmissionFamilySalaryDecision(params: {
+  onboardingId: string;
+  grant: boolean;
+  actorId: string;
+  actorName: string;
+}) {
+  const process = await loadProcess(params.onboardingId);
+  if (process.data.currentStage !== "signature_preparation"
+    || record(process.data.accountantWorkflow).status !== "completed") {
+    throw new Error("A decisão sobre o salário-família só pode ser registrada após a conclusão da contabilidade.");
+  }
+  const dependents = admissionDependentConditions(process.data);
+  if (!dependents.familySalaryDecisionRequired) {
+    throw new Error("Não há dependentes informados neste processo.");
+  }
+  if (params.grant && !dependents.familyRows.length) {
+    throw new Error("Informe os dados dos dependentes antes de conceder o salário-família.");
+  }
+  const workflow = await listSignatureWorkflow(params.onboardingId);
+  if (workflow.documents.some((document) => ["sending", "sent", "viewed", "partially_signed", "signed", "signed_archived_pending_employee", "archived"]
+    .includes(String(document.status)))) {
+    throw new Error("A decisão não pode ser alterada após o envio do pacote para assinatura.");
+  }
+  if (dependents.familySalaryDecision === params.grant) return listSignatureWorkflow(params.onboardingId);
+  const now = new Date().toISOString();
+  await process.ref.update({
+    familySalaryDecision: {
+      grant: params.grant,
+      legalAssessment: dependents.familySalaryAssessment,
+      parameterYearSupported: dependents.parameterYearSupported,
+      decidedAt: now,
+      decidedBy: params.actorId,
+      decidedByName: params.actorName,
+    },
+    updatedAt: now,
+  });
+  const revised = admissionDependentConditions({
+    ...process.data,
+    familySalaryDecision: { grant: params.grant },
+  });
+  return selectSignatureTemplates({
+    onboardingId: params.onboardingId,
+    templateIds: admissionSignaturePackageTemplateIds(
+      transportVoucherAnswer(process.data), revised.conditions,
+    ),
+    actorId: params.actorId,
+    actorName: params.actorName,
+    forceRegeneration: true,
+  });
+}
+
 export async function selectSignatureTemplates(params: {
   onboardingId: string;
   templateIds: string[];
   actorId: string;
   actorName: string;
+  forceRegeneration?: boolean;
 }) {
   const process = await loadProcess(params.onboardingId);
   if (process.data.currentStage !== "signature_preparation") {
@@ -933,7 +1003,17 @@ export async function selectSignatureTemplates(params: {
     if (["sent", "viewed", "partially_signed", "signed", "archived"].includes(String(document.get("status")))) {
       return;
     }
-    batch.set(document.ref, { selected: false, updatedAt: now }, { merge: true });
+    batch.set(document.ref, {
+      selected: false,
+      updatedAt: now,
+      ...(params.forceRegeneration ? {
+        status: "selected",
+        generatedDocumentId: null,
+        generatedStoragePath: null,
+        generatedPdfStoragePath: null,
+        reviewStatus: "pending",
+      } : {}),
+    }, { merge: true });
   });
   templates.forEach((template, index) => {
     const id = workflowId(params.onboardingId, template.id);
@@ -951,7 +1031,13 @@ export async function selectSignatureTemplates(params: {
         selected: true,
         required: true,
         order: index,
-        status: current?.get("status") ?? "selected",
+        status: params.forceRegeneration ? "selected" : current?.get("status") ?? "selected",
+        ...(params.forceRegeneration ? {
+          generatedDocumentId: null,
+          generatedStoragePath: null,
+          generatedPdfStoragePath: null,
+          reviewStatus: "pending",
+        } : {}),
         selectedAt: now,
         selectedBy: params.actorId,
         selectedByName: params.actorName,
@@ -1055,11 +1141,25 @@ export async function generateSelectedSignatureDocuments(params: {
   for (const target of targets) {
     try {
       const templateId = String(target.get("templateId"));
+      const dependents = admissionDependentConditions(process.data);
+      const lines = (rows: typeof dependents.familyRows) => rows
+        .map((row) => `${row.name} — nascimento ${row.birthDate}${row.cpf ? ` — CPF ${row.cpf}` : ""}`)
+        .join("\n");
+      const manualValues = templateId === ADMISSION_FAMILY_SALARY_TEMPLATE_ID
+        ? { family_salary_dependents_lines: lines(dependents.familyRows) }
+        : templateId === ADMISSION_INCOME_TAX_TEMPLATE_ID
+          ? { income_tax_dependents_lines: lines(dependents.incomeTaxRows.map((row) => ({
+            ...row,
+            birthDate: /^\d{4}-\d{2}-\d{2}$/.test(row.birthDate)
+              ? row.birthDate.split("-").reverse().join("/") : row.birthDate,
+          }))) }
+          : undefined;
       const generated = await generateDocumentFromTemplate({
         templateId,
         employeeId: processEmployeeId(process.data),
         onboardingId: params.onboardingId,
         includeSensitive: params.includeSensitive,
+        manualValues,
         lifecycle: "draft",
         actorId: params.actorId,
         actorName: params.actorName,

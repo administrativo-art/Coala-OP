@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { cn } from "@/lib/utils";
 
 import { breakStatus, journeyStartStatus, plannedPausesOf, type BreakLevel } from "./break-status";
-import { fiscalClock, minutesOf, workedMinutes, type DayShift, type DayView } from "./day-model";
+import { currentManualSegment, fiscalClock, minutesOf, workedMinutes, type DayShift, type DayView } from "./day-model";
 import { brDate, LocationCaptureNotice, LocationResultNotice, OfficialClockDisplay, ReceiptPill, saveFile } from "./marking-ui";
 import { formatOfficialClock } from "./official-clock";
 import type { useRepPMarking } from "./use-rep-p-marking";
@@ -27,6 +27,8 @@ export function hm(minutes: number, signed = false) {
 /** Batidas esperadas no dia: a do turno; sem cadastro, uma a mais que as feitas (sem inventar pares). */
 export function expectedPunchesOf(day: DayView) {
   if (!day.shift || day.shift.type !== "work" || day.absence) return day.markings.length;
+  if (day.manualSegments?.length) return day.manualSegments.reduce((count, segment) =>
+    count + 2 + (segment.breakType === "none" ? 0 : 2 * (plannedPausesOf(segment) ?? 0)), 0);
   if (day.shift.expectedPunches) return day.shift.expectedPunches;
   // Sem cadastro: 2 + 2 por pausa prevista; pausas em aberto deixam a conta aberta.
   if (day.shift.breakType === "none") return 2;
@@ -155,6 +157,7 @@ export function journeyState(day: DayView) {
   const last = day.markings.at(-1);
   if (!first || !last) return "Jornada não iniciada";
   const purpose = last.classification?.purpose;
+  if (purpose === "journey_end" && currentManualSegment(day.manualSegments ?? [], day.markings)) return "Trecho encerrado";
   if (purpose === "journey_end") return `Jornada encerrada às ${fiscalClock(last.markedAt)}`;
   if (purpose === "break_start") return `Em intervalo desde ${fiscalClock(last.markedAt)}`;
   return `Em jornada desde ${fiscalClock(first.markedAt)}`;
@@ -164,7 +167,10 @@ export function journeyState(day: DayView) {
 export function nextMarkingOf(day: DayView) {
   const expected = expectedPunchesOf(day);
   const index = day.markings.length;
-  const purpose = suggestedPurpose(day.markings, day.shift);
+  const segment = currentManualSegment(day.manualSegments ?? [], day.markings);
+  const last = day.markings.at(-1)?.classification?.purpose;
+  const purpose = segment?.breakType === "none" && last === "journey_start"
+    ? "journey_end" : suggestedPurpose(day.markings, segment ?? day.shift);
   const reliable = day.markings.length === 0 || day.markings.every((marking) => marking.classification?.purpose);
   const position = expected === null ? `${index + 1}ª batida` : index < expected ? `${index + 1}ª de ${expected}` : "batida extra";
   return { expected, index, purpose, reliable, position, extra: expected !== null && index >= expected };
@@ -228,7 +234,9 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded, dialog
   const units = options?.executionUnits ?? [];
   const unitName = units.find((unit) => unit.id === unitId)?.name;
   // Turno com unidade fixa: a unidade da escala vem escolhida; trocar é possível e não bloqueia a batida.
-  const work = day.shift?.type === "work" ? day.shift : null;
+  const segments = day.manualSegments ?? [];
+  const currentSegment = currentManualSegment(segments, day.markings);
+  const work = segments.length ? currentSegment : day.shift?.type === "work" ? day.shift : null;
   const freeUnit = work?.executionUnitPolicy === "free";
   const scheduledUnitId = work && !freeUnit && work.unitId && units.some((unit) => unit.id === work.unitId) ? work.unitId : null;
   const [otherUnit, setOtherUnit] = useState(false);
@@ -250,11 +258,12 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded, dialog
           {options ? <OfficialClockDisplay clock={unitClock} tone="dark" /> : <p className="text-sm text-ds-on-dark-muted">Carregando…</p>}
         </div>
         <div className="min-w-0 flex-1 space-y-1.5">
+          <ManualSegmentList day={day} dark />
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-ds-on-dark-2">
             <strong className="text-[13px] text-white">{journeyState(day)}</strong>
             {day.markings.length ? <span>{hm(workedMinutes(day.markings, nowMinutes))} até agora</span> : null}
             <span className="text-ds-on-dark-muted" aria-hidden>·</span>
-            {day.shift?.type === "work"
+            {segments.length ? <span>Jornada em trechos</span> : day.shift?.type === "work"
               ? <span>{day.shift.shiftName ?? "Turno"} {day.shift.startTime}–{day.shift.endTime}</span>
               : <span>{day.shift ? "Folga na escala" : "Sem escala publicada"}</span>}
             {units.length ? (
@@ -309,6 +318,25 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded, dialog
       </div>
       <RecordDialog open={dialogOpen} onOpenChange={setDialogOpen} marking={marking} day={day} onRecorded={onRecorded} />
     </ControlPanel>
+  );
+}
+
+function ManualSegmentList({ day, dark = false }: { day: DayView; dark?: boolean }) {
+  const segments = day.manualSegments ?? [];
+  if (!segments.length) return null;
+  const currentSegment = currentManualSegment(segments, day.markings);
+  return (
+    <ol className={dark ? "space-y-1 text-[12.5px] text-ds-on-dark-2" : "space-y-1 text-sm text-muted-foreground"}>
+      {segments.map((segment) => {
+        const active = segment === currentSegment;
+        return <li key={segment.manualOrder} className={active ? (dark ? "font-semibold text-white" : "font-semibold text-foreground") : ""}>
+          {active ? "Trecho atual ou próximo · " : ""}{segment.unitName ?? "Unidade"}
+          {segment.manualMode === "flexible"
+            ? ` · Flexível · ${hm(segment.manualWorkMinutes ?? 0)}${segment.startTime && segment.endTime ? ` · Janela ${segment.startTime}–${segment.endTime}` : ""}`
+            : ` · Fixo · Entrada ${segment.startTime} · Saída ${segment.endTime}`}
+        </li>;
+      })}
+    </ol>
   );
 }
 
@@ -420,6 +448,7 @@ export function RecordDialog({ open, onOpenChange, marking, day, onRecorded, cho
                 ? "Confira antes de registrar. Este ensaio fica separado do ponto oficial e não entra no fechamento."
                 : "Confira antes de registrar. A batida não pode ser apagada depois."}</DialogDescription>
             </DialogHeader>
+            <ManualSegmentList day={day} />
             <div className="rounded-ds-md border border-ds-border bg-ds-warm p-4 text-center">
               <OfficialClockDisplay clock={unitClock} />
               <p className="mt-1 text-xs text-ds-ink-muted">A hora gravada é a do servidor, no momento da confirmação.</p>

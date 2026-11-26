@@ -18,6 +18,46 @@ export type ExpectedBankDebitEntry = {
   references: string[];
 };
 
+type ExpenseInstallment = Record<string, unknown>;
+
+export function expectedDebitPrincipalForExpense(
+  expense: { totalValue?: unknown; installments?: unknown },
+  installmentNumber: unknown,
+): number | null {
+  if (installmentNumber === null || installmentNumber === undefined) {
+    const total = Number(expense.totalValue);
+    return Number.isFinite(total) && total > 0 ? total : null;
+  }
+  const number = Number(installmentNumber);
+  if (!Number.isInteger(number) || number < 1) return null;
+  if (!Array.isArray(expense.installments) || expense.installments.length === 0) {
+    const total = Number(expense.totalValue);
+    return number === 1 && Number.isFinite(total) && total > 0 ? total : null;
+  }
+  const matches = (expense.installments as ExpenseInstallment[]).filter((item, index) =>
+    (Number(item.number) || index + 1) === number
+  );
+  if (matches.length !== 1 || ["paid", "cancelled"].includes(String(matches[0].status))) return null;
+  const value = Number(matches[0].value);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+export function settleExpectedDebitInstallments(
+  installments: ExpenseInstallment[],
+  installmentNumber: number | null | undefined,
+  obligationPaid: boolean,
+  paidAt: unknown,
+  transactionId: string,
+): ExpenseInstallment[] {
+  return installments.map((installment, index) => {
+    const number = Number(installment.number) || index + 1;
+    const shouldPay = installmentNumber != null
+      ? number === installmentNumber
+      : obligationPaid && installment.status !== "cancelled";
+    return shouldPay ? { ...installment, status: "paid", paidAt, linkedBankTransactionId: transactionId } : installment;
+  });
+}
+
 const COUNTERPARTY_STOP_WORDS = new Set([
   "BANCO", "BOLETO", "COMERCIO", "DE", "DO", "DA", "EIRELI", "EPP", "LTDA", "ME",
   "PAGAMENTO", "SA", "SIMPLES", "TITULO",

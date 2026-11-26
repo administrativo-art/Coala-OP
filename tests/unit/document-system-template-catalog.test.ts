@@ -20,6 +20,7 @@ import {
   isAdmissionSignatureTemplateApplicable,
 } from "../../src/features/hr/documents/admission-signature-order";
 import { admissionBundleSignerPositions } from "../../src/features/hr/documents/admission-signature-positions";
+import { admissionDependentConditions } from "../../src/features/hr/documents/admission-dependent-conditions";
 import {
   isSelectableAdmissionSignatureTemplate,
   SYSTEM_DOCUMENT_TEMPLATES,
@@ -27,7 +28,7 @@ import {
 } from "../../src/features/hr/documents/system-template-catalog";
 
 test("catálogo reúne base institucional, uniformes, kit admissional e comprovante de ponto", () => {
-  assert.equal(SYSTEM_DOCUMENT_TEMPLATES.length, 21);
+  assert.equal(SYSTEM_DOCUMENT_TEMPLATES.length, 24);
   assert.deepEqual(
     [...new Set(SYSTEM_DOCUMENT_TEMPLATES.map((template) => template.category))].sort(),
     ["Admissão", "Base institucional", "Benefícios", "Contratos", "Controle de ponto", "Documentos", "Financeiro e recibos", "Patrimônio", "Uniformes"].sort(),
@@ -51,12 +52,12 @@ test("catálogo reúne base institucional, uniformes, kit admissional e comprova
   );
   assert.equal(
     SYSTEM_DOCUMENT_TEMPLATES.filter((template) => template.renderer === "admission_docx").length,
-    11,
+    13,
   );
   const admissionTemplates = SYSTEM_DOCUMENT_TEMPLATES.filter((template) =>
     template.id.startsWith("system-admission-"),
   );
-  assert.equal(admissionTemplates.length, 9);
+  assert.equal(admissionTemplates.length, 11);
   assert.ok(admissionTemplates.every((template) => template.status === "published"));
 });
 
@@ -81,9 +82,9 @@ test("termo de ponto eletrônico não integra o catálogo operacional", () => {
   );
 });
 
-test("seleção admissional oferece oito modelos e mantém o encerramento automático", () => {
+test("seleção admissional oferece dez modelos e mantém o encerramento automático", () => {
   const selectable = SYSTEM_DOCUMENT_TEMPLATES.filter(isSelectableAdmissionSignatureTemplate);
-  assert.equal(selectable.length, 8);
+  assert.equal(selectable.length, 10);
   assert.equal(
     selectable.some((template) => template.id === "system-admission-bundle-closing-term"),
     false,
@@ -155,6 +156,52 @@ test("kit admissional exige todos os componentes aplicáveis como uma unidade", 
     isCompleteAdmissionSignaturePackage([...forRequest, forRequest[0]], "yes"),
     true,
   );
+  const withDependents = admissionSignaturePackageTemplateIds("yes", {
+    familySalaryGranted: true,
+    incomeTaxDeclared: true,
+  });
+  assert.equal(withDependents.length, 9);
+  assert.equal(isCompleteAdmissionSignaturePackage(withDependents, "yes", {
+    familySalaryGranted: true,
+    incomeTaxDeclared: true,
+  }), true);
+  assert.equal(isCompleteAdmissionSignaturePackage(forRequest, "yes", {
+    familySalaryGranted: true,
+    incomeTaxDeclared: true,
+  }), false);
+});
+
+test("análise legal não decide a concessão do salário-família", () => {
+  const base = {
+    employmentRelationshipType: "clt",
+    expectedAdmissionDate: "2026-08-26",
+    monthlySalary: 1500,
+    publicFormAnswers: {
+      children: [{ name: "Criança A", birthDate: "2015-01-02", cpf: "12345678901", incomeTaxDependent: false }],
+    },
+    documents: [
+      { id: "child_1_birth_certificate", status: "approved", filePath: "birth.pdf" },
+      { id: "child_1_school_attendance", status: "approved", filePath: "school.pdf" },
+    ],
+  };
+  assert.deepEqual(admissionDependentConditions(base).conditions, {
+    familySalaryGranted: false,
+    incomeTaxDeclared: false,
+  });
+  assert.match(admissionDependentConditions(base).familySalaryAssessment, /ELEGÍVEL/);
+  assert.equal(admissionDependentConditions(base).familySalaryDecisionRequired, true);
+  assert.deepEqual(admissionDependentConditions({
+    ...base,
+    familySalaryDecision: { grant: true },
+    publicFormAnswers: { children: [{ ...base.publicFormAnswers.children[0], incomeTaxDependent: true }] },
+    documents: [],
+  }).conditions, {
+    familySalaryGranted: true,
+    incomeTaxDeclared: true,
+  });
+  assert.equal(admissionDependentConditions({ ...base, expectedAdmissionDate: "2027-01-10" }).parameterYearSupported, false);
+  assert.equal(admissionDependentConditions({ ...base, familySalaryDecision: { grant: false } }).conditions.familySalaryGranted, false);
+  assert.equal(admissionDependentConditions({ ...base, employmentRelationshipType: "internship", familySalaryDecision: { grant: true } }).conditions.familySalaryGranted, true);
 });
 
 test("posiciona as duas assinaturas no termo final do pacote", () => {
@@ -286,7 +333,7 @@ test("consentimento de imagem integra o pacote inicial sem perder a alteração 
 
 test("LGPD vigente remove vigência fixa e mantém índice do encerramento alinhado à esquerda", async () => {
   const lgpd = systemDocumentTemplateById("system-admission-lgpd-awareness-term");
-  assert.equal(lgpd?.version, 5);
+  assert.equal(lgpd?.version, 6);
   assert.equal(lgpd?.fieldMapping?.term_effective_date, undefined);
   assert.equal(lgpd?.variables.includes("term_effective_date"), false);
 
@@ -294,21 +341,32 @@ test("LGPD vigente remove vigência fixa e mantém índice do encerramento alinh
   const lgpdXml = new PizZip(lgpdSource).file("word/document.xml")?.asText() ?? "";
   assert.equal(lgpdXml.includes("Vigência:"), false);
   assert.equal(lgpdXml.includes("Versão 1.0"), false);
-  assert.ok(lgpdXml.includes("3-A. Localização no registro de ponto e durante a jornada"));
-  assert.ok(lgpdXml.indexOf("3. Finalidades do tratamento") < lgpdXml.indexOf("3-A. Localização"));
-  assert.ok(lgpdXml.indexOf("3-A. Localização") < lgpdXml.indexOf("4. Dados de saúde"));
-  // A revisão acrescenta somente a seção 3-A: modelos históricos e demais partes ficam preservados.
-  const previous = new PizZip(await readFile(path.join(process.cwd(), "docs/modelos-documentos/admissionais/03-termo-lgpd-v4.docx")));
+  const sections = [
+    "3. Finalidades do tratamento",
+    "3-A. Localização no registro de ponto e durante a jornada",
+    "3-B. Acompanhamento da localização durante a jornada e aparelhos empresariais",
+    "3-C. Metas, desempenho e premiação",
+    "4. Dados de saúde",
+  ].map((title) => lgpdXml.indexOf(title));
+  assert.ok(sections.every((index, i) => index > 0 && (i === 0 || index > sections[i - 1]!)), JSON.stringify(sections));
+  // Frequência e dados do acompanhamento descrevem o app atual (lease: 2 min em movimento, 15 min parado, sem sensores).
+  assert.ok(lgpdXml.includes("no máximo uma posição a cada 2 minutos; com o aparelho parado, uma posição a cada 15 minutos"));
+  assert.ok(lgpdXml.includes("As coordenadas não integram o registro de ponto, o comprovante nem os arquivos fiscais."));
+  assert.equal(lgpdXml.includes("orientação, bateria, rede"), false);
+  // A v6 parte da v5: componentes do DOCX idênticos e somente os parágrafos revisados (preâmbulo, 2-XVII/XVIII,
+  // 3-XXII, 3-A-III/IV, 7-II/XII, 10-X e 15-IX) alterados; os demais acréscimos são parágrafos novos.
+  const previous = new PizZip(await readFile(path.join(process.cwd(), "docs/modelos-documentos/admissionais/03-termo-lgpd-v5.docx")));
   const current = new PizZip(lgpdSource);
   assert.deepEqual(Object.keys(current.files).sort(), Object.keys(previous.files).sort());
   for (const name of Object.keys(previous.files).filter((name) => name !== "word/document.xml" && !previous.files[name].dir)) {
     assert.deepEqual(current.file(name)?.asUint8Array(), previous.file(name)?.asUint8Array(), name);
   }
-  const paragraphs = lgpdXml.match(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g) ?? [];
-  const clauseStart = paragraphs.findIndex((p) => p.includes("3-A. Localização"));
-  const clauseEnd = paragraphs.findIndex((p) => p.includes("4. Dados de saúde"));
-  assert.equal(clauseEnd - clauseStart, 10);
-  assert.equal(lgpdXml.replace(paragraphs.slice(clauseStart, clauseEnd).join(""), ""), previous.file("word/document.xml")?.asText());
+  const paragraphPattern = /<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g;
+  const previousParagraphs = previous.file("word/document.xml")?.asText().match(paragraphPattern) ?? [];
+  const paragraphs = lgpdXml.match(paragraphPattern) ?? [];
+  const kept = new Set(paragraphs);
+  assert.equal(previousParagraphs.filter((p) => !kept.has(p)).length, 10);
+  assert.equal(paragraphs.length - previousParagraphs.length, 29);
 
   const closing = systemDocumentTemplateById("system-admission-bundle-closing-term");
   assert.equal(closing?.version, 4);
@@ -319,6 +377,17 @@ test("LGPD vigente remove vigência fixa e mantém índice do encerramento alinh
   assert.ok(summaryParagraph);
   assert.match(summaryParagraph, /<w:jc w:val="left"\/>/);
   assert.equal(summaryParagraph.includes('w:val="both"'), false);
+});
+
+test("termo LGPD v6 limita acompanhamento a aparelhos empresariais", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { default: PizZip } = await import("pizzip");
+  const source = SYSTEM_DOCUMENT_TEMPLATES.find((item) => item.id === "system-admission-lgpd-awareness-term")!;
+  const zip = new PizZip(await readFile(source.sourcePath!));
+  const xml = zip.file("word/document.xml")!.asText();
+  const text = xml.replace(/<[^>]+>/g, "");
+  assert.match(text, /O acompanhamento não será realizado em aparelhos pessoais/);
+  assert.match(text, /cadastrado e autorizado como aparelho empresarial/);
 });
 
 test("fontes admissionais preservam os hashes catalogados", async () => {
@@ -333,13 +402,13 @@ test("fontes admissionais preservam os hashes catalogados", async () => {
   }
 });
 
-test("contrato de experiência v4 usa somente a razão social e preserva o layout", async () => {
+test("contrato de experiência v5 usa somente a razão social, preserva o layout e cita os documentos do pacote", async () => {
   const template = systemDocumentTemplateById(
     "system-admission-employment-probation-contract",
   );
-  assert.equal(template?.version, 4);
+  assert.equal(template?.version, 5);
   assert.equal(template?.status, "published");
-  assert.equal(template?.sourcePath?.endsWith("01-contrato-experiencia-v4.docx"), true);
+  assert.equal(template?.sourcePath?.endsWith("01-contrato-experiencia-v5.docx"), true);
   const salaryBinding = template?.fieldMapping?.contract_monthly_salary;
   assert.equal(salaryBinding?.kind, "system");
   if (salaryBinding?.kind === "system") {
@@ -366,7 +435,7 @@ test("contrato de experiência v4 usa somente a razão social e preserva o layou
   assert.equal(template?.variables.length, 16);
 
   const prepared = await readFile(
-    path.join(process.cwd(), "docs/modelos-documentos/admissionais/01-contrato-experiencia-v4.docx"),
+    path.join(process.cwd(), "docs/modelos-documentos/admissionais/01-contrato-experiencia-v5.docx"),
   );
   const preparedZip = new PizZip(prepared);
   const documentXml = preparedZip.file("word/document.xml")?.asText() ?? "";
@@ -384,6 +453,9 @@ test("contrato de experiência v4 usa somente a razão social e preserva o layou
   assert.ok(documentXml.includes("CONFIDENCIALIDADE E PROPRIEDADE INTELECTUAL"));
   assert.ok(documentXml.includes("Termo de Confidencialidade que"));
   assert.ok(documentXml.includes("artigos 88 a 93 da Lei nº 9.279/1996"));
+  assert.ok(documentXml.includes("na forma do Termo de Ciência sobre o Tratamento de Dados Pessoais, que integra"));
+  assert.ok(documentXml.includes("Regulamento de Metas e Prêmios por Desempenho vigente para o período"));
+  assert.equal(documentXml.includes("Regulamento de Bonificação"), false);
   assert.ok(documentXml.includes('<w:jc w:val="right"/>'));
   assert.equal((documentXml.match(/<w:spacing w:before="1000"\/>/g) ?? []).length, 2);
   for (const token of [
@@ -429,4 +501,13 @@ test("acordo de banco de horas v2 está parametrizado sem alterar partes opacas"
     return !before || !after || Buffer.compare(Buffer.from(before), Buffer.from(after)) !== 0;
   }).sort();
   assert.deepEqual(changed, ["word/document.xml", "word/footer1.xml"]);
+});
+
+test("regulamento de metas v4 informa apuração pelo sistema e pedido de revisão", async () => {
+  const template = systemDocumentTemplateById("system-admission-goals-awards-policy");
+  assert.equal(template?.version, 4);
+  assert.equal(template?.sourcePath?.endsWith("05-metas-premios-v4.docx"), true);
+  const xml = new PizZip(await readFile(path.join(process.cwd(), template!.sourcePath!))).file("word/document.xml")?.asText() ?? "";
+  assert.ok(xml.includes("A apuração será feita pelos sistemas internos da EMPREGADORA"));
+  assert.ok(xml.includes("a demonstração e a revisão do resultado apurado."));
 });

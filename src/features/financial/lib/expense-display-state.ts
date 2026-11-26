@@ -4,6 +4,7 @@ type ExpenseState = {
   status?: string; paymentState?: string; provisionType?: string; originModule?: string; originStatus?: string;
   dueDate?: unknown; totalValue?: number; budgetMigration?: unknown;
   hiddenFromExpensePanel?: boolean;
+  sourceSettlement?: unknown;
   installments?: Array<{ status?: string; paymentSchedulingStatus?: string }>;
   settlementSummary?: { reconciliationStatus?: string; balanceAmountCents?: number | null;
     principalSettledAmountCents?: number; settlementCreditsAmountCents?: number } | null;
@@ -30,6 +31,7 @@ export function expenseAwaitingConfirmation(expense: ExpenseState) {
 
 /** A confirmed debit remains evidence even while the expense is still a forecast. */
 export function expenseCashForecastAmount(expense: ExpenseState) {
+  if (Object.prototype.hasOwnProperty.call(expense, "sourceSettlement")) return 0;
   if (["paid", "draft", "cancelled", "reconciled"].includes(expense.status ?? "")) return 0;
   const summary = expense.settlementSummary;
   if (summary?.balanceAmountCents != null) return cents(summary.balanceAmountCents) / 100;

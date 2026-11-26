@@ -10,6 +10,9 @@ import { repPInstantMs } from "./time-zones";
  */
 
 export type DayShift = {
+  manualOrder?: number;
+  manualMode?: 'fixed' | 'flexible';
+  manualWorkMinutes?: number;
   type: "work" | "day_off";
   startTime: string | null;
   endTime: string | null;
@@ -56,6 +59,7 @@ export type DayIncident = "missing" | "odd" | "missing_break" | "late_exit" | "s
 export type DayView = {
   date: string;
   shift: DayShift | null;
+  manualSegments?: DayShift[];
   markings: DayMarking[];
   absence: DayAbsence | null;
   incidents: DayIncident[];
@@ -141,7 +145,15 @@ export function plannedWorkMinutesOf(shift: DayShift | null) {
   return Math.max(0, (span < 0 ? span + 1440 : span) - plannedBreakMinutesOf(shift));
 }
 
-export function buildDayView(input: { date: string; today: string; shift: DayShift | null; markings: DayMarking[]; absences: DayAbsence[]; treatments?: DayTreatment[] }): DayView {
+export function currentManualSegment(segments: DayShift[], markings: DayMarking[]) {
+  let index = 0;
+  for (const marking of markings) {
+    if (marking.executionUnitId === segments[index]?.unitId && marking.classification?.purpose === 'journey_end') index++;
+  }
+  return segments[index] ?? null;
+}
+
+export function buildDayView(input: { date: string; today: string; shift: DayShift | null; shifts?: DayShift[]; markings: DayMarking[]; absences: DayAbsence[]; treatments?: DayTreatment[] }): DayView {
   const allMarkings = applyTreatments(input.markings, (input.treatments ?? []).filter((item) => item.workDate === input.date),
     (item) => ({ receiptId: `ajuste-${item.adjustmentId}`, markedAt: item.markedAt, nsr: 0, executionUnitId: item.executionUnitId ?? "",
       receiptStatus: "available" as const }))
@@ -149,10 +161,14 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
   const markings = allMarkings.filter((marking) => marking.treatment !== "discarded");
   const absence = input.absences.find((item) => ACTIVE_ABSENCE.has(item.status) && item.startDate <= input.date && item.endDate >= input.date) ?? null;
   const shift = input.shift && input.shift.type === "work" ? input.shift : null;
+  const manualSegments = (input.shifts ?? []).filter((segment) => segment.manualOrder != null)
+    .sort((left, right) => (left.manualOrder ?? 0) - (right.manualOrder ?? 0));
   const past = input.date < input.today;
   const worked = workedMinutes(markings);
   const breakMinutes = breakTaken(markings);
-  const plannedWorkMinutes = plannedWorkMinutesOf(shift);
+  const plannedWorkMinutes = manualSegments.length
+    ? manualSegments.reduce((total, segment) => total + (segment.manualWorkMinutes ?? plannedWorkMinutesOf(segment) ?? 0), 0)
+    : plannedWorkMinutesOf(shift);
   const nightMinutes = pairedNightMinutes(markings.map((marking) => marking.markedAt));
   const tolerance = toleranceOf(shift);
   const incidents: DayIncident[] = [];
@@ -160,12 +176,12 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
 
   // Jornada que atravessa a meia-noite tem batidas em dois dias civis: sem tratamento, só o total é mostrado.
   if (shift?.overnight) {
-    return { date: input.date, shift: input.shift, markings, allMarkings, absence, incidents, workedMinutes: worked, breakMinutes,
+    return { date: input.date, shift: input.shift, manualSegments, markings, allMarkings, absence, incidents, workedMinutes: worked, breakMinutes,
       plannedWorkMinutes, nightMinutes, balanceMinutes: null, deviation };
   }
   if (past && shift && !markings.length && !absence) incidents.push("missing");
   if (past && markings.length % 2 === 1) incidents.push("odd");
-  if (shift && markings.length >= 2 && markings.length % 2 === 0 && shift.startTime && shift.endTime) {
+  if (shift && !manualSegments.length && markings.length >= 2 && markings.length % 2 === 0 && shift.startTime && shift.endTime) {
     const endDiff = minutesOf(fiscalClock(markings[markings.length - 1].markedAt)) - minutesOf(shift.endTime);
     const startDiff = minutesOf(fiscalClock(markings[0].markedAt)) - minutesOf(shift.startTime);
     if (Math.abs(endDiff) > tolerance) deviation = { edge: "end", minutes: endDiff };
@@ -187,12 +203,13 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
     if (!incidents.includes("short_break")) incidents.push("short_break");
   }
   // Unidade fixa da escala: batida em outra unidade não é bloqueada, só fica a conferir pelo DP.
-  if (shift?.unitId && shift.executionUnitPolicy !== "free" && markings.some((marking) => marking.executionUnitId !== shift.unitId)) {
+  const scheduledUnits = new Set(manualSegments.length ? manualSegments.map((segment) => segment.unitId) : [shift?.unitId]);
+  if (shift?.unitId && shift.executionUnitPolicy !== "free" && markings.some((marking) => !scheduledUnits.has(marking.executionUnitId))) {
     incidents.push("other_unit");
   }
   const difference = past && shift && !absence && markings.length % 2 === 0 && plannedWorkMinutes !== null ? worked - plannedWorkMinutes : null;
   const balanceMinutes = difference === null ? null : Math.abs(difference) <= tolerance ? 0 : difference;
-  return { date: input.date, shift: input.shift, markings, allMarkings, absence, incidents, workedMinutes: worked, breakMinutes,
+  return { date: input.date, shift: input.shift, manualSegments, markings, allMarkings, absence, incidents, workedMinutes: worked, breakMinutes,
     plannedWorkMinutes, nightMinutes, balanceMinutes, deviation };
 }
 
@@ -210,7 +227,7 @@ export function buildMonthView(input: { month: string; today: string; shifts: (D
     // A existência da evidência congela a decisão vigente na batida. Não releia a definição mutável do turno
     // para esconder ou revelar retroativamente um resultado histórico.
     const markings = input.markings.filter((marking) => marking.workDate === date);
-    return buildDayView({ date, today: input.today, shift, markings, absences: input.absences,
+    return buildDayView({ date, today: input.today, shift, shifts, markings, absences: input.absences,
       treatments: input.treatments });
   });
 }

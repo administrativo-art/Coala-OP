@@ -272,14 +272,23 @@ export async function buildCollaboratorSchedulePayload(
     })
   );
 
-  function enrichShift(shift: Record<string, unknown>) {
+  function enrichShift(shift: Record<string, unknown>, includeManualSegments = false) {
     const unitId = String(shift.unitId ?? "");
     const definitionId = String(shift.shiftDefinitionId ?? "");
     const unit = units.get(unitId) ?? {
       name: "Unidade não definida",
       tone: toneForUnit(unitId || "unassigned"),
     };
+    const manualDay = shift.manualDay as { mode?: unknown; expectedWorkMinutes?: unknown; expectedBreakMinutes?: unknown } | undefined;
+    const manualOrder = shift.manualOrder;
+    const manualSegment = includeManualSegments && typeof manualOrder === "number" && Number.isInteger(manualOrder)
+      && typeof manualDay?.expectedBreakMinutes === "number"
+      && (manualDay.mode === "fixed" || (manualDay.mode === "flexible" && typeof manualDay.expectedWorkMinutes === "number"));
     return {
+      ...(manualSegment ? { manualOrder, manualDay: { mode: manualDay.mode,
+        expectedBreakMinutes: manualDay.expectedBreakMinutes,
+        ...(manualDay.mode === "flexible" ? { expectedWorkMinutes: manualDay.expectedWorkMinutes } : {}),
+      } } : {}),
       id: String(shift.id ?? ""),
       scheduleId: String(shift.scheduleId ?? ""),
       unitId,
@@ -301,7 +310,7 @@ export async function buildCollaboratorSchedulePayload(
     year,
     month,
     published: latestScheduleByUnit.size > 0,
-    shifts: shifts.map(enrichShift),
+    shifts: shifts.map((shift) => enrichShift(shift, true)),
     teamUnits: visibleTeamUnitIds(unitIds, linkedUnitIds, extraTeamUnitIds)
       .map((unitId) => {
         const unit = units.get(unitId) ?? {

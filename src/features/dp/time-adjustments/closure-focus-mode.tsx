@@ -1,4 +1,5 @@
 "use client";
+import { DayCorrectionsPanel } from "./day-corrections-panel";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User as FirebaseUser } from "firebase/auth";
@@ -58,7 +59,7 @@ export function absenceCoverage(dayAbsence: DayView["absence"], request: { unit:
  * O ponto é de uso exclusivo do colaborador: aqui o DP só decide pedidos feitos por ele (ajuste e ausência) e consulta
  * batidas e política; nada grava batida ou pedido em nome da pessoa. Clicar fora não fecha (Esc e "Fechar" fecham).
  */
-export function ClosureFocusMode({ open, onOpenChange, startDate, days, today, adjustments, bank, unitNames, employeeName, firebaseUser, onChanged }: {
+export function ClosureFocusMode({ open, onOpenChange, startDate, days, today, adjustments, bank, unitNames, employeeName, employeeUid, firebaseUser, onChanged }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   startDate: string | null;
@@ -68,6 +69,7 @@ export function ClosureFocusMode({ open, onOpenChange, startDate, days, today, a
   bank: BankLines;
   unitNames: Map<string, string>;
   employeeName: string;
+  employeeUid: string;
   firebaseUser: FirebaseUser | null;
   onChanged: () => void;
 }) {
@@ -96,7 +98,7 @@ export function ClosureFocusMode({ open, onOpenChange, startDate, days, today, a
             </header>
             <div className="flex-1 overflow-y-auto px-5 py-4">
               <FocusDay key={day.date} day={day} adjustments={adjustments.filter((item) => item.workDate === day.date)} bank={bank} unitNames={unitNames}
-                employeeName={employeeName} firebaseUser={firebaseUser} onChanged={onChanged} />
+                employeeName={employeeName} employeeUid={employeeUid} firebaseUser={firebaseUser} onChanged={onChanged} />
             </div>
             <footer className="flex flex-wrap items-center gap-2 border-t border-ds-border bg-ds-surface px-5 py-3">
               <Button variant="ds-secondary" size="sm" disabled={!previous} onClick={() => previous && setDate(previous)}><ChevronLeft className="h-4 w-4" aria-hidden /> Anterior</Button>
@@ -142,8 +144,8 @@ function Card({ title, aside, children, className }: { title: React.ReactNode; a
   );
 }
 
-function FocusDay({ day, adjustments, bank, unitNames, employeeName, firebaseUser, onChanged }: {
-  day: DayView; adjustments: AdjustmentView[]; bank: BankLines; unitNames: Map<string, string>; employeeName: string;
+function FocusDay({ day, adjustments, bank, unitNames, employeeName, employeeUid, firebaseUser, onChanged }: {
+  day: DayView; adjustments: AdjustmentView[]; bank: BankLines; unitNames: Map<string, string>; employeeName: string; employeeUid: string;
   firebaseUser: FirebaseUser | null; onChanged: () => void;
 }) {
   const work = day.shift?.type === "work" ? day.shift : null;
@@ -168,7 +170,6 @@ function FocusDay({ day, adjustments, bank, unitNames, employeeName, firebaseUse
   const decisions = alerts.length + pendingAdjustments.length + (day.absence && OPEN_ABSENCE.includes(day.absence.status) ? 1 : 0);
   const odd = day.markings.length % 2 === 1 || (work && day.markings.length > 0 && day.markings.length < 4);
   const lines = (bank?.lines ?? []).filter((item) => item.date === day.date);
-  const first = employeeName.split(" ")[0];
 
   return (
     <div className="space-y-5">
@@ -203,13 +204,12 @@ function FocusDay({ day, adjustments, bank, unitNames, employeeName, firebaseUse
                   <p className="text-sm font-bold text-ds-ink">{label}</p>
                   {incidentFact(day, incident, unitNames) ? <p className="text-xs font-semibold text-ds-ink-2">{incidentFact(day, incident, unitNames)}</p> : null}
                   <p className="text-xs text-ds-ink-muted">{detail}</p>
-                  <Button variant="ds-secondary" size="sm" disabled title="Em construção: o envio do pedido ao colaborador ainda não existe no sistema.">
-                    Pedir a {first}: {incident === "missing" ? "justificar ou corrigir" : "corrigir as batidas"} · em breve
-                  </Button>
+
                 </div>
               </div>
             );
           })}
+          <DayCorrectionsPanel firebaseUser={firebaseUser} month={day.date.slice(0, 7)} employeeUid={employeeUid} workDate={day.date} adjustments={adjustments} onChanged={onChanged} />
           {adjustments.map((adjustment) => <AdjustmentCard key={adjustment.id} adjustment={adjustment} day={day} firebaseUser={firebaseUser} onChanged={onChanged} />)}
           {day.absence ? (
             absence ? <AbsenceCard request={absence} firebaseUser={firebaseUser} employeeName={employeeName} onChanged={() => { void loadAbsence(); onChanged(); }} />

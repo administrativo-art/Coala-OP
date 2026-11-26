@@ -5,13 +5,7 @@ import type { User as FirebaseUser } from "firebase/auth";
 
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import { resolveDPCoverageMode } from "@/lib/dp-coverage-demands";
-import {
-  DP_WEEKDAYS,
-  dpOperatingHoursSchema,
-  emptyOperatingHours,
-  normalizeOperatingHours,
-  type DPWeekdayKey,
-} from "@/lib/dp-operating-hours";
+import { emptyOperatingHours, normalizeOperatingHours } from "@/lib/dp-operating-hours";
 import { Field, fieldInputClass } from "@/components/patterns/field";
 import { Segmented } from "@/components/patterns/segmented";
 import { WizardModal, type WizardStep } from "@/components/patterns/wizard-modal";
@@ -22,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { BRAZIL_TIME_ZONES } from "@/features/dp/rep-p/time-zones";
 import { LocationPolicyControl } from "@/features/dp/rep-p/location-policy-control";
 import { cn } from "@/lib/utils";
-import type { DPCoverageMode, DPUnit, DPUnitGroup, DPUnitOrganization, DPUnitStockRole, Kiosk } from "@/types";
+import type { DPUnit, DPUnitGroup, DPUnitOrganization, DPUnitStockRole, Kiosk } from "@/types";
 import {
   COVERAGE_MODE_LABELS,
   NONE,
@@ -39,7 +33,7 @@ export type UnitDialogState =
 const STEPS: WizardStep[] = [
   { id: "identity", label: "Identificação", description: "Nome, CNPJ, tipo e localização da unidade." },
   { id: "structure", label: "Estrutura", description: "Organização, grupo e função no estoque." },
-  { id: "coverage", label: "Cobertura", description: "Como a escala identifica falta de pessoas na unidade." },
+  { id: "coverage", label: "Alerta da escala", description: "Avise quando a unidade ficar sem ninguém escalado no dia." },
   { id: "integrations", label: "Integrações", description: "Vínculos independentes com o PDV Legal e o Bizneo." },
 ];
 
@@ -55,7 +49,7 @@ function blankForm(): UnitForm {
     kioskId: "",
     pdvFilialId: "",
     bizneoTaxonId: "",
-    coverageMode: "fixed_hours",
+    coverageMode: "disabled",
     operatingHours: emptyOperatingHours(),
     stockRole: "commercial",
   };
@@ -102,7 +96,6 @@ export function UnitWizardModal({
     [groups, form.organizationId]
   );
   const cnpjValidation = form.cnpj.trim() ? CnpjValidator.validate(form.cnpj) : null;
-  const hoursValid = dpOperatingHoursSchema.safeParse(form.operatingHours).success;
 
   // Reinicia o formulário sempre que o modal abre para outra unidade ou outro modo.
   useEffect(() => {
@@ -190,25 +183,6 @@ export function UnitWizardModal({
     clearError("kioskId");
   }
 
-  function updateOperatingDay(weekday: DPWeekdayKey, change: { isOpen: boolean } | { startTime: string } | { endTime: string }) {
-    setForm((current) => {
-      const existing = current.operatingHours[weekday];
-      let nextDay = existing;
-      if ("isOpen" in change) {
-        nextDay = change.isOpen
-          ? {
-              isOpen: true,
-              startTime: existing.isOpen ? existing.startTime : "09:00",
-              endTime: existing.isOpen ? existing.endTime : "21:00",
-            }
-          : { isOpen: false };
-      } else if (existing.isOpen) {
-        nextDay = { ...existing, ...change };
-      }
-      return { ...current, operatingHours: { ...current.operatingHours, [weekday]: nextDay } };
-    });
-  }
-
   function validateStep(index: number) {
     const found: Record<string, string> = {};
     if (index === 0) {
@@ -217,9 +191,6 @@ export function UnitWizardModal({
       if (cnpjValidation && !cnpjValidation.valid) {
         found.cnpj = cnpjValidation.clean.length < 14 ? "Informe os 14 dígitos do CNPJ." : cnpjValidation.message ?? "CNPJ inválido.";
       }
-    }
-    if (index === 2 && form.coverageMode === "fixed_hours" && !hoursValid) {
-      found.hours = "Em cada dia aberto, o encerramento deve ser posterior à abertura.";
     }
     setErrors(found);
     return Object.keys(found).length === 0;
@@ -438,68 +409,15 @@ export function UnitWizardModal({
 
       {stepIndex === 2 ? (
         <div className="space-y-4">
-          <Field label="Modelo de cobertura" hint="Define como a escala identifica falta de pessoas na unidade.">
-            <Segmented<DPCoverageMode>
-              aria-label="Modelo de cobertura"
-              value={form.coverageMode}
-              onChange={(coverageMode) => { patch({ coverageMode }); clearError("hours"); }}
-              options={[
-                { value: "fixed_hours", label: "Horário fixo" },
-                { value: "on_demand", label: "Sob demanda" },
-                { value: "disabled", label: "Sem controle de cobertura" },
-              ]}
-            />
-          </Field>
-          {form.coverageMode === "fixed_hours" ? (
-            <div className="space-y-2">
-              <p className="text-xs text-ds-ink-muted">
-                A escala usará os intervalos abaixo para identificar períodos sem nenhum turno cobrindo a unidade.
-              </p>
-              <div className="divide-y divide-ds-divider rounded-ds-btn-lg border border-ds-border bg-white">
-                {DP_WEEKDAYS.map(({ key, label }) => {
-                  const day = form.operatingHours[key];
-                  return (
-                    <div key={key} className="grid grid-cols-[minmax(120px,1fr)_auto] items-center gap-3 px-3 py-2 sm:grid-cols-[minmax(150px,1fr)_auto_110px_110px]">
-                      <span className="text-[13px] font-bold">{label}</span>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={day.isOpen}
-                          onCheckedChange={(checked) => { updateOperatingDay(key, { isOpen: checked }); clearError("hours"); }}
-                          aria-label={`${day.isOpen ? "Fechar" : "Abrir"} ${label}`}
-                        />
-                        <span className="w-14 text-xs text-ds-ink-muted">{day.isOpen ? "Aberta" : "Fechada"}</span>
-                      </div>
-                      <Input
-                        type="time"
-                        value={day.isOpen ? day.startTime : ""}
-                        onChange={(event) => { updateOperatingDay(key, { startTime: event.target.value }); clearError("hours"); }}
-                        disabled={!day.isOpen}
-                        aria-label={`Abertura de ${label}`}
-                        className={cn(fieldInputClass, "tabular-nums disabled:opacity-50")}
-                      />
-                      <Input
-                        type="time"
-                        value={day.isOpen ? day.endTime : ""}
-                        onChange={(event) => { updateOperatingDay(key, { endTime: event.target.value }); clearError("hours"); }}
-                        disabled={!day.isOpen}
-                        aria-label={`Encerramento de ${label}`}
-                        className={cn(fieldInputClass, "tabular-nums disabled:opacity-50")}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-              {errors.hours ? <p role="alert" className="text-xs font-semibold text-ds-danger">{errors.hours}</p> : null}
+          <Field label="Alerta de escala vazia" hint="Avisa quando não houver nenhum turno de trabalho na unidade naquele dia.">
+            <div className="flex items-center gap-3 rounded-ds-btn border border-ds-border bg-ds-surface p-4">
+              <Switch checked={form.coverageMode !== "disabled"}
+                onCheckedChange={(checked) => patch({ coverageMode: checked ? "fixed_hours" : "disabled" })}
+                aria-label="Alertar quando a unidade não tiver ninguém escalado" />
+              <span className="text-sm font-semibold text-ds-ink">Alertar quando não houver ninguém escalado no dia</span>
             </div>
-          ) : form.coverageMode === "on_demand" ? (
-            <p className="rounded-ds-btn border border-ds-info/20 bg-ds-info-bg px-3.5 py-2.5 text-xs font-semibold text-ds-info">
-              Os intervalos e a quantidade mínima de pessoas serão definidos separadamente em cada data da escala mensal.
-            </p>
-          ) : (
-            <p className="rounded-ds-btn bg-ds-neutral-bg px-3.5 py-2.5 text-xs font-semibold text-ds-neutral">
-              A escala não exibirá alertas de cobertura para esta unidade.
-            </p>
-          )}
+          </Field>
+          <p className="text-xs text-ds-ink-muted">Um turno de qualquer duração conta como dia com escala. Este alerta não verifica horas sem cobertura nem quantidade mínima por setor.</p>
         </div>
       ) : null}
 

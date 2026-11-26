@@ -1,9 +1,9 @@
 import { UNIFORM_SYSTEM_TEMPLATES } from "@/features/uniforms/template-catalog";
 import {
-  PROBATION_CONTRACT_V4_FIELD_MAPPING,
-  PROBATION_CONTRACT_V4_HASH,
-  PROBATION_CONTRACT_V4_SOURCE,
-  PROBATION_CONTRACT_V4_VARIABLES,
+  PROBATION_CONTRACT_V5_FIELD_MAPPING,
+  PROBATION_CONTRACT_V5_HASH,
+  PROBATION_CONTRACT_V5_SOURCE,
+  PROBATION_CONTRACT_V5_VARIABLES,
 } from "@/features/hr/documents/probation-contract-template";
 import {
   HOURS_BANK_V2_HASH,
@@ -17,7 +17,7 @@ import {
 } from "@/features/hr/documents/document-form-schema";
 
 export type SystemDocumentTemplateKind = "system_pdf" | "reference_docx";
-export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx" | "rep_p_receipt" | "rep_p_pilot_receipt" | "time_mirror" | "asset_custody_term" | "asset_maintenance_order" | "editor_html";
+export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx" | "rep_p_receipt" | "rep_p_pilot_receipt" | "time_mirror" | "asset_custody_term" | "asset_maintenance_order" | "editor_html" | "dre_report";
 export type SystemDocumentGenerationMode = "direct" | "contextual" | "reference";
 
 export type SystemDocumentTemplate = {
@@ -34,7 +34,7 @@ export type SystemDocumentTemplate = {
   renderer: SystemDocumentTemplateRenderer;
   /** Define onde o documento nasce; modelos contextuais não aparecem no gerador avulso. */
   generationMode: SystemDocumentGenerationMode;
-  sourceModule?: "documents" | "uniforms" | "admission" | "termination" | "time_recording" | "assets";
+  sourceModule?: "documents" | "uniforms" | "admission" | "termination" | "time_recording" | "assets" | "financial";
   sourceModulePath?: string;
   variables: string[];
   fieldMapping?: TemplateFieldMapping;
@@ -159,12 +159,12 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     shortName: "Contrato de experiência",
     slug: "contrato-experiencia",
     category: "Contratos",
-    description: "Versão 4 no padrão documental CT Sorvetes, com qualificação destacada e área ampliada para assinatura.",
-    sourcePath: PROBATION_CONTRACT_V4_SOURCE,
-    contentHash: PROBATION_CONTRACT_V4_HASH,
-    version: 4,
-    variables: [...PROBATION_CONTRACT_V4_VARIABLES],
-    fieldMapping: PROBATION_CONTRACT_V4_FIELD_MAPPING,
+    description: "Versão 5 no padrão documental CT Sorvetes, com qualificação destacada, área ampliada para assinatura e referências alinhadas ao Termo LGPD e ao Regulamento de Metas e Prêmios.",
+    sourcePath: PROBATION_CONTRACT_V5_SOURCE,
+    contentHash: PROBATION_CONTRACT_V5_HASH,
+    version: 5,
+    variables: [...PROBATION_CONTRACT_V5_VARIABLES],
+    fieldMapping: PROBATION_CONTRACT_V5_FIELD_MAPPING,
   },
   {
     id: "system-admission-hours-bank-agreement",
@@ -180,10 +180,10 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     id: "system-admission-lgpd-awareness-term",
     name: "Termo de Ciência sobre o Tratamento de Dados Pessoais",
     category: "Admissão",
-    description: "Versão 5 com ciência sobre localização no ponto e acompanhamento entre unidades, sem consentimento genérico.",
-    sourcePath: `${ADMISSION_BASE}/03-termo-lgpd-v5.docx`,
-    contentHash: "0dd7f0309096dd7e7a938d8789fcb297c1a25b78f56f22ee135ae3be0edb2ba2",
-    version: 5,
+    description: "Versão 6 com localização no ponto e durante a jornada, aparelhos empresariais, metas e prêmios, aplicativos e IA, sem consentimento genérico.",
+    sourcePath: `${ADMISSION_BASE}/03-termo-lgpd-v6.docx`,
+    contentHash: "163eeb3601b5a8c632ef83e34a28dee1451483a2b91052aeced944b63b6c8e53",
+    version: 6,
     variables: [
       "employee.cpf",
       "employee.name",
@@ -215,9 +215,9 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     name: "Regulamento de Metas e Prêmios por Desempenho",
     category: "Admissão",
     description: "Modelo parametrizado e homologado para uso no fluxo admissional.",
-    sourcePath: `${ADMISSION_BASE}/05-metas-premios-v2.docx`,
-    contentHash: "a5662e341eb06b40f01a6db049db18411b94d2bd1d0f74595909eb5ff6624745",
-    version: 2,
+    sourcePath: `${ADMISSION_BASE}/05-metas-premios-v4.docx`,
+    contentHash: "bb6c2c80561cbd2aa76d5dc62ffb29945b0bdf2751b561b5fcfcb7588a09857f",
+    version: 4,
     variables: [
       "employee.ctps_number",
       "employee.ctps_series",
@@ -372,6 +372,32 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     ],
   },
   {
+    id: "system-admission-family-salary-term",
+    name: "Termo de responsabilidade para salário-família",
+    category: "Admissão",
+    description: "Incluído quando o operador registra a concessão após a conclusão da contabilidade; a análise legal é informativa.",
+    sourcePath: `${ADMISSION_BASE}/08-termo-salario-familia-v2.docx`,
+    contentHash: "929c79c62097ca63a772af96435f40f5c0a7135cff0398735ee417aec31630d6",
+    version: 2,
+    variables: ["integration.employer_name", "integration.employer_cnpj", "employee.name", "employee.cpf", "family_salary_dependents_lines"],
+    fieldMapping: {
+      family_salary_dependents_lines: { kind: "manual", label: "Dependentes informados para salário-família", format: "multiline", required: true },
+    },
+  },
+  {
+    id: "system-admission-income-tax-dependents",
+    name: "Declaração de dependentes para imposto de renda",
+    category: "Admissão",
+    description: "Incluída somente para filhos que a pessoa marcou expressamente como dependentes de IR.",
+    sourcePath: `${ADMISSION_BASE}/08-declaracao-dependentes-ir-v1.docx`,
+    contentHash: "d3271e2414a25867637c8412c76a9c767fba626d3c1fdcfeffc8cd64c93b5ce1",
+    version: 1,
+    variables: ["integration.employer_name", "integration.employer_cnpj", "employee.name", "employee.cpf", "income_tax_dependents_lines"],
+    fieldMapping: {
+      income_tax_dependents_lines: { kind: "manual", label: "Dependentes declarados para IR", format: "multiline", required: true },
+    },
+  },
+  {
     id: "system-admission-bundle-closing-term",
     name: "Termo de Encerramento, Ciência e Assinatura",
     category: "Admissão",
@@ -500,7 +526,7 @@ const assetTemplates: SystemDocumentTemplate[] = [{
   category: "Patrimônio",
   description: "Termo contextual emitido na transferência de posse de um patrimônio da empresa para um colaborador.",
   status: "published",
-  version: 1,
+  version: 2,
   templateKind: "system_pdf",
   renderer: "asset_custody_term",
   generationMode: "contextual",
@@ -517,7 +543,7 @@ const assetTemplates: SystemDocumentTemplate[] = [{
   sourceFormat: "pdf",
   isSystem: true,
   previewUrl: "/api/documents/templates/system-asset-custody-term/preview",
-  updatedAt: "2026-10-30T00:00:00.000Z",
+  updatedAt: "2026-11-02T00:00:00.000Z",
 }, {
   id: "system-asset-maintenance-order", name: "Ordem de manutenção patrimonial", documentTitle: "ORDEM DE MANUTENÇÃO PATRIMONIAL", category: "Patrimônio", description: "Ordem contextual de manutenção preventiva, corretiva ou manual, sem assinatura eletrônica.", status: "published", version: 1, templateKind: "system_pdf", renderer: "asset_maintenance_order", generationMode: "contextual", sourceModule: "assets", sourceModulePath: "src/features/assets/maintenance.server.ts", variables: ["asset.code", "asset.name", "maintenance.type", "maintenance.description", "maintenance.checklist", "maintenance.components", "document.protocol"], letterheadVersion: "coala-letterhead-v2", signatureScope: "none", retentionPolicyId: "asset_lifecycle_plus_5y", sourceFormat: "pdf", isSystem: true, previewUrl: "/api/documents/templates/system-asset-maintenance-order/preview", updatedAt: "2026-10-30T00:00:00.000Z",
 }];
@@ -551,6 +577,15 @@ const editorTemplates: SystemDocumentTemplate[] = [{
   updatedAt: "2026-11-05T00:00:00.000Z",
 }];
 
+const financialReportTemplates: SystemDocumentTemplate[] = [{
+  id: "system-financial-dre-report", name: "Relatório de DRE mensal e de 12 meses", category: "Financeiro e recibos",
+  description: "Relatório contextual transitório com CMV por movimentação de estoque, unidades autorizadas, situação das fontes e comparação de competências. Não é publicado ou armazenado pelo sistema.",
+  status: "published", version: 1, templateKind: "system_pdf", renderer: "dre_report", generationMode: "contextual",
+  sourceModule: "financial", sourceModulePath: "src/features/financial/dre/report-pdf.ts", variables: [],
+  letterheadVersion: "coala-letterhead-v2", signatureScope: "none", retentionPolicyId: "manual_review",
+  sourceFormat: "pdf", isSystem: true, previewUrl: "/api/documents/templates/system-financial-dre-report/preview", updatedAt: "2026-11-17T00:00:00.000Z",
+}];
+
 export const SYSTEM_DOCUMENT_TEMPLATES: readonly SystemDocumentTemplate[] = [
   ...baseTemplates,
   ...uniformTemplates,
@@ -558,6 +593,7 @@ export const SYSTEM_DOCUMENT_TEMPLATES: readonly SystemDocumentTemplate[] = [
   ...timeRecordingTemplates,
   ...assetTemplates,
   ...editorTemplates,
+  ...financialReportTemplates,
 ];
 
 export function systemDocumentTemplateById(id: string) {

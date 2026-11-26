@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { SalesMatchFact, SuggestedSalesReconciliationCase } from "./types";
 import {
-  bases, caseBadgeLabel, caseReason, caseTime, channels, confidences, factLabel, isAttention, money,
+  bases, caseBadgeLabel, caseReason, caseTime, formatDateKey, channels, confidences, factLabel, isAttention, money,
   providerTransactionLabels, saleStatuses,
 } from "./review-view";
 
@@ -54,8 +55,9 @@ function FactCard({ fact }: { fact: SalesMatchFact }) {
     </dl> : null}
     {fact.adjustment ? <div className="mt-2 space-y-0.5 rounded-lg bg-ds-ok-bg px-2 py-1.5 text-[11px]">
       <p className="font-medium text-ds-ok">
-        Cupom original {money(fact.adjustment.originalAmountCents)} · cancelado −{money(fact.adjustment.cancelledAmountCents)} · final {money(fact.adjustment.finalAmountCents)}
+        Cupom antes do cancelamento {money(fact.adjustment.originalAmountCents)} · cancelado −{money(fact.adjustment.cancelledAmountCents)} · final {money(fact.adjustment.finalAmountCents)}
       </p>
+      {fact.adjustment.itemDiscountCents ? <p className="text-ds-ink-faint">Descontos nos itens incluídos no cálculo · {money(fact.adjustment.itemDiscountCents)}.</p> : null}
       <p className="text-ds-ink-faint">
         {fact.adjustment.finalizedAfterCancellation
           ? `Cancelado às ${fact.adjustment.lastCancellationAt?.slice(11, 19)}; pagamento final às ${fact.adjustment.finalizedAt.slice(11, 19)}.`
@@ -80,7 +82,7 @@ function Side({ title, emptyLabel, ids, facts }: { title: string; emptyLabel: st
   </div>;
 }
 
-export function CaseDetailPanel({ row, facts, position, total, onPrev, onNext, onClose }: {
+export function CaseDetailPanel({ row, facts, position, total, onPrev, onNext, onClose, onResolve, resolverName }: {
   row: SuggestedSalesReconciliationCase;
   facts: Map<string, SalesMatchFact>;
   position: number;
@@ -88,9 +90,30 @@ export function CaseDetailPanel({ row, facts, position, total, onPrev, onNext, o
   onPrev: () => void;
   onNext: () => void;
   onClose: () => void;
+  resolverName?: string;
+  onResolve?: (justification: string) => Promise<void>;
 }) {
+  const [writing, setWriting] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [justification, setJustification] = useState("");
+  const [resolutionError, setResolutionError] = useState("");
   const attention = isAttention(row);
+  async function submitResolution() {
+    if (writing || !onResolve || justification.trim().length < 12) return;
+    setWriting(true);
+    setResolutionError("");
+    try { await onResolve(justification.trim()); }
+    catch (error) { setResolutionError(error instanceof Error ? error.message : "Não foi possível resolver o caso."); }
+    finally { setWriting(false); }
+  }
   const different = row.differenceAmountCents !== 0;
+  const refundCheck = row.pixRefundCheck;
+  const cutoff = refundCheck?.checkedThrough.split("-").reverse().join("/");
+  const pdvStatus = facts.get(row.pdvFactIds[0])?.status;
+  const confirmedRefunds = refundCheck?.events.filter(event => event.state === "confirmed") ?? [];
+  const confirmedCents = confirmedRefunds.reduce((sum, event) => sum + (event.amountCents ?? 0), 0);
+  const refundTotalLabel = confirmedCents === row.stoneGrossAmountCents ? "Devolução integral confirmada"
+    : confirmedCents < row.stoneGrossAmountCents ? "Devolução parcial confirmada" : "Soma confirmada acima do valor da venda";
   const navButton = "flex h-7 w-7 items-center justify-center rounded-lg border border-ds-border bg-white text-ds-ink-muted hover:bg-ds-input disabled:opacity-40";
   return <aside aria-label="Evidências do caso" className="sticky top-4 overflow-hidden rounded-2xl border border-ds-border bg-white shadow-[0_10px_30px_rgba(0,0,0,.06)]">
     <div className="flex items-center justify-between gap-2.5 border-b border-ds-divider bg-ds-input px-3.5 py-3">
@@ -121,8 +144,46 @@ export function CaseDetailPanel({ row, facts, position, total, onPrev, onNext, o
           <p className="mt-[3px] font-mono text-[13px] font-bold tabular-nums">{money(row.differenceAmountCents)}</p>
         </div>
       </div>
+      {refundCheck ? <div className="space-y-1.5 rounded-xl border border-ds-border bg-ds-input px-3 py-2.5 text-[11.5px]">
+        <p className="font-bold">Devoluções Pix na Stone</p>
+        <p className="text-ds-ink-2">PDV {pdvStatus ? saleStatuses[pdvStatus].toLowerCase() : "cancelado"} · Stone aprovado</p>
+        {refundCheck.state === "clear" ? <p className="text-ds-ok">Sem devolução encontrada até {cutoff}.</p> : null}
+        {!refundCheck.complete ? <p className="text-ds-warn">A verificação tem cobertura incompleta até {cutoff}.</p> : null}
+        {confirmedCents > 0 ? <p className="font-semibold text-ds-ink-2">{refundTotalLabel} · {money(confirmedCents)}</p> : null}
+        {refundCheck.events.length ? <ul className="space-y-1.5 text-ds-ink-2">
+          {refundCheck.events.map(event => <li key={JSON.stringify(event)}>
+            <span className="font-semibold">{event.state === "confirmed" ? "Devolução confirmada" : "Evento de devolução a verificar"}</span>
+            {event.amountCents !== null ? ` · ${money(event.amountCents)}` : null}
+            {event.occurredAt ? ` · ${new Date(event.occurredAt).toLocaleDateString("pt-BR", { timeZone: "America/Belem" })}` : null}
+            {event.refundId ? <span className="block break-all font-mono text-ds-ink-faint">{event.refundId}</span> : null}
+          </li>)}
+        </ul> : null}
+      </div> : null}
       <Side title={`PDV · ${row.pdvFactIds.length} pagamento(s)`} emptyLabel="Não localizado no PDV deste recorte" ids={row.pdvFactIds} facts={facts} />
       <Side title={`Stone · ${row.stoneSaleIds.length} captura(s)`} emptyLabel="Não localizado na fonte Stone consultada" ids={row.stoneSaleIds} facts={facts} />
+      {row.unlinkedResolution ? <div className="space-y-1.5 rounded-xl border border-ds-border bg-ds-input px-3 py-2.5 text-[11.5px]">
+        <p className="font-bold">Justificativa</p>
+        <p className="break-words text-ds-ink-2">{row.unlinkedResolution.justification}</p>
+        <p className="break-words text-ds-ink-muted" title={row.unlinkedResolution.actor.id}>{row.unlinkedResolution.actor.namespace === "system"
+          ? "Operação autorizada" : resolverName ? `Responsável · ${resolverName}` : "Responsável registrado"}</p>
+        <p className="text-ds-ink-muted">Sem devolução encontrada até {formatDateKey(row.unlinkedResolution.checkedThrough)}.</p>
+      </div> : onResolve ? <div className="space-y-2">
+        {editing ? <>
+          <p className="text-xs text-ds-ink-2">Registre o Pix de {money(row.stoneGrossAmountCents)} na Stone como resolvido sem venda vinculada no PDV.</p>
+          <label className="block text-xs font-semibold">
+            Justificativa
+            <textarea className="mt-1.5 block w-full rounded-lg border border-ds-border bg-ds-input px-2.5 py-2 text-sm"
+              value={justification} onChange={event => setJustification(event.target.value)} maxLength={500} rows={3} disabled={writing} />
+          </label>
+          {resolutionError ? <p role="alert" className="text-xs text-ds-danger">{resolutionError}</p> : null}
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" disabled={writing || justification.trim().length < 12} onClick={() => void submitResolution()}>
+              {writing ? "Registrando…" : "Confirmar resolução"}
+            </Button>
+            <Button type="button" variant="outline" size="sm" disabled={writing} onClick={() => setEditing(false)}>Cancelar</Button>
+          </div>
+        </> : <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>Resolver sem vínculo</Button>}
+      </div> : null}
       <p className="text-[11px] text-ds-ink-faint">↑ ↓ navegam entre os casos do filtro · Esc fecha</p>
     </div>
   </aside>;

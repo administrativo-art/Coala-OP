@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { applyUnlinkedResolutions, type UnlinkedResolution } from "./unlinked-resolution";
 import type { DailySalesResult } from "./query";
 
 export type DailySalesReviewStatus = "closed" | "attention_required" | "awaiting_source";
@@ -8,6 +9,7 @@ export type DailySalesReviewSummary = {
   stoneAmountCents: number;
   autoCheckedCount: number;
   attentionCount: number;
+  resolvedWithoutLinkCount?: number;
   sourceIssueCount: number;
   uncomparedPdvCount: number;
 };
@@ -33,6 +35,7 @@ export type DailySalesReviewRecord = {
   reopenedAt: string | null;
   reopenedReason: "source_changed" | null;
   snapshotVersion?: 1;
+  activeUnlinkedResolutions?: UnlinkedResolution[];
 };
 
 export type DailySalesReviewView = {
@@ -47,6 +50,7 @@ export type DailySalesReviewView = {
   sourceChanged: boolean;
   checkedAt: string;
   snapshotAvailable: boolean;
+  activeUnlinkedResolutions?: UnlinkedResolution[];
 };
 
 export type DailySalesApiResult = DailySalesResult & { review: DailySalesReviewView };
@@ -58,6 +62,7 @@ const view = (record: DailySalesReviewRecord, id: string, sourceChanged: boolean
   reviewedAt: record.reviewedAt, closedAt: record.closedAt, reopenedAt: record.reopenedAt,
   reopenedReason: record.reopenedReason, sourceChanged, checkedAt,
   snapshotAvailable: record.snapshotVersion === 1,
+  ...(record.activeUnlinkedResolutions?.length ? { activeUnlinkedResolutions: record.activeUnlinkedResolutions } : {}),
 });
 
 export type DailySalesReviewIdentity = {
@@ -67,6 +72,10 @@ export type DailySalesReviewIdentity = {
   stoneCode: string;
   referenceDate: string;
 };
+
+export function dailySalesRefundScopeId(identity: Omit<DailySalesReviewIdentity, "referenceDate">) {
+  return digest([identity.workspaceId, identity.kioskId, identity.mappingId, identity.stoneCode]);
+}
 
 export function dailySalesReviewIdentityId(identity: DailySalesReviewIdentity) {
   return digest([identity.workspaceId, identity.kioskId, identity.mappingId,
@@ -97,12 +106,16 @@ export function dailySalesSourceFingerprint(result: DailySalesResult) {
     uncomparedPdvFacts: sorted(result.uncomparedPdvFacts),
     issues: sorted(result.issues),
     stoneEvents: sorted(result.stoneEvents),
-    cases: sorted(result.cases),
+    cases: sorted(applyUnlinkedResolutions(result.cases, []).map(row => row.pixRefundCheck
+      ? { ...row, pixRefundCheck: { state: row.pixRefundCheck.state, complete: row.pixRefundCheck.complete, events: row.pixRefundCheck.events } }
+      : row)),
   });
 }
 
 export function dailySalesReviewSummary(result: DailySalesResult): DailySalesReviewSummary {
+  const resolvedWithoutLinkCount = result.cases.filter(row => row.reviewStatus === "resolved_without_link").length;
   return {
+    ...(resolvedWithoutLinkCount ? { resolvedWithoutLinkCount } : {}),
     pdvAmountCents: result.cases.reduce((sum, row) => sum + row.pdvGrossAmountCents, 0),
     stoneAmountCents: result.cases.reduce((sum, row) => sum + row.stoneGrossAmountCents, 0),
     autoCheckedCount: result.cases.filter(row => row.reviewStatus === "auto_checked").length,
@@ -126,18 +139,22 @@ export function buildDailySalesReviewTransition(input: {
   actorId: string;
   now: string;
   previous?: DailySalesReviewRecord;
+  activeUnlinkedResolutions?: UnlinkedResolution[];
 }) {
   const id = dailySalesReviewId(input.result);
   const sourceFingerprint = dailySalesSourceFingerprint(input.result);
   const previous = input.previous;
-  if (previous?.sourceFingerprint === sourceFingerprint) {
+  const resolutions = input.activeUnlinkedResolutions ?? [];
+  if (previous?.sourceFingerprint === sourceFingerprint
+    && JSON.stringify(previous.activeUnlinkedResolutions ?? []) === JSON.stringify(resolutions)) {
     return {
       write: false as const,
       view: view(previous, id, false, input.now),
     };
   }
   const status = dailySalesReviewStatus(input.result);
-  const sourceChanged = previous !== undefined;
+  const sourceChanged = previous !== undefined && (previous.sourceFingerprint !== sourceFingerprint
+    || (previous.activeUnlinkedResolutions ?? []).some(proof => !resolutions.some(active => active.caseKey === proof.caseKey && active.decidedRevision === proof.decidedRevision)));
   const reopened = previous?.status === "closed" && status !== "closed";
   const next: DailySalesReviewRecord = {
     schemaVersion: 1,
@@ -155,6 +172,7 @@ export function buildDailySalesReviewTransition(input: {
     collectedAt: input.result.collectedAt,
     reviewedAt: input.now,
     reviewedBy: input.actorId,
+    ...(resolutions.length ? { activeUnlinkedResolutions: resolutions } : {}),
     closedAt: status === "closed" ? input.now : null,
     closedBy: status === "closed" ? input.actorId : null,
     reopenedAt: reopened ? input.now : status === "closed" ? null : previous?.reopenedAt ?? null,

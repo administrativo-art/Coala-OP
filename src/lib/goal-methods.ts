@@ -56,11 +56,11 @@ export const DEFAULT_KIOSK_MEDIUM_GOAL_METHOD: GoalMethodSnapshot = {
     prorateByAttendance: false,
     reliefWorker: {
       enabled: true,
-      splitMode: 'proportional_by_covered_shifts',
+      splitMode: 'proportional_by_worked_days',
       turnsPerDay: 2,
       fixedCollaboratorRule: 'remaining_equal_split',
       description:
-        'Quando houver folguista, separa a parte proporcional aos turnos cobertos e divide o restante igualmente entre as colaboradoras fixas.',
+        'Nas metas iniciadas a partir de novembro de 2026, separa a parte proporcional aos dias trabalhados e divide o restante igualmente entre as colaboradoras fixas.',
     },
   },
   leadershipBonus: {
@@ -137,13 +137,19 @@ export interface GoalBonusCalculationOptions {
   reliefWorkerCount?: number;
   reliefWorkerCoveredTurnsByPerson?: number[];
   totalPeriodTurns?: number;
+  reliefWorkerBasis?: 'turns' | 'days';
+  reliefWorkerCoveredDaysByPerson?: number[];
+  totalPeriodDays?: number;
   fixedCollaboratorCount?: number;
 }
 
 export interface GoalReliefWorkerBonusSplit {
   enabled: boolean;
+  basis: 'turns' | 'days';
   totalPeriodTurns: number;
   coveredTurns: number;
+  totalPeriodDays: number;
+  coveredDays: number;
   reliefWorkerCount: number;
   reliefWorkerBonuses: number[];
   fixedCollaboratorCount: number;
@@ -335,7 +341,9 @@ export function calculateTieredGoalBonus(
   const perCollaboratorBonus = safeEligibleCount > 0 ? roundMoney(totalTeamBonus / safeEligibleCount) : 0;
   const reliefWorkerConfig = config.teamBonus.reliefWorker;
   const reliefWorkerSplit = reliefWorkerConfig?.enabled ? (() => {
+    const basis = options.reliefWorkerBasis ?? (reliefWorkerConfig.splitMode === 'proportional_by_worked_days' ? 'days' : 'turns');
     const totalPeriodTurns = Math.max(options.totalPeriodTurns ?? 0, 0);
+    const totalPeriodDays = Math.max(options.totalPeriodDays ?? 0, 0);
     const configuredReliefWorkerCount = Math.max(Math.floor(options.reliefWorkerCount ?? 0), 0);
     const coveredTurnsByPerson = options.reliefWorkerCoveredTurnsByPerson && options.reliefWorkerCoveredTurnsByPerson.length > 0
       ? options.reliefWorkerCoveredTurnsByPerson.map(value => Math.max(value, 0))
@@ -345,13 +353,23 @@ export function calculateTieredGoalBonus(
     const reliefWorkerCount = coveredTurnsByPerson.length;
     const rawCoveredTurns = coveredTurnsByPerson.reduce((sum, value) => sum + value, 0);
     const coveredTurns = totalPeriodTurns > 0 ? Math.min(rawCoveredTurns, totalPeriodTurns) : rawCoveredTurns;
+    const coveredDaysByPerson = (options.reliefWorkerCoveredDaysByPerson ?? []).map(value => Math.max(value, 0));
+    const rawCoveredDays = coveredDaysByPerson.reduce((sum, value) => sum + value, 0);
+    const coveredDays = totalPeriodDays > 0 ? Math.min(rawCoveredDays, totalPeriodDays) : rawCoveredDays;
+    const totalUnits = basis === 'days' ? totalPeriodDays : totalPeriodTurns;
+    const rawCoveredUnits = basis === 'days' ? rawCoveredDays : rawCoveredTurns;
+    const coveredUnits = basis === 'days' ? coveredDays : coveredTurns;
+    const coveredUnitsByPerson = basis === 'days' ? coveredDaysByPerson : coveredTurnsByPerson;
     const fixedCollaboratorCount = Math.max(options.fixedCollaboratorCount ?? Math.max(safeEligibleCount - 1, 0), 0);
 
-    if (totalPeriodTurns <= 0 || coveredTurns <= 0 || reliefWorkerCount <= 0) {
+    if (totalUnits <= 0 || coveredUnits <= 0 || reliefWorkerCount <= 0) {
       return {
         enabled: true,
+        basis,
         totalPeriodTurns,
         coveredTurns,
+        totalPeriodDays,
+        coveredDays,
         reliefWorkerCount,
         reliefWorkerBonuses: Array.from({ length: reliefWorkerCount }, () => 0),
         fixedCollaboratorCount,
@@ -362,16 +380,19 @@ export function calculateTieredGoalBonus(
       };
     }
 
-    const totalReliefWorkerBonus = roundMoney((coveredTurns / totalPeriodTurns) * totalTeamBonus);
-    const reliefWorkerBonuses = coveredTurnsByPerson.map(value =>
-      roundMoney(totalReliefWorkerBonus * (rawCoveredTurns > 0 ? value / rawCoveredTurns : 0))
+    const totalReliefWorkerBonus = roundMoney((coveredUnits / totalUnits) * totalTeamBonus);
+    const reliefWorkerBonuses = coveredUnitsByPerson.map(value =>
+      roundMoney(totalReliefWorkerBonus * (rawCoveredUnits > 0 ? value / rawCoveredUnits : 0))
     );
     const reliefWorkerBonus = reliefWorkerBonuses[0] ?? 0;
     const remainingFixedBonus = roundMoney(totalTeamBonus - totalReliefWorkerBonus);
     return {
       enabled: true,
+      basis,
       totalPeriodTurns,
       coveredTurns,
+      totalPeriodDays,
+      coveredDays,
       reliefWorkerCount,
       reliefWorkerBonuses,
       fixedCollaboratorCount,

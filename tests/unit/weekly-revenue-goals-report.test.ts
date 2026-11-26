@@ -87,9 +87,12 @@ test('e-mail mostra as faixas da meta, os 10 produtos e fica abaixo do corte do 
   assert.match(html, /Percentuais, esperado e status usam a Meta Alvo\./);
   assert.match(html, /10 produtos com maior faturamento na semana/);
   assert.match(html, /Shake Morango 500 ml/);
-  assert.match(html, /Semana com 13 de 14 dias de dados\./);
+  assert.match(html, /Semana · 7 dias/);
+  assert.match(html, /13\/14 relatórios das unidades/);
+  assert.match(html, /Mês até 25\/10 · 25 dias/);
+  assert.match(html, /Semana com 13 de 14 relatórios diários das unidades\./);
   assert.ok(Buffer.byteLength(html) < 95_000);
-  assert.match(renderText(report), /Atenção: semana com 13 de 14 dias de dados/);
+  assert.match(renderText(report), /Atenção: semana com 13 de 14 relatórios diários das unidades/);
 });
 
 test('nome vindo do cadastro é escapado no HTML', () => {

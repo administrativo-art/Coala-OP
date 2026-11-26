@@ -2,11 +2,15 @@ import type { z } from "zod";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { WORKSPACE_ID } from "@/lib/workspace";
+import { matchesPersonWorkspace } from "@/features/privacy/person-workspace";
 import {
   inferPixKeyType,
   maskBrazilianDocument,
   maskPaymentDestination,
   normalizeBrazilianDocument,
+  normalizeValidatedPixKey,
+  validBrazilianTaxId,
   toIsoString,
 } from "./normalization";
 import { decryptPaymentDestination, encryptPaymentDestination } from "./security.server";
@@ -128,12 +132,25 @@ export async function listPaymentBeneficiaries(params?: { includeEmployees?: boo
   );
 }
 
-export async function getEntityPaymentProfile(entityId: string) {
+async function readEntityPaymentProfile(entityId: string) {
   const [entity, profile] = await Promise.all([
     dbAdmin.collection("entities").doc(entityId).get(),
     financialDbAdmin.collection(PROFILE_COLLECTION).doc(entityId).get(),
   ]);
   if (!entity.exists) throw new Error("Pessoa ou empresa não encontrada.");
+  const document = normalizeBrazilianDocument(entity.get("document") ?? entity.get("cnpj"));
+  const isPerson = document.length === 11;
+  if (!matchesPersonWorkspace(entity.data(), WORKSPACE_ID, !isPerson)
+    || (isPerson && entity.get("type") !== "pessoa_fisica")
+    || !matchesPersonWorkspace(profile.data(), WORKSPACE_ID, true)
+    || (profile.exists && (isPerson ? profile.get("entityId") !== entityId
+      : profile.get("entityId") != null && profile.get("entityId") !== entityId))) {
+    throw new Error("Cadastro ou perfil Pix fora do workspace ou com entidade divergente.");
+  }
+  return { entity, profile };
+}
+
+function entityPaymentProfileResult(entityId: string, entity: FirebaseFirestore.DocumentSnapshot, profile: FirebaseFirestore.DocumentSnapshot) {
   return {
     beneficiary: profileForList(entityId, entity.data() ?? {}, profile.data()),
     profile: profile.exists
@@ -154,9 +171,14 @@ export async function getEntityPaymentProfile(entityId: string) {
   };
 }
 
+export async function getEntityPaymentProfile(entityId: string) {
+  const { entity, profile } = await readEntityPaymentProfile(entityId);
+  return entityPaymentProfileResult(entityId, entity, profile);
+}
+
 export async function getEntityPixProfile(entityId: string) {
-  const result = await getEntityPaymentProfile(entityId);
-  const profile = await financialDbAdmin.collection(PROFILE_COLLECTION).doc(entityId).get();
+  const { entity, profile } = await readEntityPaymentProfile(entityId);
+  const result = entityPaymentProfileResult(entityId, entity, profile);
   if (!profile.exists) return { ...result, pixKey: "" };
   const destination = decryptPaymentDestination(String(profile.get("encryptedPaymentData") ?? ""));
   return { ...result, pixKey: destination.pixKey ?? "" };
@@ -172,11 +194,27 @@ export async function saveEntityPixProfile(
   const profileRef = financialDbAdmin.collection(PROFILE_COLLECTION).doc(entityId);
   const [entity, current] = await Promise.all([entityRef.get(), profileRef.get()]);
   if (!entity.exists) throw new Error("Pessoa ou empresa não encontrada.");
+  if (!matchesPersonWorkspace(entity.data(), WORKSPACE_ID, true)
+    || !matchesPersonWorkspace(current.data(), WORKSPACE_ID, true)
+    || (current.exists && current.get("entityId") != null && current.get("entityId") !== entityId)) {
+    throw new Error("Cadastro ou perfil Pix fora do workspace ou com entidade divergente.");
+  }
   if (options?.requireCreator && entity.get("createdBy") !== actor.uid) {
     throw new Error("Sem permissão para alterar a chave Pix deste cadastro.");
   }
 
   const pixKey = input.pixKey.trim();
+  const pixKeyType = input.pixKeyType;
+  const holderDocument = normalizeBrazilianDocument(entity.get("document") ?? entity.get("cnpj"));
+  const isPerson = holderDocument.length === 11;
+  const isCompany = holderDocument.length === 14;
+  if (pixKey && (!validBrazilianTaxId(holderDocument)
+    || (isPerson && entity.get("type") !== "pessoa_fisica")
+    || (isCompany && entity.get("type") != null && entity.get("type") !== "pessoa_juridica")
+    || !matchesPersonWorkspace(entity.data(), WORKSPACE_ID, isCompany)
+    || !pixKeyType || !normalizeValidatedPixKey(pixKey, pixKeyType, holderDocument))) {
+    throw new Error("CPF/CNPJ ou tipo e valor da chave Pix incompatíveis com o cadastro.");
+  }
   const now = new Date().toISOString();
   if (!pixKey) {
     if (current.exists) {
@@ -194,13 +232,14 @@ export async function saveEntityPixProfile(
 
   const data: SupplierPaymentProfile = {
     entityId,
+    ...(isPerson ? { workspaceId: WORKSPACE_ID } : {}),
     active: true,
     paymentMethod: "pix_key",
-    pixKeyType: inferPixKeyType(pixKey),
+    pixKeyType: pixKeyType!,
     encryptedPaymentData: encryptPaymentDestination({ pixKey }),
     maskedPaymentDestination: maskPaymentDestination(pixKey),
     holderName: String(entity.get("name") ?? entity.get("razao_social") ?? ""),
-    holderDocument: normalizeBrazilianDocument(entity.get("document") ?? entity.get("cnpj")),
+    holderDocument,
     validatedAt: now,
     validatedBy: actor.uid,
     createdAt: current.get("createdAt") ?? now,

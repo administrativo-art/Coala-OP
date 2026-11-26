@@ -19,6 +19,8 @@ const statusLabel: Record<DPResponsibilityTask['status'], string> = {
 };
 
 const isCoverage = (task: DPResponsibilityTask) => task.kind === 'absence_schedule_recomposition';
+const reviewLabel = (task: DPResponsibilityTask) => task.kind === 'automatic_absence_restoration_review'
+  ? 'Revisar restauração após correção de falta' : 'Revisar escala após cancelamento';
 
 /**
  * Pendências de escala causadas por ausências. A recomposição após aprovação é resolvida pela etapa de cobertura;
@@ -91,7 +93,7 @@ export function ResponsibilityTaskSection({ firebaseUser, people, canManage = fa
           onClick={() => setSelected(task)} className="flex items-center justify-between gap-4">
           <span className="min-w-0">
             <span className="block truncate text-sm font-extrabold text-ds-ink">{name(task)}</span>
-            <span className="block truncate text-sm font-semibold text-ds-ink">{isCoverage(task) ? 'Definir cobertura após ausência' : 'Revisar escala após cancelamento'}</span>
+            <span className="block truncate text-sm font-semibold text-ds-ink">{isCoverage(task) ? 'Definir cobertura após ausência' : reviewLabel(task)}</span>
             <span className="block text-xs text-ds-ink-muted">{formatRequestDate(task.startDate)} a {formatRequestDate(task.endDate)} · {task.displacedShiftCount} turno(s)</span>
           </span>
           <StatusPill variant={task.status === 'unassigned' ? 'danger' : isCoverage(task) ? 'warn' : task.status === 'claimed' ? 'info' : 'warn'}>
@@ -102,7 +104,7 @@ export function ResponsibilityTaskSection({ firebaseUser, people, canManage = fa
     </ListShell>
 
     <SidePanel open={Boolean(selected)} onOpenChange={(open) => { if (!open && !busyId) setSelected(null); }}
-      kicker={selected && isCoverage(selected) ? 'Cobertura após ausência' : 'Escala após cancelamento'}
+      kicker={selected && isCoverage(selected) ? 'Cobertura após ausência' : selected ? reviewLabel(selected) : 'Revisão da escala'}
       title={selected ? name(selected) : 'Pendência'}
       subtitle={selected ? `${formatRequestDate(selected.startDate)} a ${formatRequestDate(selected.endDate)} · ${selected.displacedShiftCount} turno(s)` : undefined}>
       {selected ? <>
@@ -111,9 +113,11 @@ export function ResponsibilityTaskSection({ firebaseUser, people, canManage = fa
           ? <AbsenceCoverageSection firebaseUser={firebaseUser} requestId={selected.requestId}
             onChanged={(view) => { if (view.shifts.every((shift) => shift.decision)) void load(); }} />
           : <PanelSection title="Revisão da escala">
-            <p className="text-xs text-ds-ink-muted">A ausência foi cancelada depois de retirar turnos. Confira a escala e registre o que foi feito.</p>
+            <p className="text-xs text-ds-ink-muted">{selected.kind === 'automatic_absence_restoration_review'
+              ? 'A correção foi aprovada, mas o turno original não pôde ser restaurado. Remova o conflito da escala; a rotina tentará novamente e concluirá esta pendência quando restaurar o turno.'
+              : 'A ausência foi cancelada depois de retirar turnos. Confira a escala e registre o que foi feito.'}</p>
             {canClaim(selected) ? <div className="flex justify-end"><Button size="md" variant="primary-modal" loading={busyId === selected.id} onClick={() => void act(selected, 'claim')}>Assumir revisão</Button></div> : null}
-            {canResolve(selected) ? <div className="space-y-2">
+            {canResolve(selected) && selected.kind !== 'automatic_absence_restoration_review' ? <div className="space-y-2">
               <Textarea value={noteById[selected.id] ?? ''} onChange={(event) => setNoteById((current) => ({ ...current, [selected.id]: event.target.value }))} placeholder="Descreva como a escala foi ajustada." maxLength={1000} />
               <div className="flex justify-end"><Button size="md" variant="primary-modal" loading={busyId === selected.id} disabled={(noteById[selected.id]?.trim().length ?? 0) < 10} onClick={() => void act(selected, 'resolve')}>Concluir revisão</Button></div>
             </div> : null}

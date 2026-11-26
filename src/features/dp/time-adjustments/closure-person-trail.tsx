@@ -10,6 +10,7 @@ import { REASON_LABELS, TimeBankCard, type TimeBankStatementResponse } from "@/f
 import type { BankStatementLine } from "@/features/dp/time-bank/core";
 import { cn } from "@/lib/utils";
 
+import type { PayrollPersonStatus } from "../time-bank/payroll-readiness";
 import type { ClosurePerson } from "./closure-core";
 import { pendingOfPerson } from "./closure-year-overview";
 
@@ -34,11 +35,13 @@ function destinationOf(line: BankStatementLine["line"]): { label: string; varian
  * Trilha de fechamento de uma pessoa: cada etapa só abre quando a anterior termina, e a tela abre na primeira etapa
  * ainda não concluída. A situação das etapas vem da consulta do ponto e do extrato do banco de horas do mês.
  */
-export function ClosurePersonTrail({ firebaseUser, competence, person, closed, canManage, requests, closing }: {
+export function ClosurePersonTrail({ firebaseUser, competence, person, closed, payrollStatus, onBankUpdated, canManage, requests, closing }: {
   firebaseUser: FirebaseUser | null;
   competence: string;
   person: ClosurePerson;
   closed: boolean;
+  payrollStatus?: PayrollPersonStatus;
+  onBankUpdated: () => void;
   canManage: boolean;
   /** Solicitações do mês (a tratar e finalizadas), exibidas no saneamento. */
   requests: ReactNode;
@@ -56,19 +59,19 @@ export function ClosurePersonTrail({ firebaseUser, competence, person, closed, c
   const toDecide = lines.filter((item) => item.line.reason === "pending_approval" || item.line.nature === "review").length;
   const issues = (summary?.problemDays ?? 0) + (summary?.toTreat ?? 0) + pending;
   const sanitized = closed || Boolean(summary?.loaded && issues === 0);
-  const bankDone = closed || (sanitized && bank !== null && toDecide === 0);
+  const bankDone = closed ? payrollStatus?.status === "ready" : sanitized && bank !== null && toDecide === 0;
 
   const steps: Step[] = [
     { title: "Saneamento da folha", state: sanitized ? "done" : "current",
-      status: sanitized ? "Sem alerta grave nem pedido aberto" : !summary?.loaded ? "Conferindo…" : `${issues} ${issues === 1 ? "pendência" : "pendências"}` },
+      status: closed ? "Ponto fechado" : sanitized ? "Sem alerta grave nem pedido aberto" : !summary?.loaded ? "Conferindo…" : `${issues} ${issues === 1 ? "pendência" : "pendências"}` },
     { title: "Banco de horas e extras", state: bankDone ? "done" : sanitized ? "current" : "locked",
-      status: !sanitized ? "Depois do saneamento" : bankDone ? (closed ? "Destinos definidos" : "Destinos definidos (prévia)") : bank ? `${toDecide} a decidir` : "Lendo extrato…" },
-    { title: "Resumo do colaborador", state: closed ? "done" : bankDone ? "current" : "locked",
-      status: closed ? "Folha fechada" : bankDone ? "Conferir e fechar" : "Depois do banco" },
+      status: closed ? payrollStatus?.reason ?? "Consultando apuração" : !sanitized ? "Depois do saneamento" : bankDone ? "Destinos definidos (prévia)" : bank ? `${toDecide} a decidir` : "Lendo extrato…" },
+    { title: "Resumo do colaborador", state: closed && bankDone ? "done" : bankDone ? "current" : "locked",
+      status: closed && bankDone ? "Apuração conferida" : bankDone ? "Conferir e fechar" : "Depois do banco" },
     { title: "Fechamento da folha", state: closed ? "done" : "locked", status: closed ? "Competência fechada (todas as pessoas)" : "Hoje fecha a competência de todos" },
   ];
   const current = Math.max(0, steps.findIndex((step) => step.state === "current"));
-  const automatic = closed ? steps.length - 1 : current;
+  const automatic = closed && bankDone ? steps.length - 1 : current;
   const active = chosen !== null && steps[chosen].state !== "locked" ? chosen : automatic;
 
   const sum = (filter: (line: BankStatementLine["line"]) => boolean) => lines.filter((item) => filter(item.line)).reduce((total, item) => total + item.line.minutes, 0);
@@ -119,7 +122,7 @@ export function ClosurePersonTrail({ firebaseUser, competence, person, closed, c
               <h4 className="text-sm font-black text-ds-ink">Horas extras e lançamentos do mês</h4>
               <p className="text-xs text-ds-ink-muted">Destino definido pela política de horas{bank?.policy ? ` “${bank.policy.name}”` : ""}. Itens em aprovação ou revisão precisam de decisão do DP.</p>
             </div>
-            {toDecide ? <StatusPill variant="warn">{toDecide} a decidir</StatusPill> : bank ? <StatusPill variant="ok">Tudo decidido</StatusPill> : null}
+            {toDecide ? <StatusPill variant="warn">{toDecide} a decidir</StatusPill> : bankDone ? <StatusPill variant="ok">Tudo decidido</StatusPill> : null}
           </header>
           {lines.length ? (
             <ul className="divide-y divide-ds-divider">
@@ -137,7 +140,7 @@ export function ClosurePersonTrail({ firebaseUser, competence, person, closed, c
             </ul>
           ) : <p className="px-4 py-6 text-center text-sm text-ds-ink-muted">{bank ? "Nenhum lançamento de banco ou hora extra neste mês." : "Lendo o extrato…"}</p>}
         </div>
-        <TimeBankCard firebaseUser={firebaseUser} employeeUid={person.uid} date={lastDayOf(competence)} canManage={canManage} detailed onLoaded={onBank} />
+        <TimeBankCard firebaseUser={firebaseUser} employeeUid={person.uid} date={lastDayOf(competence)} canManage={canManage} detailed onLoaded={onBank} autoGenerate={!closed} onUpdated={onBankUpdated} />
       </section>
 
       {active === 2 ? (

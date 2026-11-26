@@ -10,6 +10,7 @@ import {
 import { InterApiError, safeInterApiError } from "../../../src/lib/integrations/inter/error";
 import { createHash } from "node:crypto";
 import { mapInterBarcodeStatus } from "../../../src/lib/integrations/inter/barcode-payments.server";
+import { interOverdueMinimumCents } from "../../../src/features/financial/payment-requests/inter-overdue-quote";
 
 test("maps confirmed Inter statuses to paid", () => {
   for (const status of ["PROCESSADO", "PAGO", "EFETIVADO", "CONCLUIDO", "LIQUIDADO"]) {
@@ -68,6 +69,18 @@ test("preserva o motivo sanitizado do corpo do erro 422", () => {
   assert.match(parsed.details ?? "", /\[REDACTED\]/);
   assert.doesNotMatch(parsed.safeMessage, /destinatario\.chave|29696755000154|financeiro@clinica\.com/);
   assert.doesNotMatch(parsed.details ?? "", /29696755000154|financeiro@clinica\.com/);
+});
+
+test("redige destino Pix em campos e texto do Inter sem perder a cotação de boleto", () => {
+  const key = "123e4567-e89b-12d3-a456-426614174000";
+  const structured = safeInterPaymentError({ response: { status: 422, data: {
+    chave: key, destinatario: { pixKey: key }, detalhe: `Chave ${key} recusada.`,
+  } } });
+  assert.doesNotMatch(structured.details ?? "", /123e4567|426614174000|pixKey/);
+  const plain = safeInterPaymentError({ response: { status: 400, data: `Chave ${key} recusada. Pagamento mínimo aceito: R$ 1098.80.` } });
+  assert.doesNotMatch(plain.details ?? "", /123e4567|426614174000/);
+  assert.match(plain.details ?? "", /Pagamento mínimo aceito: R\$ 1098\.80/);
+  assert.equal(interOverdueMinimumCents(plain), 109880);
 });
 
 test("concilia o CNPJ completo do banco com o hash do snapshot mascarado", () => {
