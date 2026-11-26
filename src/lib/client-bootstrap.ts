@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorMessage } from "@/lib/api-error-message";
 import { type User as FirebaseUser } from "firebase/auth";
 import { Timestamp } from "firebase/firestore";
 
@@ -82,7 +83,7 @@ export async function fetchClientBootstrap(
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
-    throw new Error(payload?.error ?? `HTTP ${response.status}`);
+    throw new Error(apiErrorMessage(payload, `HTTP ${response.status}`));
   }
 
   return reviveFirestoreValues(await response.json()) as ClientBootstrapPayload;

@@ -1,3 +1,4 @@
+import { admissionDocumentError } from "./admission-document-error";
 import { prepareOnboardingPersonForWrite } from "@/features/privacy/onboarding-person.server";
 import { assertGenerationPersonScopes, type GenerationActor } from "./generation-access.server";
 import { createHash } from "node:crypto";
@@ -93,10 +94,10 @@ function missingSystemDataMessage(keys: string[]) {
 }
 
 function sanitizeFormValue(value: unknown, depth = 0): unknown {
-  if (depth > 8) throw new Error("O formulário excedeu a profundidade permitida.");
+  if (depth > 8) throw admissionDocumentError("O formulário excedeu a profundidade permitida.");
   if (value === null || ["string", "number", "boolean"].includes(typeof value)) return value;
   if (Array.isArray(value)) {
-    if (value.length > 200) throw new Error("O formulário excedeu o limite de itens.");
+    if (value.length > 200) throw admissionDocumentError("O formulário excedeu o limite de itens.");
     return value.map((item) => sanitizeFormValue(item, depth + 1));
   }
   if (value && typeof value === "object") {
@@ -156,7 +157,7 @@ function maskPartyDocument(value: string | null) {
 export async function generateDocumentFromTemplate(
   params: GenerateDocumentFromTemplateParams
 ): Promise<GeneratedDocumentResult> {
-  if (!params.templateId) throw new Error("Informe o modelo.");
+  if (!params.templateId) throw admissionDocumentError("Informe o modelo.");
 
   const storedTemplate = await dbAdmin
     .collection("companyDocumentTemplates")
@@ -174,7 +175,7 @@ export async function generateDocumentFromTemplate(
     && systemTemplate.sourceFormat === "docx"
     && Boolean(systemTemplate.sourcePath);
   if (!storedPublished && !systemPublished) {
-    throw new Error("Modelo DOCX publicado não encontrado.");
+    throw admissionDocumentError("Modelo DOCX publicado não encontrado.");
   }
   const templateData = storedPublished
     ? record(storedTemplate.data())
@@ -189,7 +190,7 @@ export async function generateDocumentFromTemplate(
     && !params.onboardingId
     && (!formSchema || formSchema.anchor === "employee")
   ) {
-    throw new Error("Informe o colaborador ou integração.");
+    throw admissionDocumentError("Informe o colaborador ou integração.");
   }
   const variables = Array.isArray(templateValue("variables"))
     ? (templateValue("variables") as unknown[]).filter((item): item is string => typeof item === "string")
@@ -246,13 +247,13 @@ export async function generateDocumentFromTemplate(
     return binding?.kind === "system" ? binding.key : placeholder;
   });
   if (mappedSystemKeys.length) {
-    throw new Error(
+    throw admissionDocumentError(
       `A geração foi bloqueada. Complete estes dados na fonte oficial: ${missingSystemDataMessage(mappedSystemKeys)}.`,
     );
   }
   const missingForm = [...mapped.missingManual, ...missingSchema];
   if (missingForm.length) {
-    throw new Error(`Preencha os campos obrigatórios: ${missingForm.join(", ")}.`);
+    throw admissionDocumentError(`Preencha os campos obrigatórios: ${missingForm.join(", ")}.`);
   }
   let assignedProtocol: string | null = null;
   if (formSchema?.protocolTarget && formSchema.protocolType) {
@@ -282,7 +283,7 @@ export async function generateDocumentFromTemplate(
     usedSystemVariables.has(key)
   );
   if (missingRequired.length) {
-    throw new Error(
+    throw admissionDocumentError(
       `A geração foi bloqueada. Complete estes dados na fonte oficial: ${missingSystemDataMessage(missingRequired)}.`,
     );
   }
@@ -352,7 +353,7 @@ export async function generateDocumentFromTemplate(
   if (storedPublished) {
     const integrity = await inspectStoredDocumentTemplateIntegrity(storedTemplate);
     if (!integrity.valid) {
-      throw new Error(
+      throw admissionDocumentError(
         `A geração foi bloqueada porque o DOCX publicado não corresponde ao mapeamento: ${integrity.issues.map((issue) => issue.message).join(" ")}`,
       );
     }
@@ -363,7 +364,7 @@ export async function generateDocumentFromTemplate(
   const buffer = generateDocx(source, mapped.data);
   const unresolvedTokens = extractDocxVariables(buffer);
   if (unresolvedTokens.length) {
-    throw new Error(
+    throw admissionDocumentError(
       `A geração deixou campos sem resolução: ${unresolvedTokens.join(", ")}.`,
     );
   }

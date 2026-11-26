@@ -1,3 +1,5 @@
+import { projectDocumentReceiptPaid } from "./document-receipt-projection.server";
+import { paymentRequestError } from "./business-error";
 import { assertExpenseAllowsNewPayment } from "../lib/source-settlement";
 import { randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
@@ -93,7 +95,7 @@ function assertGeneratedReceiptPaymentTarget(
     || !Number.isSafeInteger(totalCents) || !Number.isSafeInteger(netCents)
     || amountCents !== totalCents || amountCents !== netCents
     || (requestId && expense.paymentRequestId !== requestId)) {
-    throw new Error("O recibo, a despesa, o favorecido ou o valor líquido não correspondem à solicitação bancária.");
+    throw paymentRequestError("O recibo, a despesa, o favorecido ou o valor líquido não correspondem à solicitação bancária.");
   }
 }
 
@@ -109,7 +111,7 @@ export async function createPaymentRequest(input: {
   scheduledFor?: string | null;
 }, actor: PaymentActor, onExistingFound?: () => Promise<void>): Promise<PixBankPaymentRequest> {
   if (input.sourceType === "purchase_order") {
-    throw new Error("Pedidos de compra exigem despesa financeira vinculada antes do Pix.");
+    throw paymentRequestError("Pedidos de compra exigem despesa financeira vinculada antes do Pix.");
   }
   if (input.sourceType === "generated_receipt") {
     const expense = input.expenseId ? await financialDbAdmin.collection("expenses").doc(input.expenseId).get() : null;
@@ -125,10 +127,10 @@ export async function createPaymentRequest(input: {
       const [currentSnapshot, expense] = await Promise.all([
         transaction.get(requestRef), expenseRef ? transaction.get(expenseRef) : Promise.resolve(null),
       ]);
-      if (!currentSnapshot.exists) throw new Error("A solicitação bancária existente não foi encontrada.");
+      if (!currentSnapshot.exists) throw paymentRequestError("A solicitação bancária existente não foi encontrada.");
       const current = { id: currentSnapshot.id, ...currentSnapshot.data() } as BankPaymentRequest;
       if (current.paymentRail && String(current.paymentRail) !== "pix") {
-        throw new Error("A origem da solicitação bancária existente é incompatível.");
+        throw paymentRequestError("A origem da solicitação bancária existente é incompatível.");
       }
       if (current.sourceType !== input.sourceType || current.sourceId !== input.sourceId
         || current.workspaceId !== WORKSPACE_ID
@@ -137,14 +139,14 @@ export async function createPaymentRequest(input: {
         || current.beneficiaryReference?.sourceType !== input.beneficiaryReference.sourceType
         || current.beneficiaryReference?.sourceId !== input.beneficiaryReference.sourceId
         || (current.scheduledFor ?? null) !== (input.scheduledFor ?? null)) {
-        throw new Error("A solicitação bancária existente diverge dos dados aprovados. Faça a conferência antes de continuar.");
+        throw paymentRequestError("A solicitação bancária existente diverge dos dados aprovados. Faça a conferência antes de continuar.");
       }
       if (expenseRef) {
-        if (!expense?.exists) throw new Error("A despesa vinculada à solicitação não foi encontrada.");
+        if (!expense?.exists) throw paymentRequestError("A despesa vinculada à solicitação não foi encontrada.");
         assertExpenseAllowsNewPayment(expense.data()!);
         if (current.sourceType === "generated_receipt") assertGeneratedReceiptPaymentTarget(input, expense.data());
         const linkedRequestId = String(expense.get("paymentRequestId") || "").trim();
-        if (linkedRequestId && linkedRequestId !== current.id) throw new Error("A despesa já possui outra solicitação bancária.");
+        if (linkedRequestId && linkedRequestId !== current.id) throw paymentRequestError("A despesa já possui outra solicitação bancária.");
         if (!linkedRequestId) {
           const installments = current.sourceType === "consultancy_provision" && Array.isArray(expense.get("installments"))
             ? (expense.get("installments") as Record<string, unknown>[]).map((item) => ({ ...item, paymentRequestId: current.id }))
@@ -186,7 +188,7 @@ export async function createPaymentRequest(input: {
   }
   if (input.sourceType === "expense_complement") {
     if (input.beneficiaryReference.sourceType !== "employee") {
-      throw new Error("O complemento deve usar o colaborador favorecido da despesa.");
+      throw paymentRequestError("O complemento deve usar o colaborador favorecido da despesa.");
     }
     await assertExpenseComplementPaymentTarget({
       sourceId: input.sourceId,
@@ -199,19 +201,19 @@ export async function createPaymentRequest(input: {
   }
   let consultancyEmployee: { id: string; name?: unknown; status?: unknown } | null = null;
   if (input.sourceType === "consultancy_provision") {
-    if (input.beneficiaryReference.sourceType !== "employee") throw new Error("A consultoria exige favorecido identificado no RH.");
+    if (input.beneficiaryReference.sourceType !== "employee") throw paymentRequestError("A consultoria exige favorecido identificado no RH.");
     const employee = await hrDbAdmin.collection("employees").doc(input.beneficiaryReference.sourceId).get();
     consultancyEmployee = employee.exists ? { id: employee.id, ...employee.data() } : null;
     const actual = input.expenseId ? await financialDbAdmin.collection("expenses").doc(input.expenseId).get() : null;
     assertConsultancyActualPaymentTarget(input, actual?.exists ? { id: actual.id, ...actual.data() } : null, consultancyEmployee, WORKSPACE_ID);
   }
   const beneficiary = await resolvePaymentBeneficiary(input.beneficiaryReference);
-  if (!beneficiary.validated) throw new Error("O favorecido ainda não foi validado.");
+  if (!beneficiary.validated) throw paymentRequestError("O favorecido ainda não foi validado.");
   const now = new Date().toISOString();
   const ref = paymentRequestRef(randomUUID());
   const status: BankPaymentRequestStatus = "awaiting_financial_authorization";
   if (input.scheduledFor && (!isValidIsoDate(input.scheduledFor) || input.scheduledFor < todayInBelem())) {
-    throw new Error("A data programada do pagamento é inválida ou está no passado.");
+    throw paymentRequestError("A data programada do pagamento é inválida ou está no passado.");
   }
   const request: PixBankPaymentRequest = {
     id: ref.id,
@@ -231,7 +233,7 @@ export async function createPaymentRequest(input: {
     if (input.expenseId) {
       const expenseRef = financialDbAdmin.collection("expenses").doc(input.expenseId);
       const expense = await transaction.get(expenseRef);
-      if (!expense.exists) throw new Error("A despesa vinculada à solicitação não foi encontrada.");
+      if (!expense.exists) throw paymentRequestError("A despesa vinculada à solicitação não foi encontrada.");
       assertExpenseAllowsNewPayment(expense.data()!);
       if (input.sourceType === "generated_receipt") assertGeneratedReceiptPaymentTarget(input, expense.data());
       if (input.sourceType === "consultancy_provision") {
@@ -240,13 +242,13 @@ export async function createPaymentRequest(input: {
           transaction.get(financialDbAdmin.collection("bankPaymentRequests").where("expenseId", "==", input.expenseId).limit(2)),
         ]);
         if (payments.docs.some((item) => item.get("reversed") !== true) || !otherRequests.empty) {
-          throw new Error("A obrigação real já possui pagamento ou solicitação bancária.");
+          throw paymentRequestError("A obrigação real já possui pagamento ou solicitação bancária.");
         }
         assertConsultancyActualPaymentTarget(input, { id: expense.id, ...expense.data() }, consultancyEmployee, WORKSPACE_ID);
       }
       const linkedRequestId = String(expense.get("paymentRequestId") || "").trim();
       if (linkedRequestId && linkedRequestId !== ref.id) {
-        throw new Error("A despesa já possui outra solicitação bancária.");
+        throw paymentRequestError("A despesa já possui outra solicitação bancária.");
       }
       const consultancyInstallments = input.sourceType === "consultancy_provision" && Array.isArray(expense.get("installments"))
         ? (expense.get("installments") as Record<string, unknown>[]).map((item) => ({ ...item, paymentRequestId: ref.id }))
@@ -2071,7 +2073,7 @@ async function completeSource(request: BankPaymentRequest) {
     const paymentRef = financialDbAdmin.collection("payments").doc(`inter_${request.id}`);
     await financialDbAdmin.runTransaction(async (transaction) => {
       const expense = await transaction.get(expenseRef);
-      if (!expense.exists) throw new Error("A despesa vinculada à solicitação não foi encontrada.");
+      if (!expense.exists) throw paymentRequestError("A despesa vinculada à solicitação não foi encontrada.");
       assertExpenseAllowsNewPayment(expense.data()!);
       transaction.set(paymentRef, {
         workspaceId: request.workspaceId ?? WORKSPACE_ID,
@@ -2118,7 +2120,7 @@ async function completeSource(request: BankPaymentRequest) {
     await financialDbAdmin.collection("generatedReceipts").doc(request.sourceId).set({ status: "paid", paidAt: request.paidAt, paymentRequestId: request.id, paymentProofStoragePath: request.proofStoragePath, updatedAt: new Date().toISOString() }, { merge: true });
   }
   if (request.sourceType === "document_receipt") {
-    await dbAdmin.collection("generatedDocuments").doc(request.sourceId).set({ receiptPaymentStatus: "paid", receiptPaymentRequestId: request.id, receiptPaidAt: request.paidAt }, { merge: true });
+    await projectDocumentReceiptPaid(dbAdmin, { documentId: request.sourceId, requestId: request.id, paidAt: request.paidAt, pdfHash: request.receiptPdfContentHash });
   }
 }
 

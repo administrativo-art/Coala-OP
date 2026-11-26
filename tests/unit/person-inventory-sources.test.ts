@@ -153,3 +153,27 @@ test('day correction separates its subject, request author and historical actors
   assert.equal(sourceById('day-correction-actors')?.role, 'actor');
   assert.equal(sourceById('user-notification-owners')?.field, 'ownerUid');
 });
+
+ test('fiscal export actor sources require an explicit matching workspace even for global admin', () => {
+  const actor = { workspace_id: 'coala', isDefaultAdmin: true, permissions: {}, userDoc: {} } as Parameters<typeof canViewPersonRecord>[0];
+  for (const id of ['fiscal-afd-export-actors', 'fiscal-aej-export-actors']) {
+    const source = sourceById(id)!;
+    assert.equal(canViewPersonRecord(actor, source, {}), false);
+    assert.equal(canViewPersonRecord(actor, source, { workspaceId: 'other' }), false);
+    assert.equal(canViewPersonRecord(actor, source, { workspaceId: 'coala' }), true);
+  }
+});
+
+
+test('manifestos privados admissionais têm consulta por titular separada do ator', () => {
+  const config = JSON.parse(readFileSync('firestore.rh.indexes.json', 'utf8'));
+  for (const id of ['admission-storage-scopes', 'admission-upload-manifests']) {
+    const source = sourceById(id)!;
+    assert.equal(source.role, 'subject');
+    assert.equal(source.namespace, 'subjectKeys');
+    assert.equal(source.parentCollection, 'onboardingProcesses');
+    const field = config.fieldOverrides.find((entry: { collectionGroup: string; fieldPath: string }) => entry.collectionGroup === source.collection && entry.fieldPath === source.field);
+    assert.ok(field?.indexes.some((entry: { arrayConfig?: string; queryScope: string }) => entry.arrayConfig === 'CONTAINS' && entry.queryScope === 'COLLECTION_GROUP'));
+  }
+  assert.equal(sourceById('admission-signature-workflow-actors')?.role, 'actor');
+});

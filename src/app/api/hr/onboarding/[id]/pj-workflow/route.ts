@@ -1,3 +1,4 @@
+import { redactOnboardingProcess } from "@/features/hr/onboarding/process-redaction.server";
 import { canAccessUnit } from "@/lib/unit-access";
 import { discardCancelledOnboardingDocuments } from "@/lib/hr/onboarding-document-discard.server";
 import { confirmedSubjectKeysForDocument } from "@/features/privacy/person-lookup.server";
@@ -234,7 +235,7 @@ export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer },
     const { id, process, workflow } = security.resource;
     const { asset } = security.input;
     if (asset && (process.status === "cancelled" || process.documentDiscard)) return error("Arquivo indisponível.", 404);
-    if (!asset) return NextResponse.json(serializeHrValue({ id, ...process }));
+    if (!asset) return NextResponse.json(redactOnboardingProcess(serializeHrValue({ id, ...process }) as Record<string, unknown>, security.actor));
     const path = asset === 'signed_contract' ? workflow.contract?.signedStoragePath : workflow.contract?.storagePath;
     if (!path) return error('Arquivo ainda não disponível.', 404);
     const buffer = await readStorage(path);
@@ -553,7 +554,7 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
       ttl_days: 365,
     });
     const saved = await ref.get();
-    return NextResponse.json({ process: { id: saved.id, ...((serializeHrValue(saved.data()) as Record<string, unknown>) ?? {}) } });
+    return NextResponse.json({ process: redactOnboardingProcess({ id: saved.id, ...((serializeHrValue(saved.data()) as Record<string, unknown>) ?? {}) }, access) });
   } catch (cause) {
     const current = await hrDbAdmin.collection("onboardingProcesses").doc(id).get();
     if (current.get("status") === "cancelled") await discardCancelledOnboardingDocuments(id, "system:cancelled-pj-operation");

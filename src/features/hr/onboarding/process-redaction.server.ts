@@ -17,6 +17,7 @@ export function redactOnboardingProcess(
   access: FormalizationAccess,
 ) {
   const result = structuredClone(process) as Record<string, unknown>;
+  if (result.documentDiscard) result.status = "cancelled";
   delete result.documentDiscardProgress;
   delete result.documentDiscardLease;
   delete result.documentDiscardRevision;

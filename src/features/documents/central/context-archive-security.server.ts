@@ -31,6 +31,7 @@ export function contextArchiveSecurity(file: boolean) {
       if (!isContextArchiveSource(source)) throw new AppError({ code: "ARCHIVE_SOURCE_INVALID", kind: "VALIDATION", safeMessage: "Pasta documental inválida." });
       // Official personal receipts always use the real authenticated owner, matching their existing service.
       const actor = await ((source === "receipts" || source === "pilotReceipts") ? requireAuthenticatedUser(request) : source === "afd" || source === "aej" ? requireTimeManager(request) : requireUser(request)).catch(rethrowServerAuthenticationFailure);
+      if ((source === "afd" || source === "aej") && actor.viewAs) throw new AppError({ code: "ARCHIVE_FISCAL_VIEW_AS_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Use seu próprio perfil para acessar arquivos fiscais coletivos." });
       if (!canViewContextArchive(source, actor)) throw new AppError({ code: "ARCHIVE_SOURCE_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem permissão para acessar esta pasta." });
       const parsed = (file ? fileSchema : listSchema).safeParse(Object.fromEntries(request.nextUrl.searchParams));
       if (!parsed.success || "mine" in parsed.data && parsed.data.mine && source !== "uniforms") throw new AppError({ code: "ARCHIVE_SOURCE_INPUT_INVALID", kind: "VALIDATION", safeMessage: "Consulta documental inválida." });

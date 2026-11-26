@@ -239,3 +239,10 @@ env:
     secret: GOOGLE_MAPS_GEOCODING_API_KEY
   - variable: GOOGLE_MAPS_GEOCODING_DAILY_LIMIT
     value: "100"
+
+  # Exclusão admissional autorizada: API e funções compartilham somente este segredo de serviço.
+  - variable: ONBOARDING_DOCUMENT_DISCARD_SECRET
+    secret: ONBOARDING_DOCUMENT_DISCARD_SECRET
+  # Política do bucket confirmada em 26/11/2026; proteção global preservada.
+  - variable: ONBOARDING_STORAGE_SOFT_DELETE_SECONDS
+    value: "604800"

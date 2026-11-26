@@ -26,11 +26,11 @@ export function contextFileReference(source: ContextArchiveSource, id: string, r
     const digest = hash(term.contentHash);
     return term.storagePath === path && digest ? { path, hash: digest, filename: text(term.fileName) ?? "termo-uniforme.pdf", mimeType: "application/pdf" } : null;
   }
-  if (source !== "afd" && source !== "aej") return null;
+  if (source !== "afd" && source !== "aej" || record.status !== "exported") return null;
   const bundle = object(object(record.artifacts).bundle);
   if (record.workspaceId !== scope.workspaceId || !segment(record.establishmentId) || !scope.fiscalBucket) return null;
   const path = `time-recording/fiscal-exports/${scope.workspaceId}/${source}/${record.establishmentId}/${id}/pacote-fiscal-${source}.zip`;
   const digest = hash(bundle.sha256), generation = text(bundle.generation);
-  if (bundle.storageBucket !== scope.fiscalBucket || bundle.storagePath !== path || !digest || !generation || !/^\d+$/.test(generation) || !Number.isSafeInteger(bundle.size) || Number(bundle.size) < 0 || Number(bundle.size) > 100 * 1024 * 1024) return null;
+  if (bundle.storageBucket !== scope.fiscalBucket || bundle.storagePath !== path || !digest || !generation || !/^[1-9]\d*$/.test(generation) || !Number.isSafeInteger(Number(generation)) || !Number.isSafeInteger(bundle.size) || Number(bundle.size) < 0 || Number(bundle.size) > 100 * 1024 * 1024) return null;
   return { path, bucket: scope.fiscalBucket, generation, hash: digest, size: Number(bundle.size), filename: `pacote-fiscal-${source}-${id}.zip`, mimeType: "application/zip" };
 }

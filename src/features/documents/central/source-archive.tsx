@@ -32,7 +32,7 @@ export function SourceArchive({ source, documentId, mine = false, parentId }: { 
   const canViewSigned = hasFormalizationPermission(permissions, "signatures.view", isDefaultAdmin);
   const actorKey = `${user?.id ?? ""}:${viewAs?.id ?? ""}`;
   const permissionKey = JSON.stringify(permissions);
-  const canView = canViewArchiveSource(source, permissions, isDefaultAdmin, user ?? {}) && !((source === "receipts" || source === "pilotReceipts") && viewAs);
+  const canView = canViewArchiveSource(source, permissions, isDefaultAdmin, user ?? {}) && !((source === "receipts" || source === "pilotReceipts" || source === "afd" || source === "aej") && viewAs);
   const unitKey = JSON.stringify([user?.unitAccessScope, user?.unitAccessUnitIds, user?.unitIds, user?.assignedKioskIds, user?.operationalUnitPeriods]);
   const dataKey = JSON.stringify([source, parentId, documentId, mine, actorKey, permissionKey, unitKey, isDefaultAdmin]);
   const [loadedKey, setLoadedKey] = useState("");

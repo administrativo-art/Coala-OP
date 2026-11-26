@@ -25,7 +25,8 @@ export function admissionRecordVisibility(db: Firestore = hrDbAdmin) {
   const cache = new Map<string, Promise<boolean>>();
   return async (record: Record<string, unknown>) => {
     const id = record.sourceOnboardingId ?? record.onboardingId;
-    if (!text(id)) return true;
+    if (id == null || id === "") return true;
+    if (!text(id) || id === "." || id === "..") return false;
     if (!cache.has(id)) cache.set(id, db.collection("onboardingProcesses").doc(id).get().then((snapshot) => snapshot.exists && admissionArchiveReady(id, snapshot.data() ?? {}, db)));
     return cache.get(id)!;
   };

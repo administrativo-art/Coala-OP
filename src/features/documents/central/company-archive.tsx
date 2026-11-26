@@ -94,7 +94,7 @@ function nextPendingItemId() {
 /** Aba Empresa do Acervo: pastas e arquivos internos da empresa (sem as pastas dos colaboradores). */
 export function CompanyArchive() {
   const router = useRouter();
-  const { firebaseUser, permissions, isDefaultAdmin, user } = useAuth();
+  const { firebaseUser, permissions, isDefaultAdmin, user, viewAs } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const [documents, setDocuments] = useState<CompanyDocument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -459,7 +459,7 @@ export function CompanyArchive() {
     folders.splice(unclassified < 0 ? folders.length : unclassified, 0, { id: "models", name: companyArchiveFolderLabel("Modelos"), open: () => router.push("/dashboard/documents/models") });
   }
   const sourceFolders = (Object.keys(ARCHIVE_SOURCE_FOLDERS) as ArchiveFolderSource[])
-    .filter((source) => source !== "receipts" && source !== "pilotReceipts" && (source !== "uniforms" || managesUniformArchive({ permissions, isDefaultAdmin, userDoc: user ?? {} })) && canViewArchiveSource(source, permissions, isDefaultAdmin, user ?? {}))
+    .filter((source) => !(viewAs && (source === "afd" || source === "aej")) && source !== "receipts" && source !== "pilotReceipts" && (source !== "uniforms" || managesUniformArchive({ permissions, isDefaultAdmin, userDoc: user ?? {} })) && canViewArchiveSource(source, permissions, isDefaultAdmin, user ?? {}))
     .map((source) => ({ id: `source:${source}`, name: ARCHIVE_SOURCE_FOLDERS[source].label, open: () => router.push(archiveSourceHref(source)) }));
   folders.push(...sourceFolders);
   const fileEntries = (list: CompanyDocument[]): ArchiveEntry[] => list.map((document) => ({

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorMessage } from "@/lib/api-error-message";
 import { DndContext, PointerSensor, useDraggable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { AlertTriangle, Check, FileSignature, Loader2, Plus, RotateCcw, Save, X } from "lucide-react";
@@ -338,8 +339,8 @@ export default function SignaturePlacementEditor({
           { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" },
         );
         if (!response.ok) {
-          const payload = await response.json().catch(() => ({})) as { error?: string };
-          throw new Error(payload.error || "Não foi possível abrir o PDF congelado.");
+          const payload = await response.json().catch(() => ({})) as unknown;
+          throw new Error(apiErrorMessage(payload, "Não foi possível abrir o PDF congelado."));
         }
         const task = await openPdfDocument(await response.arrayBuffer());
         loaded = await task.promise as unknown as PdfDocument;
@@ -490,8 +491,8 @@ export default function SignaturePlacementEditor({
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ action, ...body }),
     });
-    const payload = await response.json().catch(() => ({})) as SignaturePlacementWorkflow & { error?: string };
-    if (!response.ok) throw new Error(payload.error || "Falha ao salvar o posicionamento.");
+    const payload = await response.json().catch(() => ({})) as SignaturePlacementWorkflow;
+    if (!response.ok) throw new Error(apiErrorMessage(payload, "Falha ao salvar o posicionamento."));
     return payload;
   }
 

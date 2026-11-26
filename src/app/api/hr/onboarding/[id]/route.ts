@@ -1,3 +1,4 @@
+import { subjectKey } from "@/features/privacy/person-subject";
 import { canAccessUnit } from "@/lib/unit-access";
 import { discardCancelledOnboardingDocuments } from "@/lib/hr/onboarding-document-discard.server";
 import { provisionOnboardingAuth, checkpointOnboardingIdentities } from "@/features/privacy/onboarding-provisioning.server";
@@ -964,7 +965,8 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
   let process = snap.data() ?? {};
   if (process.status === 'cancelled') {
     if (action === 'retry_document_discard' || action === 'cancel') {
-      await discardCancelledOnboardingDocuments(id, access.decoded.uid);
+      if (!process.documentDiscard) await ref.set({ documentDiscard: { status: 'pending', requestedAt: new Date().toISOString(), requestedBy: access.decoded.uid, actorId: access.decoded.uid } }, { merge: true });
+      await discardCancelledOnboardingDocuments(id, access.decoded.uid, (process) => assertOnboardingMutationScope(access, process));
       const saved = await ref.get();
       return NextResponse.json({ process: redactOnboardingProcess({ id, ...((serializeHrValue(saved.data()) as Record<string, unknown>) ?? {}) }, access) });
     }
@@ -1268,6 +1270,9 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
     }
     update.publicToken = null;
     update.publicTokenClosedAt = now;
+    update.asoClinicTokenHash = null;
+    update.asoCandidateTokenHash = null;
+    update.accountantTokenHash = null;
     update.integrationAlerts = isPj ? [] : await verifyAccessIntegrations({ process, collaboratorUserId: created.userId, now });
     update.firstAccess = {
       status: 'pending',
@@ -1409,7 +1414,10 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
     update.cancelledBy = access.decoded.uid;
     update.cancelledByEmail = access.decoded.email ?? null;
     update.publicTokenClosedAt = now;
-    update.documentDiscard = { status: 'pending', requestedAt: now, actorId: access.decoded.uid };
+    update.asoClinicTokenHash = null;
+    update.asoCandidateTokenHash = null;
+    update.accountantTokenHash = null;
+    update.documentDiscard = { status: 'pending', requestedAt: now, requestedBy: access.decoded.uid, actorId: access.decoded.uid };
   } else {
     return jsonError('Ação inválida.');
   }
@@ -1434,9 +1442,9 @@ export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnfor
     assertOnboardingMutationScope(access, current.data() ?? {});
     if (current.get('status') === 'cancelled' || action === 'cancel' && current.get('status') === 'completed') throw new AppError({ code: 'ONBOARDING_STATE_CHANGED', kind: 'CONFLICT', safeMessage: 'O processo mudou. Atualize a tela antes de continuar.' });
     tx.set(ref, update, { merge: true });
-    if (action === 'cancel') tx.set(ref.collection('audit').doc(), { action: 'ADMISSION_DOCUMENT_DISCARD_REQUESTED', actorId: access.decoded.uid, at: now });
+    if (action === 'cancel') tx.set(ref.collection('audit').doc(), { action: 'ADMISSION_DOCUMENT_DISCARD_REQUESTED', actorId: access.decoded.uid, actorKeys: [subjectKey({ namespace: 'main.users', id: access.decoded.uid })], at: now });
   });
-  if (action === 'cancel') await discardCancelledOnboardingDocuments(id, access.decoded.uid);
+  if (action === 'cancel') await discardCancelledOnboardingDocuments(id, access.decoded.uid, (process) => assertOnboardingMutationScope(access, process));
 
   await logAction({
     user_id: access.decoded.uid,

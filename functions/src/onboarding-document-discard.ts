@@ -16,7 +16,7 @@ async function enqueue(onboardingId: string) {
   const ref = hrDb.collection('onboardingProcesses').doc(onboardingId);
   const eligible = await hrDb.runTransaction(async (tx) => {
     const parent = await tx.get(ref);
-    if (!parent.exists || parent.get('completedAt') || !parent.get('cancelledAt') && !parent.get('documentDiscard')) return false;
+    if (!parent.exists || parent.get('completedAt') || !parent.get('documentDiscard')) return false;
     tx.set(ref, { status: 'cancelled', documentDiscard: { status: 'pending' }, documentDiscardProgress: FieldValue.delete(), documentDiscardRevision: FieldValue.increment(1) }, { merge: true });
     return true;
   });
@@ -38,6 +38,10 @@ export const discardLateOnboardingObject = onObjectFinalized({ retry: true, maxI
   let onboardingId: unknown = file.metadata?.onboardingId;
   const parts = name.split('/');
   if (!id(onboardingId) && parts[0] === 'signature-packages') onboardingId = parts[1];
+  if (!id(onboardingId) && (parts[0] === 'signature-documents' || parts[0] === 'signed-documents' && parts[1] === 'generated')) {
+    const generatedId = parts[0] === 'signature-documents' ? parts[1] : parts[2];
+    if (id(generatedId)) onboardingId = (await getFirestore('coala').collection('generatedDocuments').doc(generatedId).get()).get('onboardingId');
+  }
   if (!id(onboardingId) && parts[0] === 'hr' && parts[1] === 'employee-documents' && parts[3] === 'documents' && id(parts[4])) {
     onboardingId = (await hrDb.collection('employeeDocuments').doc(parts[4]).get()).get('sourceOnboardingId');
   }

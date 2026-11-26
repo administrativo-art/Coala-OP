@@ -1,6 +1,6 @@
 import "server-only";
 import { admissionArchivePage, readAdmissionArchiveFile } from "./admission-archive.server";
-import { createHash } from "node:crypto";
+import { validContextArchiveBytes } from "./context-archive-bytes";
 import { FieldPath, type Query, type DocumentSnapshot } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
@@ -108,14 +108,15 @@ export async function contextArchivePage(source: ContextArchiveSource, actor: Se
   if (position) query = query.startAfter(position.id);
   const page = await query.limit(limit + 1).get();
   const items: Item[] = [];
-  const uniformAccess = new Map<string, Promise<boolean>>();
+  const uniformAccess: Record<string, Promise<boolean>> = {};
   for (const doc of page.docs.slice(0, limit)) {
     const record = data(doc);
     if (source === "paymentProof" && (!contextWorkspaceAllowed(record, actor.workspace_id, actor.isDefaultAdmin) || !text(record.proofStoragePath))) continue;
     if (source === "uniforms") {
       const person = text(record.collaboratorUserId) ?? "";
-      if (!uniformAccess.has(person)) uniformAccess.set(person, uniformAllowed(actor, record));
-      if (!text(object(record.term).storagePath) || !await uniformAccess.get(person)) continue;
+      const accessKey = `person:${person}`;
+      if (!Object.hasOwn(uniformAccess, accessKey)) uniformAccess[accessKey] = uniformAllowed(actor, record);
+      if (!text(object(record.term).storagePath) || !await uniformAccess[accessKey]) continue;
     }
     if ((source === "receipts" || source === "pilotReceipts") && record.status !== "issued") continue;
     if ((source === "afd" || source === "aej") && !text(object(object(record.artifacts).bundle).storagePath)) continue;
@@ -160,6 +161,6 @@ export async function readContextArchiveFile(source: ContextArchiveSource, actor
   if (!stored) throw fail();
   const file = getStorage(adminApp).bucket(stored.bucket ?? firebaseClientConfig.storageBucket).file(stored.path, stored.generation ? { generation: stored.generation } : undefined);
   const [bytes] = await file.download();
-  if (stored.hash && createHash("sha256").update(bytes).digest("hex") !== stored.hash || stored.size !== undefined && bytes.byteLength !== stored.size || stored.mimeType === "application/pdf" && bytes.subarray(0, 4).toString() !== "%PDF" || stored.mimeType === "application/zip" && bytes.subarray(0, 4).toString("hex") !== "504b0304") throw new AppError({ code: "ARCHIVE_SOURCE_INTEGRITY_FAILED", kind: "DATA_INTEGRITY", safeMessage: "Não foi possível conferir a integridade do documento arquivado." });
+  if (!validContextArchiveBytes(bytes, stored)) throw new AppError({ code: "ARCHIVE_SOURCE_INTEGRITY_FAILED", kind: "DATA_INTEGRITY", safeMessage: "Não foi possível conferir a integridade do documento arquivado." });
   return { bytes, filename: stored.filename, mimeType: stored.mimeType };
 }

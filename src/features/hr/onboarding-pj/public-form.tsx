@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorMessage } from '@/lib/api-error-message';
 import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, FileUp, Loader2, Paperclip, Send, X } from 'lucide-react';
 
@@ -149,7 +150,7 @@ export function PjPublicOnboardingForm({
         body: JSON.stringify({ answers, documents: Object.fromEntries(uploaded), privacyAcceptance: { noticeVersion: data.privacyNotice?.version, noticeHash: data.privacyNotice?.hash, acknowledged: privacyAcknowledged }, website: '' }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error ?? 'Falha ao enviar o cadastro.');
+      if (!response.ok) throw new Error(apiErrorMessage(payload, 'Falha ao enviar o cadastro.'));
       setFiles({}); setSubmitted(true); onUpdated(payload);
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Falha ao enviar o cadastro.'); }
     finally { setSubmitting(false); }

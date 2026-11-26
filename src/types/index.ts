@@ -1645,7 +1645,7 @@ export type OnboardingPrivacyAcceptance = {
 };
 
 export type OnboardingProcess = {
-  documentDiscard?: { status: "pending" | "completed"; removedFiles?: number; blockedFiles?: number; waitingForUploads?: boolean; waitingForOperation?: boolean; updatedAt?: string };
+  documentDiscard?: { status: "pending" | "completed"; removedFiles?: number; blockedFiles?: number; waitingForUploads?: boolean; waitingForOperation?: boolean; storageRecoverySeconds?: number; updatedAt?: string };
   personIdentity?: import("@/features/privacy/onboarding-person").OnboardingPersonIdentity;
   personOrigin?: { schemaVersion: 1; kind: "manual-natural" | "pj-company" };
   personProvisioning?: { schemaVersion: 1; operationId: string; uid: string; hrEmployeeId: string; origin: string; subjectRef: import("@/features/privacy/person-subject").SubjectRef | null; state: string };

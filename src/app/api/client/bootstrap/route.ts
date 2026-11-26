@@ -1,8 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
+import { AppError } from "@/lib/observability/app-error";
 import { canViewPurchasing } from "@/lib/purchasing-permissions";
+import { createStandardSecurityEnforcer } from "@/lib/security/enforcer";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
 import {
   canAccessUnit,
   canAccessUserByUnit,
@@ -13,6 +17,8 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const SUPPORTED_COLLECTIONS = ["currentUser", "profiles", "users", "kiosks", "products", "baseProducts", "lots", "goals"];
+
 type BootstrapCollection =
   | "currentUser"
   | "profiles"
@@ -22,10 +28,6 @@ type BootstrapCollection =
   | "baseProducts"
   | "lots"
   | "goals";
-
-function jsonError(message: string, status = 400) {
-  return NextResponse.json({ error: message }, { status });
-}
 
 function serializeValue(value: unknown): unknown {
   if (!value) return value;
@@ -110,36 +112,45 @@ function parseCollections(request: NextRequest): BootstrapCollection[] {
   );
 }
 
-export async function GET(request: NextRequest) {
-  let context: ServerUserContext;
-  try {
-    context = await requireUser(request);
-  } catch {
-    return jsonError("Não autorizado.", 401);
-  }
+type StaticRouteContext = { params: Promise<Record<string, never>> };
 
-  const collections = parseCollections(request);
-  if (collections.length === 0) {
-    return jsonError("Informe ao menos uma coleção.", 400);
-  }
+/**
+ * A porta de entrada garante usuário ativo e coleções conhecidas. O que cada pessoa enxerga de cada coleção é
+ * filtrado abaixo, por permissão e unidade; por isso o contrato não declara uma permissão única.
+ */
+const contract = defineSecurityContract({
+  schemaVersion: 1,
+  id: "client.bootstrap.read",
+  version: 1,
+  surface: { method: "GET", path: "/api/client/bootstrap" },
+  exposure: "authenticated",
+  identity: { kind: "active-user" },
+  authorization: { kind: "none" },
+  resourceScope: { kind: "none" },
+  input: { kind: "schema", schema: "client.bootstrap.collections", unknownFields: "strip" },
+  effects: { mode: "read", audit: "none" },
+  errorExposure: "sanitized",
+});
 
-  const unsupported = collections.filter(
-    (name) =>
-      ![
-        "currentUser",
-        "profiles",
-        "users",
-        "kiosks",
-        "products",
-        "baseProducts",
-        "lots",
-        "goals",
-      ].includes(name)
-  );
-  if (unsupported.length > 0) {
-    return jsonError(`Coleção não suportada: ${unsupported.join(", ")}.`, 404);
-  }
-
+export const GET = secureRoute({
+  contract,
+  enforcer: createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, ServerUserContext, BootstrapCollection[]>(contract, {
+    authenticate: ({ request }) => requireUser(request).catch((cause) => {
+      throw new AppError({ code: "CLIENT_BOOTSTRAP_UNAUTHORIZED", kind: "AUTHENTICATION", safeMessage: "Não autorizado.", cause });
+    }),
+    parseInput: ({ request }) => {
+      const collections = parseCollections(request);
+      if (collections.length === 0) {
+        throw new AppError({ code: "CLIENT_BOOTSTRAP_COLLECTIONS_REQUIRED", kind: "VALIDATION", safeMessage: "Informe ao menos uma coleção." });
+      }
+      const unsupported = collections.filter((name) => !SUPPORTED_COLLECTIONS.includes(name));
+      if (unsupported.length > 0) {
+        throw new AppError({ code: "CLIENT_BOOTSTRAP_COLLECTION_UNSUPPORTED", kind: "NOT_FOUND", safeMessage: "Coleção não suportada." });
+      }
+      return collections;
+    },
+  }),
+}, async ({ security: { actor: context, input: collections } }) => {
   const payload: Record<string, unknown> = {};
 
   try {
@@ -244,8 +255,7 @@ export async function GET(request: NextRequest) {
     );
 
     return NextResponse.json(payload);
-  } catch (error) {
-    console.error("[client/bootstrap]", error);
-    return jsonError("Falha ao carregar dados do servidor.", 500);
+  } catch (cause) {
+    throw new AppError({ code: "CLIENT_BOOTSTRAP_LOAD_FAILED", kind: "UNEXPECTED_APPLICATION", safeMessage: "Falha ao carregar dados do servidor.", cause });
   }
-}
+});

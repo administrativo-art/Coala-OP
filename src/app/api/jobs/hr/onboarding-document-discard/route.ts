@@ -5,6 +5,7 @@ import { secureRoute } from "@/lib/security/secure-route.server";
 import { defineSecurityContract } from "@/lib/security/route-contract";
 import { defineSecurityEnforcer } from "@/lib/security/enforcer";
 import { AppError } from "@/lib/observability/app-error";
+import { FieldPath } from "firebase-admin/firestore";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { discardCancelledOnboardingDocuments } from "@/lib/hr/onboarding-document-discard.server";
 export const runtime = "nodejs";
@@ -22,11 +23,23 @@ const enforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, { id: str
   },
 });
 export const POST = secureRoute({ contract, enforcer }, async ({ security }) => {
-  const parents = security.input.onboardingId ? [await hrDbAdmin.collection("onboardingProcesses").doc(security.input.onboardingId).get()] : (await hrDbAdmin.collection("onboardingProcesses").where("documentDiscard.status", "==", "pending").limit(5).get()).docs;
+  const queueCursor = hrDbAdmin.collection("onboardingDocumentDiscardQueue").doc("onboarding-document-discard-cursor");
+  const previous = security.input.onboardingId ? null : await queueCursor.get();
+  const queue = hrDbAdmin.collection("onboardingProcesses").where("documentDiscard.status", "==", "pending").orderBy(FieldPath.documentId());
+  let parents;
+  if (security.input.onboardingId) parents = [await hrDbAdmin.collection("onboardingProcesses").doc(security.input.onboardingId).get()];
+  else {
+    const cursor = previous?.get("lastId");
+    let page = await (typeof cursor === "string" ? queue.startAfter(cursor) : queue).limit(5).get();
+    if (page.empty && cursor) page = await queue.limit(5).get();
+    parents = page.docs;
+  }
   const results = [];
   for (const parent of parents) {
     if (!parent.exists || parent.get("status") !== "cancelled" || !parent.get("documentDiscard") || parent.get("completedAt")) continue;
-    results.push(await discardCancelledOnboardingDocuments(parent.id, security.actor.id));
+    try { results.push(await discardCancelledOnboardingDocuments(parent.id, security.actor.id)); }
+    catch { results.push({ status: "pending", failed: true }); await parent.ref.collection("audit").add({ action: "ADMISSION_DOCUMENT_DISCARD_RETRY_FAILED", at: new Date().toISOString() }); }
   }
+  if (!security.input.onboardingId) await queueCursor.set({ lastId: parents.at(-1)?.id ?? null, attemptedAt: new Date().toISOString() });
   return NextResponse.json({ results }, { headers: { "Cache-Control": "private, no-store" } });
 });

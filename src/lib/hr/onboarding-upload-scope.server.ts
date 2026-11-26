@@ -1,4 +1,6 @@
 import "server-only";
+import { processSubjectRef } from "@/features/privacy/onboarding-person";
+import { subjectKey } from "@/features/privacy/person-subject";
 import { createHash } from "node:crypto";
 import { FieldValue, type DocumentReference } from "firebase-admin/firestore";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
@@ -14,8 +16,10 @@ export async function registerOnboardingUpload(token: string, path: string, slot
   await hrDbAdmin.runTransaction(async (tx) => {
     const current = await tx.get(parent);
     if (!current.exists || current.get("publicToken") !== token || current.get("publicTokenClosedAt") || current.get("documentDiscard") || ["cancelled", "completed"].includes(String(current.get("status")))) throw fail();
-    tx.set(parent.collection("documentStorageScopes").doc(onboardingObjectKey(token)), { prefix: `hr/onboarding/${token}/`, onboardingId: parent.id, createdAt: FieldValue.serverTimestamp() }, { merge: true });
-    tx.create(file, { onboardingId: parent.id, path, slotId, sha256: hash, status: "uploading", createdAt: FieldValue.serverTimestamp() });
+    const subject = processSubjectRef({ ...current.data(), id: parent.id });
+    const subjectKeys = subject ? [subjectKey(subject)] : [];
+    tx.set(parent.collection("documentStorageScopes").doc(onboardingObjectKey(token)), { subjectKeys, prefix: `hr/onboarding/${token}/`, onboardingId: parent.id, createdAt: FieldValue.serverTimestamp() }, { merge: true });
+    tx.create(file, { subjectKeys, onboardingId: parent.id, path, slotId, sha256: hash, status: "uploading", createdAt: FieldValue.serverTimestamp() });
   });
   return { parent, file };
 }
