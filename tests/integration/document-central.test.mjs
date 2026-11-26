@@ -1130,3 +1130,108 @@ test("central: autorização atual, paginação e proposta preservadas pelas API
     for (const [key, value] of Object.entries(previousEnv)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
   }
 });
+
+
+test("standalone archive refuses terminal state and publication if projection is discarded during download", async (t) => {
+  const { archiveAutentiqueSignedDocument } = await import("../../src/features/hr/documents/signature-workflow.server.ts");
+  const id = "synthetic-standalone-discard-during-download";
+  const generatedRef = dbAdmin.collection("generatedDocuments").doc(id);
+  const requestRef = hrDbAdmin.collection("hrSignatureRequests").doc(`signature_generated_${id}`);
+  const documentId = createHash("sha256").update(`signed-generated-document:${id}`).digest("hex").slice(0, 32);
+  const archiveRef = hrDbAdmin.collection("employeeDocuments").doc(documentId);
+  const bytes = Buffer.from("%PDF-synthetic-discard-during-download");
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  const path = `signed-documents/generated/${id}/${requestRef.id}/${hash}/signed.pdf`;
+  const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+  const originalFetch = globalThis.fetch;
+  t.after(async () => { globalThis.fetch = originalFetch; await Promise.all([generatedRef.delete(), requestRef.delete(), hrDbAdmin.recursiveDelete(archiveRef), bucket.file(path).delete({ ignoreNotFound: true })]); });
+  await generatedRef.set({ status: "final", employeeId: "synthetic-person", documentTypeCode: "VACATION_RECEIPT" });
+  await requestRef.set({ generatedDocumentId: id, storagePath: `signature-documents/${id}/prepared.pdf`, packageHash: "a".repeat(64), employeeId: "synthetic-person", documentTypeCode: "VACATION_RECEIPT", status: "sent", providerDocumentId: "synthetic-provider", subjectKeys: ["hr.employees:synthetic-person"] });
+  globalThis.fetch = async (input, init) => {
+    if (String(input) === "https://api.autentique.com.br/synthetic-discard.pdf") {
+      await generatedRef.update({ status: "discarded" });
+      return new Response(bytes, { headers: { "Content-Type": "application/pdf" } });
+    }
+    return originalFetch(input, init);
+  };
+  await assert.rejects(archiveAutentiqueSignedDocument({ signatureRequestId: requestRef.id, signedUrl: "https://api.autentique.com.br/synthetic-discard.pdf" }), /descartado/);
+  const request = await requestRef.get(), archived = await archiveRef.get();
+  assert.equal(request.get("status"), "sent");
+  assert.equal(request.get("archivedDocumentId"), undefined);
+  assert.equal(archived.exists, false, "discard during download must precede Acervo creation");
+  assert.equal((await bucket.file(path).exists())[0], false);
+  assert.equal((await generatedRef.get()).get("status"), "discarded");
+});
+
+
+test("standalone final projection failure cannot race terminal request or publication", async (t) => {
+  const { archiveAutentiqueSignedDocument } = await import("../../src/features/hr/documents/signature-workflow.server.ts");
+  const id = "synthetic-standalone-final-projection-failure";
+  const generatedRef = dbAdmin.collection("generatedDocuments").doc(id);
+  const requestRef = hrDbAdmin.collection("hrSignatureRequests").doc(`signature_generated_${id}`);
+  const documentId = createHash("sha256").update(`signed-generated-document:${id}`).digest("hex").slice(0, 32);
+  const archiveRef = hrDbAdmin.collection("employeeDocuments").doc(documentId);
+  const bytes = Buffer.from("%PDF-synthetic-final-projection-failure");
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  const path = `signed-documents/generated/${id}/${requestRef.id}/${hash}/signed.pdf`;
+  const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+  const originalFetch = globalThis.fetch, originalTransaction = dbAdmin.runTransaction;
+  t.after(async () => { globalThis.fetch = originalFetch; dbAdmin.runTransaction = originalTransaction; await Promise.all([generatedRef.delete(), requestRef.delete(), hrDbAdmin.recursiveDelete(archiveRef), bucket.file(path).delete({ ignoreNotFound: true })]); });
+  await generatedRef.set({ status: "final", employeeId: "synthetic-person", documentTypeCode: "VACATION_RECEIPT" });
+  await requestRef.set({ generatedDocumentId: id, storagePath: `signature-documents/${id}/prepared.pdf`, packageHash: "a".repeat(64), employeeId: "synthetic-person", documentTypeCode: "VACATION_RECEIPT", status: "sent", providerDocumentId: "synthetic-provider", subjectKeys: ["hr.employees:synthetic-person"] });
+  globalThis.fetch = async (input, init) => String(input) === "https://api.autentique.com.br/synthetic-projection-failure.pdf" ? new Response(bytes, { headers: { "Content-Type": "application/pdf" } }) : originalFetch(input, init);
+  let projectionTransactions = 0;
+  dbAdmin.runTransaction = async (...args) => {
+    if (++projectionTransactions === 3) throw new Error("synthetic final projection failure");
+    return originalTransaction.apply(dbAdmin, args);
+  };
+  await assert.rejects(archiveAutentiqueSignedDocument({ signatureRequestId: requestRef.id, signedUrl: "https://api.autentique.com.br/synthetic-projection-failure.pdf" }), /synthetic final projection failure/);
+  assert.equal(projectionTransactions, 3);
+  const request = await requestRef.get(), archived = await archiveRef.get();
+  assert.equal(request.get("status"), "sent");
+  assert.equal(request.get("archivedDocumentId"), undefined);
+  assert.equal(archived.exists, true, "the staged entry survives for explicit reconciliation");
+  assert.equal(archived.get("publication.status"), undefined);
+  assert.equal((await archiveRef.collection("audit").where("action", "==", "published").get()).size, 0);
+});
+
+
+test("standalone retries publication after terminal archive without downloading or duplicating", async (t) => {
+  const { archiveAutentiqueSignedDocument } = await import("../../src/features/hr/documents/signature-workflow.server.ts");
+  const id = "synthetic-standalone-publication-recovery";
+  const generatedRef = dbAdmin.collection("generatedDocuments").doc(id);
+  const requestRef = hrDbAdmin.collection("hrSignatureRequests").doc(`signature_generated_${id}`);
+  const documentId = createHash("sha256").update(`signed-generated-document:${id}`).digest("hex").slice(0, 32);
+  const archiveRef = hrDbAdmin.collection("employeeDocuments").doc(documentId);
+  const bytes = Buffer.from("%PDF-synthetic-publication-recovery");
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  const path = `signed-documents/generated/${id}/${requestRef.id}/${hash}/signed.pdf`;
+  const bucket = getStorage(adminApp).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+  const originalFetch = globalThis.fetch, originalTransaction = hrDbAdmin.runTransaction;
+  t.after(async () => { globalThis.fetch = originalFetch; hrDbAdmin.runTransaction = originalTransaction; await Promise.all([generatedRef.delete(), requestRef.delete(), hrDbAdmin.recursiveDelete(archiveRef), bucket.file(path).delete({ ignoreNotFound: true })]); });
+  await generatedRef.set({ status: "final", employeeId: "synthetic-person", documentTypeCode: "VACATION_RECEIPT" });
+  await requestRef.set({ generatedDocumentId: id, storagePath: `signature-documents/${id}/prepared.pdf`, packageHash: "a".repeat(64), employeeId: "synthetic-person", documentTypeCode: "VACATION_RECEIPT", status: "sent", providerDocumentId: "synthetic-provider", subjectKeys: ["hr.employees:synthetic-person"] });
+  let downloads = 0, hrTransactions = 0;
+  globalThis.fetch = async (input, init) => {
+    if (String(input) === "https://api.autentique.com.br/synthetic-publication-recovery.pdf") { downloads++; return new Response(bytes, { headers: { "Content-Type": "application/pdf" } }); }
+    return originalFetch(input, init);
+  };
+  hrDbAdmin.runTransaction = async (...args) => {
+    if (++hrTransactions === 2) throw new Error("synthetic publication failure after terminal write");
+    return originalTransaction.apply(hrDbAdmin, args);
+  };
+  const params = { signatureRequestId: requestRef.id, signedUrl: "https://api.autentique.com.br/synthetic-publication-recovery.pdf" };
+  await assert.rejects(archiveAutentiqueSignedDocument(params), /synthetic publication failure/);
+  assert.equal((await requestRef.get()).get("status"), "signed");
+  assert.equal((await requestRef.get()).get("archivedDocumentId"), documentId);
+  assert.equal((await archiveRef.get()).get("publication"), undefined);
+  hrDbAdmin.runTransaction = originalTransaction;
+  assert.equal(await archiveAutentiqueSignedDocument(params), documentId);
+  assert.equal((await archiveRef.get()).get("publication.status"), "published");
+  assert.equal(await archiveAutentiqueSignedDocument(params), documentId);
+  assert.equal(downloads, 1);
+  assert.equal((await archiveRef.collection("audit").where("action", "==", "DOCUMENT_PUBLISHED").get()).size, 1);
+  await generatedRef.update({ status: "discarded" });
+  await assert.rejects(archiveAutentiqueSignedDocument(params), /descartado/);
+  assert.equal(downloads, 1);
+});

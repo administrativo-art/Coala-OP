@@ -1,3 +1,8 @@
+import { assertOnboardingAttachmentScope } from "@/lib/hr/onboarding-attachment-scope.server";
+import { secureRoute } from "@/lib/security/secure-route.server";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { createStandardSecurityEnforcer } from "@/lib/security/enforcer";
+import { toRouteAccessError } from "@/lib/security/route-access.server";
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
@@ -17,7 +22,7 @@ import { adminApp } from '@/lib/firebase-admin';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
-import { AppError, withApiErrorHandling } from '@/lib/observability';
+import { AppError } from '@/lib/observability';
 import { invalidateAccountantFormVersion } from '@/features/hr/accountant/form-version';
 import { maritalStatusIsInformed } from '@/features/hr/onboarding/marital-status';
 import { applyOnboardingSignatureMode, normalizeOnboardingStages } from '@/lib/recruitment-onboarding';
@@ -113,9 +118,15 @@ function parseReviewedFormData(value: unknown) {
   return { error: null, data };
 }
 
-export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const access = await assertFormalizationAccess(request, 'accountant.view').catch(() => null);
-  if (!access) return NextResponse.json({ error: 'Sem permissão.' }, { status: 403 });
+type RouteContext = { params: Promise<{ id: string }> };
+const readContract = defineSecurityContract({ schemaVersion: 1, id: "hr.onboarding.accountant.read", version: 1, surface: { method: "GET", path: "/api/hr/onboarding/[id]/accountant-workflow" }, exposure: "authenticated", identity: { kind: "active-user" }, authorization: { kind: "custom", strategy: "accountant-view" }, resourceScope: { kind: "none" }, input: { kind: "none" }, effects: { mode: "read", audit: "none" }, errorExposure: "sanitized" });
+const actionContract = defineSecurityContract({ schemaVersion: 1, id: "hr.onboarding.accountant.act", version: 1, surface: { method: "POST", path: "/api/hr/onboarding/[id]/accountant-workflow" }, exposure: "authenticated", identity: { kind: "active-user" }, authorization: { kind: "custom", strategy: "accountant-manage" }, resourceScope: { kind: "none" }, input: { kind: "none" }, effects: { mode: "external", audit: "none" }, errorExposure: "sanitized" });
+const updateContract = defineSecurityContract({ schemaVersion: 1, id: "hr.onboarding.accountant.update", version: 1, surface: { method: "PATCH", path: "/api/hr/onboarding/[id]/accountant-workflow" }, exposure: "authenticated", identity: { kind: "active-user" }, authorization: { kind: "custom", strategy: "accountant-manage" }, resourceScope: { kind: "none" }, input: { kind: "none" }, effects: { mode: "external", audit: "none" }, errorExposure: "sanitized" });
+const updateEnforcer = createStandardSecurityEnforcer<NextRequest, RouteContext, unknown, Awaited<ReturnType<typeof assertFormalizationAccess>>>(updateContract, { authenticate: ({ request }) => assertFormalizationAccess(request, 'accountant.manage').catch(cause => { throw toRouteAccessError(cause, 'ACCOUNTANT'); }), authorize: () => undefined });
+const readEnforcer = createStandardSecurityEnforcer<NextRequest, RouteContext, unknown, Awaited<ReturnType<typeof assertFormalizationAccess>>>(readContract, { authenticate: ({ request }) => assertFormalizationAccess(request, 'accountant.view').catch(cause => { throw toRouteAccessError(cause, 'ACCOUNTANT'); }), authorize: () => undefined });
+const actionEnforcer = createStandardSecurityEnforcer<NextRequest, RouteContext, unknown, Awaited<ReturnType<typeof assertFormalizationAccess>>>(actionContract, { authenticate: ({ request }) => assertFormalizationAccess(request, 'accountant.manage').catch(cause => { throw toRouteAccessError(cause, 'ACCOUNTANT'); }), authorize: () => undefined });
+
+export const GET = secureRoute({ contract: readContract, enforcer: readEnforcer }, async ({ request, routeContext: context }) => {
   const { id } = await context.params;
   const snapshot = await hrDbAdmin.collection('onboardingProcesses').doc(id).get();
   if (!snapshot.exists) return NextResponse.json({ error: 'Integração não encontrada.' }, { status: 404 });
@@ -133,22 +144,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   }
   const events = await snapshot.ref.collection('accountantEvents').orderBy('at', 'desc').limit(50).get();
   return NextResponse.json({ workflow, events: events.docs.map((document) => ({ id: document.id, ...document.data() })) });
-}
+});
 
-export const POST = withApiErrorHandling({
-  source: 'api',
-  operation: 'upload-accountant-registry',
-  routeOrJob: '/api/hr/onboarding/[id]/accountant-workflow',
-}, async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
-  const access = await assertFormalizationAccess(request, 'accountant.manage').catch(() => null);
-  if (!access) {
-    throw new AppError({
-      code: 'ACCOUNTANT_REGISTRY_UPLOAD_FORBIDDEN',
-      kind: 'AUTHORIZATION',
-      safeMessage: 'Sem permissão.',
-    });
-  }
-
+export const POST = secureRoute({ contract: actionContract, enforcer: actionEnforcer }, async ({ request, routeContext: context, security: { actor: access } }) => {
   const { id } = await context.params;
   const processRef = hrDbAdmin.collection('onboardingProcesses').doc(id);
   const snapshot = await processRef.get();
@@ -242,13 +240,7 @@ export const POST = withApiErrorHandling({
   return NextResponse.json({ ok: true, completed: true, nextStage: completion.next.id });
 });
 
-export const PATCH = withApiErrorHandling({
-  source: 'api',
-  operation: 'update-accountant-workflow',
-  routeOrJob: '/api/hr/onboarding/[id]/accountant-workflow',
-}, async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
-  const access = await assertFormalizationAccess(request, 'accountant.manage').catch(() => null);
-  if (!access) return NextResponse.json({ error: 'Sem permissão.' }, { status: 403 });
+export const PATCH = secureRoute({ contract: updateContract, enforcer: updateEnforcer }, async ({ request, routeContext: context, security: { actor: access } }) => {
   const { id } = await context.params;
   const processRef = hrDbAdmin.collection('onboardingProcesses').doc(id);
   const snapshot = await processRef.get();
@@ -404,6 +396,7 @@ export const PATCH = withApiErrorHandling({
     const unavailableSelection = selectedDocumentIds.filter((documentId) => !availableDocumentIds.has(documentId));
     if (unavailableSelection.length) return NextResponse.json({ error: 'A seleção contém documento indisponível, sem aprovação ou sem arquivo auditável. Atualize a página e revise os anexos.' }, { status: 409 });
     const candidateDocuments = candidateDocumentsForAccountant(documents, selectedDocumentIds, process.publicFormAnswers);
+    await Promise.all(candidateDocuments.map(document => assertOnboardingAttachmentScope(id, process, document, firebaseClientConfig.storageBucket)));
     const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
     const sourceFiles = [
       { label: 'Formulário de admissão para a contabilidade', storagePath: text(form.storagePath, 1500), mimeType: 'application/pdf' },
