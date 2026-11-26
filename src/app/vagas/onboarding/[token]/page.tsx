@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorMessage } from "@/lib/api-error-message";
 import React, { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Clock3, FileUp, Loader2, Paperclip, Send, X } from "lucide-react";
@@ -363,7 +364,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
     fetch(`/api/hr/onboarding/public/${token}`, { cache: "no-store" })
       .then(async response => {
         const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "Link de onboarding não encontrado.");
+        if (!response.ok) throw new Error(apiErrorMessage(payload, "Link de onboarding não encontrado."));
         return payload;
       })
       .then((payload: PublicOnboarding) => {
@@ -591,7 +592,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
-        throw new Error(payload?.error ?? "Falha ao enviar onboarding.");
+        throw new Error(apiErrorMessage(payload, "Falha ao enviar onboarding."));
       }
       const updated = await response.json();
       setData(updated);

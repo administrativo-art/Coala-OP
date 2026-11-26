@@ -1,3 +1,4 @@
+import { admissionDocumentError } from "./admission-document-error";
 import { createHash } from "node:crypto";
 
 import {
@@ -52,7 +53,7 @@ function hashBuffer(buffer: Buffer) {
 
 function assertPdf(buffer: Buffer, title: string) {
   if (buffer.byteLength < 5 || buffer.subarray(0, 4).toString() !== "%PDF") {
-    throw new Error(`O documento ${title} não possui uma versão PDF válida.`);
+    throw admissionDocumentError(`O documento ${title} não possui uma versão PDF válida.`);
   }
 }
 
@@ -115,7 +116,7 @@ export async function composeDocumentPackage(params: {
   traceabilityMode?: "package" | "standalone";
 }) {
   if (!params.components.length) {
-    throw new Error("A composição não possui documentos.");
+    throw admissionDocumentError("A composição não possui documentos.");
   }
   const mode = params.traceabilityMode
     ?? (params.components.length === 1 && params.packageType !== "admission"
@@ -125,7 +126,7 @@ export async function composeDocumentPackage(params: {
     mode === "package" &&
     params.components.some((component) => component.signatureScope === "standalone")
   ) {
-    throw new Error(
+    throw admissionDocumentError(
       "Documento com aceite independente não pode integrar um pacote de assinatura.",
     );
   }

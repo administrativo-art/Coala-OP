@@ -826,7 +826,8 @@
           "order": "ASCENDING"
         }
       ]
-    }
+    },
+    {"collectionGroup": "uniformTransactions","queryScope": "COLLECTION","fields": [{"fieldPath": "workspaceId","order": "ASCENDING"},{"fieldPath": "collaboratorUserId","order": "ASCENDING"},{"fieldPath": "__name__","order": "ASCENDING"}]}
   ],
   "fieldOverrides": [
     { "collectionGroup": "shifts", "fieldPath": "userId", "indexes": [

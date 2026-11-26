@@ -76,7 +76,7 @@ test("ações individuais são idempotentes, autorizadas e preservam o kit indiv
   assert.match(routeSource, /"resend_participant"/);
   assert.match(routeSource, /"create_signature_link"/);
   assert.match(routeSource, /"replace_participant_email"/);
-  assert.match(routeSource, /\? "signatures\.send"/);
+  assert.match(routeSource, /SEND_ACTIONS\.has\(action\)\) return "signatures\.send"/);
   assert.match(source, /collection\("participantActions"\)\.doc\(params\.actionRequestId\)/);
   assert.match(source, /participantActionLease/);
   assert.match(source, /status: "executing"/);

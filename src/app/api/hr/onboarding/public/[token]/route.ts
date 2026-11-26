@@ -1,3 +1,10 @@
+import { stripUndefined } from "@/features/hr/lib/schemas";
+import { z } from "zod";
+import { submitOpenOnboardingProcess } from "@/lib/hr/onboarding-process-write.server";
+import { secureRoute } from "@/lib/security/secure-route.server";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { defineSecurityEnforcer } from "@/lib/security/enforcer";
+import { AppError } from "@/lib/observability/app-error";
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash, randomBytes } from 'crypto';
 
@@ -61,11 +68,8 @@ const SUBMIT_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const SUBMIT_LIMIT_MAX = 8;
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 
-function jsonError(message: string, status = 400) {
-  return NextResponse.json({ error: message }, {
-    status,
-    headers: { 'Cache-Control': 'private, no-store, max-age=0, must-revalidate' },
-  });
+function jsonError(message: string, status = 400): never {
+  throw new AppError({ code: `PUBLIC_ONBOARDING_${status}`, kind: status === 404 ? 'NOT_FOUND' : status === 403 ? 'AUTHORIZATION' : status >= 500 ? 'UNEXPECTED_APPLICATION' : 'VALIDATION', httpStatus: status, safeMessage: message });
 }
 
 function jsonSuccess(payload: unknown) {
@@ -491,9 +495,9 @@ async function getOnboardingByToken(token: string) {
   const snap = await hrDbAdmin
     .collection('onboardingProcesses')
     .where('publicToken', '==', token)
-    .limit(1)
+    .limit(2)
     .get();
-  if (snap.empty) return null;
+  if (snap.size !== 1) return null;
   return snap.docs[0];
 }
 
@@ -563,23 +567,22 @@ function publicPayload(id: string, data: FirebaseFirestore.DocumentData) {
   };
 }
 
-export async function GET(request: NextRequest, context: { params: Promise<{ token: string }> }) {
-  const { token } = await context.params;
-  const cleanToken = trimText(token, 120);
-  if (!cleanToken) return jsonError('Token ausente.', 400);
-
-  const doc = await getOnboardingByToken(cleanToken);
-  if (!doc) return jsonError('Onboarding não encontrado.', 404);
-
-  const data = doc.data();
-  const closedMessage = onboardingPublicLinkClosedMessage(data);
-  if (closedMessage) return jsonError(closedMessage, 410);
-  if (data.status === 'cancelled' || data.status === 'completed') {
-    return jsonError('Este link de onboarding não está mais disponível.', 404);
-  }
-  if (onboardingPublicLinkExpired(data)) {
-    return jsonError('Este link expirou. Solicite ao RH a prorrogação do prazo.', 410);
-  }
+const readContract = defineSecurityContract({ schemaVersion: 1, id: "hr.onboarding.public.read", version: 1, surface: { method: "GET", path: "/api/hr/onboarding/public/[token]" }, exposure: "public", identity: { kind: "public-token", purpose: "onboarding-form-read" }, authorization: { kind: "custom", strategy: "open-onboarding-public-token" }, resourceScope: { kind: "custom", strategy: "onboarding-token-process" }, input: { kind: "schema", schema: "onboarding-public-read", unknownFields: "reject" }, effects: { mode: "read", audit: "none" }, errorExposure: "sanitized" });
+const readEnforcer = defineSecurityEnforcer<NextRequest, { params: Promise<{ token: string }> }, unknown, undefined, { cleanToken: string }, NonNullable<Awaited<ReturnType<typeof getOnboardingByToken>>>>({
+  id: "onboarding-public-read-v1", guarantees: ["purpose-bound-token", "authorization:open-onboarding-public-token", "scope:onboarding-token-process", "input-validated", "fields-allowlisted"],
+  async enforce({ request, routeContext }) {
+    const cleanToken = trimText((await routeContext.params).token, 120);
+    if (!/^[A-Za-z0-9_-]{1,120}$/.test(cleanToken) || request.nextUrl.searchParams.size) throw new AppError({ code: "ONBOARDING_PUBLIC_READ_INVALID", kind: "VALIDATION" });
+    const doc = await getOnboardingByToken(cleanToken);
+    if (!doc) throw new AppError({ code: "ONBOARDING_PUBLIC_NOT_FOUND", kind: "NOT_FOUND", safeMessage: "Onboarding não encontrado." });
+    const data = doc.data(), closed = onboardingPublicLinkClosedMessage(data);
+    if (data.documentDiscard || ['cancelled', 'completed'].includes(String(data.status))) throw new AppError({ code: "ONBOARDING_PUBLIC_CLOSED", kind: "NOT_FOUND", safeMessage: "Este link de onboarding não está mais disponível." });
+    if (closed || onboardingPublicLinkExpired(data)) throw new AppError({ code: "ONBOARDING_PUBLIC_EXPIRED", kind: "AUTHORIZATION", httpStatus: 410, safeMessage: closed || "Este link expirou. Solicite ao RH a prorrogação do prazo." });
+    return { actor: undefined, input: { cleanToken }, resource: doc };
+  },
+});
+export const GET = secureRoute({ contract: readContract, enforcer: readEnforcer }, async ({ request, security }) => {
+  const { cleanToken } = security.input, doc = security.resource, data = doc.data();
   const accessedAt = new Date().toISOString();
   await doc.ref.collection('audit').add({
     action: 'PUBLIC_LINK_ACCESSED',
@@ -589,32 +592,32 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tok
     at: accessedAt,
   }).catch(error => console.error('[onboarding] Falha ao auditar acesso público.', error));
   return jsonSuccess(publicPayload(doc.id, serializeHrValue(data) as FirebaseFirestore.DocumentData));
-}
+});
 
-export async function POST(request: NextRequest, context: { params: Promise<{ token: string }> }) {
-  const { token } = await context.params;
-  const cleanToken = trimText(token, 120);
-  if (!cleanToken) return jsonError('Token ausente.', 400);
-  if (isRateLimited(getClientKey(request, cleanToken))) {
-    return jsonError('Muitas tentativas. Tente novamente em alguns minutos.', 429);
-  }
-
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body !== 'object') return jsonError('Payload inválido.');
-  if (trimText((body as Record<string, unknown>).website, 200)) return jsonError('Envio não aceito.', 400);
-
-  const doc = await getOnboardingByToken(cleanToken);
-  if (!doc) return jsonError('Onboarding não encontrado.', 404);
-  const data = doc.data();
-  const closedMessage = onboardingPublicLinkClosedMessage(data);
-  if (closedMessage) return jsonError(closedMessage, 410);
-  if (data.status === 'cancelled' || data.status === 'completed') {
-    return jsonError('Este onboarding não está aceitando documentos.', 403);
-  }
-  if (onboardingPublicLinkExpired(data)) {
-    return jsonError('Este link expirou. Solicite ao RH a prorrogação do prazo.', 410);
-  }
-
+const submissionSchema = z.object({ website: z.string().max(200).optional(), answers: z.record(z.string(), z.unknown()).optional(), documents: z.record(z.string(), z.unknown()).optional(), imageVoiceConsent: z.unknown().optional(), privacyAcceptance: z.unknown().optional(), sessionId: z.unknown().optional() }).strip();
+const submissionContract = defineSecurityContract({ schemaVersion: 1, id: "hr.onboarding.public.submit", version: 1, surface: { method: "POST", path: "/api/hr/onboarding/public/[token]" }, exposure: "public", identity: { kind: "public-token", purpose: "onboarding-form-submission" }, authorization: { kind: "custom", strategy: "open-onboarding-public-token" }, resourceScope: { kind: "custom", strategy: "onboarding-token-process" }, input: { kind: "schema", schema: "onboarding-public-submission", unknownFields: "strip" }, effects: { mode: "write", audit: "server-authoritative" }, errorExposure: "sanitized" });
+const submissionEnforcer = defineSecurityEnforcer<NextRequest, { params: Promise<{ token: string }> }, unknown, { tokenHash: string }, { token: string; body: z.infer<typeof submissionSchema> }, NonNullable<Awaited<ReturnType<typeof getOnboardingByToken>>>>({
+  id: "onboarding-public-submission-v1", guarantees: ["purpose-bound-token", "authorization:open-onboarding-public-token", "scope:onboarding-token-process", "input-validated", "fields-allowlisted", "server-authoritative-audit"],
+  async enforce({ request, routeContext }) {
+    const cleanToken = trimText((await routeContext.params).token, 120);
+    if (!/^[A-Za-z0-9_-]{1,120}$/.test(cleanToken) || request.nextUrl.searchParams.size) throw new AppError({ code: "ONBOARDING_PUBLIC_TOKEN_INVALID", kind: "VALIDATION" });
+    if (isRateLimited(getClientKey(request, cleanToken))) throw new AppError({ code: "ONBOARDING_PUBLIC_RATE_LIMIT", kind: "AUTHORIZATION", httpStatus: 429, safeMessage: "Muitas tentativas. Tente novamente em alguns minutos." });
+    const raw = await request.json().catch(() => null);
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) jsonError("Payload inválido.");
+    if (trimText(raw.website, 200)) jsonError("Envio não aceito.");
+    const parsed = submissionSchema.safeParse(raw);
+    if (!parsed.success || JSON.stringify(parsed.data.answers ?? {}).length > 12_000 || JSON.stringify(parsed.data.documents ?? {}).length > 20_000) throw new AppError({ code: "ONBOARDING_PUBLIC_INPUT_INVALID", kind: "VALIDATION", safeMessage: "Informações do formulário inválidas." });
+    const doc = await getOnboardingByToken(cleanToken);
+    if (!doc) throw new AppError({ code: "ONBOARDING_PUBLIC_NOT_FOUND", kind: "NOT_FOUND", safeMessage: "Onboarding não encontrado." });
+    const data = doc.data();
+    if (data.documentDiscard || ['cancelled', 'completed'].includes(String(data.status))) throw new AppError({ code: "ONBOARDING_PUBLIC_CLOSED", kind: "AUTHORIZATION", safeMessage: "O processo não aceita mais documentos." });
+    const closed = onboardingPublicLinkClosedMessage(data);
+    if (closed || onboardingPublicLinkExpired(data)) throw new AppError({ code: "ONBOARDING_PUBLIC_EXPIRED", kind: "AUTHORIZATION", httpStatus: 410, safeMessage: closed || "Este link expirou. Solicite ao RH a prorrogação do prazo." });
+    return { actor: { tokenHash: createHash("sha256").update(cleanToken).digest("hex") }, input: { token: cleanToken, body: parsed.data }, resource: doc };
+  },
+});
+export const POST = secureRoute({ contract: submissionContract, enforcer: submissionEnforcer }, async ({ security, request }) => {
+  const { token: cleanToken, body } = security.input, doc = security.resource, data = doc.data();
   const now = new Date().toISOString();
   const input = body as Record<string, unknown>;
   const rawAnswers = input.answers && typeof input.answers === 'object' && !Array.isArray(input.answers)
@@ -709,7 +712,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
         provider_registration: { ...workflow.steps.provider_registration, status: 'active' },
       },
     }, 'registration_review', now, 'provider');
-    await doc.ref.set({
+    await submitOpenOnboardingProcess(doc.ref, {
       documents: nextDocuments,
       publicFormAnswers,
       publicFormSubmittedAt: data.publicFormSubmittedAt ?? now,
@@ -723,7 +726,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
         : now,
       status: 'reviewing_documents',
       updatedAt: now,
-    }, { merge: true });
+    }, cleanToken);
     await doc.ref.collection('audit').add({
       action: 'PJ_PROVIDER_REGISTRATION_SUBMITTED',
       protocol,
@@ -859,7 +862,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
       sourceFileHashSha256,
       extraction,
     });
-    return {
+    return stripUndefined({
       ...document,
       ...extracted,
       fileUrl,
@@ -869,7 +872,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
       receivedAt: now,
       approvedAt: null,
       updatedAt: now,
-    };
+    });
   });
   const allRequiredDocumentsSubmitted = requiredDocumentsSubmitted(
     applicableOnboardingDocuments(nextDocuments, publicFormAnswers),
@@ -963,7 +966,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     ...(guideBecameOutdated ? { latestGuideRequiresRegeneration: true } : {}),
   };
 
-  await doc.ref.set({
+  await submitOpenOnboardingProcess(doc.ref, {
     documents: nextDocuments,
     candidateName: publicFormAnswers.fullName,
     publicFormAnswers,
@@ -996,7 +999,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
         ? 'collecting_documents'
         : data.status,
     updatedAt: now,
-  }, { merge: true });
+  }, cleanToken);
 
   await doc.ref.collection('consentimentos_imagem_voz_historico').doc(protocol).set({
     ...imageVoiceConsent,
@@ -1094,4 +1097,4 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
 
   const saved = await doc.ref.get();
   return jsonSuccess(publicPayload(saved.id, serializeHrValue(saved.data()) as FirebaseFirestore.DocumentData));
-}
+});

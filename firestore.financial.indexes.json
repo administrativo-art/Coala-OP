@@ -1,5 +1,9 @@
 {
   "indexes": [
+    { "collectionGroup": "events", "queryScope": "COLLECTION_GROUP", "fields": [
+      { "fieldPath": "actorId", "order": "ASCENDING" },
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }
+    ] },
     {"collectionGroup":"financialBudgetProjects","queryScope":"COLLECTION","fields":[{"fieldPath":"active","order":"ASCENDING"},{"fieldPath":"cashPlanningEnabled","order":"ASCENDING"},{"fieldPath":"cashPlanStartDate","order":"ASCENDING"}]},
     {"collectionGroup":"items","queryScope":"COLLECTION_GROUP","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"closureId","order":"ASCENDING"}]},
     {"collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [{"fieldPath": "workspaceId", "order": "ASCENDING"}, {"fieldPath": "employeeId", "order": "ASCENDING"}, {"fieldPath": "provisionCompetence", "order": "ASCENDING"}, {"fieldPath": "payrollEarningType", "order": "ASCENDING"}]},
@@ -55,6 +59,13 @@
     { "collectionGroup": "bankPaymentRequests", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "sourceType", "order": "ASCENDING" },
       { "fieldPath": "sourceId", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "bankPaymentRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" },
+      { "fieldPath": "beneficiaryReference.sourceId", "order": "ASCENDING" },
+      { "fieldPath": "beneficiaryReference.sourceType", "order": "ASCENDING" },
+      { "fieldPath": "sourceType", "order": "ASCENDING" },
+      { "fieldPath": "__name__", "order": "ASCENDING" }
     ] },
     { "collectionGroup": "financialInboxMessages", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "rawSha256", "order": "ASCENDING" }
