@@ -363,6 +363,10 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     const pendingStatement = await readBankStatement(titular, { date: '2026-08-20' }, bankDeps);
     assert.deepEqual([pendingStatement.statement.missing, pendingStatement.closures], [['2026-08'], { '2026-08': 2 }]);
     const bankMonth = await generateBankMonth(titular, { action: 'generate', competence, expectedVersion: 2 }, bankDeps);
+    // Frozen v3 results stay readable after the rollout, without reopening/reprocessing.
+    const historicalBankRef = hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_${competence}`).collection('versions').doc('2').collection('timeBank').doc(userId);
+    await historicalBankRef.update({ algorithmVersion: 'time-bank-v3' });
+    const historicalBankSource = (await historicalBankRef.get()).data();
     assert.deepEqual(bankMonth.days.filter((item) => item.lines.length).map((item) => [item.date, item.lines.map((line) => `${line.nature}:${line.minutes}:${line.reason}`)]),
       [['2026-08-12', ['bank_debit:200:worked_less']], ['2026-08-13', ['review:440:missing_day']]]);
     // Dia sem batida e sem ausência fica a tratar pelo DP: não entra no saldo. A ausência de 01 e 02/08, sem efeito no tipo, também vai para revisão.
@@ -415,6 +419,7 @@ test('fechamento da competência: pendência bloqueia, declaração congela, mê
     assert.match(Buffer.from(inclusionOnly.aejBase64, 'base64').toString('latin1'), /03\|1\|52998224725\|Maria Fiscal/);
     await assert.rejects(exportAej(admin, input, { ...aejDeps, readArp: onlyInclusion, readIdentity: async () => { throw new Error('x'); } }), { code: 'PTRP_AEJ_IDENTITY_UNRESOLVED' });
     const aej = await exportAej(admin, input, aejDeps);
+    assert.deepEqual((await historicalBankRef.get()).data(), historicalBankSource, 'statement, movements and AEJ never rewrite the frozen v3 source');
     const lines = Buffer.from(aej.aejBase64, 'base64').toString('latin1').split('\r\n');
     assert.deepEqual(lines.filter((line) => line.startsWith('05|')), [
       '05|1|2026-08-12T08:00:00-0300||E|001|I|HC001|Esqueci de bater a entrada.',
@@ -600,4 +605,71 @@ test('devolução exige titular, revisão, versão e conclusão antes de fechar'
   } finally {
     await Promise.all([userRef.delete(), closure.delete(), ...(id ? [hrDbAdmin.collection('ptrp_dayCorrections').doc(id).delete()] : [])]);
   }
+});
+
+// The new display warning must not turn a legacy-valid day into a payroll dead end.
+test('inactive rules preserve regular and extended coverage break treatment through closure and payroll without rewriting punches', async (t) => {
+  const saved = [process.env.DP_TIME_POLICY_RULES_ENABLED, process.env.DP_TIME_REVIEW_ENABLED];
+  delete process.env.DP_TIME_POLICY_RULES_ENABLED; delete process.env.DP_TIME_REVIEW_ENABLED;
+  t.after(() => { ['DP_TIME_POLICY_RULES_ENABLED', 'DP_TIME_REVIEW_ENABLED'].forEach((key, i) => {
+    if (saved[i] === undefined) delete process.env[key]; else process.env[key] = saved[i];
+  }); });
+  const { readPersonAlertSources } = await import('../../src/features/dp/time-adjustments/closure-alert-check.server.ts');
+  const { buildMonthView } = await import('../../src/features/dp/rep-p/day-model.ts');
+  const prefix = `break-rollout-${randomUUID().slice(0, 8)}`, workspaceId = `${prefix}-ws`, unitId = `${prefix}-unit`;
+  const competence = '2026-08', workDate = `${competence}-12`, journeyId = `${prefix}-journey`, definitionId = `${prefix}-shift`;
+  const people = [59, 50, 15].map(minutes => ({ uid: `${prefix}-${minutes}`, name: `Synthetic ${minutes}`, minutes, coverage: minutes === 15 }));
+  const admin = { decoded: { uid: `${prefix}-admin` }, workspace_id: workspaceId, isDefaultAdmin: true,
+    userDoc: { unitIds: [unitId] }, permissions: structuredClone(defaultAdminPermissions) };
+  const clock = { async read() { return { instant: new Date('2026-10-17T12:00:00Z') }; } };
+  const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, clock, readRoster: async () => people };
+  const bankDeps = { ...deps, now: () => new Date('2026-10-17T12:00:00Z') };
+  const schedule = dbAdmin.collection('dp_schedules').doc(prefix), receiptRefs = [];
+  await Promise.all([
+    dbAdmin.collection('dp_units').doc(unitId).set({ name: 'Synthetic unit', address: 'Synthetic street', cnpj: '14276603000125', timeZone: 'America/Fortaleza' }),
+    dbAdmin.collection('dp_journeys').doc(journeyId).set({ lineageId: journeyId, version: 1, status: 'published', validFrom: '2026-01-01', cycleLengthDays: 7,
+      days: [1, 2, 3, 4, 5, 6, 7].map(dayIndex => ({ dayIndex, plannedMinutes: 480, isRestDay: false })), toleranceMinutes: 5 }),
+    dbAdmin.collection('dp_shiftDefinitions').doc(definitionId).set({ name: 'Synthetic regular shift', breakType: 'fixed', breakStart: '12:00', breakEnd: '13:00', expectedPunches: 4 }),
+    dbAdmin.collection('dp_shiftDefinitions').doc(`${definitionId}-coverage`).set({ name: 'Synthetic coverage shift', breakType: 'fixed', breakStart: '12:00', breakEnd: '12:15', expectedPunches: 4 }),
+    dbAdmin.collection('dp_overtimePolicies').doc(prefix).set({ lineageId: prefix, version: 1, status: 'published', name: 'Synthetic legacy policy',
+      applicability: { scope: { kind: 'company' }, collaboratorIds: people.map(person => person.uid) }, validFrom: '2026-01-01', externalCoverageRule: 'origin',
+      categories: [{ id: 'bank', name: 'Bank', trigger: 'workday', ratePercent: 50, destination: 'time_bank', bankCreditFactor: 1, requiresApproval: false }],
+      timeBank: { enabled: true, allowNegativeBalance: true, expiredBalanceDestination: 'review' } }),
+    schedule.set({ year: 2026, month: 8, unitId, locked: true, createdAt: new Date('2026-07-20T00:00:00Z') }),
+  ]);
+  for (const person of people) {
+    await dbAdmin.collection('users').doc(person.uid).set({ isActive: true, unitId, unitIds: [unitId] });
+    await publishEmploymentReference(admin, { userId: person.uid, expectedRevision: 0, requestId: person.uid, periods: [{ validFrom: '2026-01-01',
+      employmentRelationshipType: 'clt', employerUnitId: unitId, unitId, unitIds: [unitId], jobFunctionIds: [], sourceDocumentId: 'synthetic', sourceReason: 'Synthetic admission verified' }] });
+    await schedule.collection('shifts').doc(person.uid).set({ scheduleId: schedule.id, date: workDate, unitId, userId: person.uid, type: 'work', startTime: '08:00', endTime: person.coverage ? '14:15' : '17:00',
+      shiftDefinitionId: person.coverage ? `${definitionId}-coverage` : definitionId, journeyResolution: { journeyId, lineageId: journeyId, version: 1,
+        ...(person.coverage ? { coverage: { applies: true, matchedBy: 'job_role', journeyId, journeyVersion: 1 } } : {}) } });
+    for (const [index, time] of ['08:00', '12:00', `12:${person.minutes}`, person.coverage ? '15:15' : '17:00'].entries()) {
+      const ref = hrDbAdmin.collection('repP_receipts').doc(`${person.uid}-${index}`); receiptRefs.push(ref);
+      await ref.set({ workspaceId, employeeId: person.uid, recordedDate: workDate, status: 'issued',
+        snapshot: { nsr: index + 1, markedAt: `${workDate}T${time}:00-0300`, executionUnitId: unitId },
+        classification: { purpose: ['journey_start', 'break_start', 'break_end', 'journey_end'][index], status: 'confirmed', source: 'declared' } });
+    }
+    const sources = await readPersonAlertSources(deps, workspaceId, competence, person.uid);
+    const day = buildMonthView({ month: competence, today: '9999-12-31', shifts: sources.schedule.shifts, markings: sources.markings, absences: [] }).find(day => day.date === workDate);
+    assert.equal(day.breakMinutes, person.minutes); assert.ok(day.incidents.includes('short_break'), 'strict visual warning remains visible');
+    if (person.coverage) { assert.equal(day.shift.coverage, true); assert.equal(day.workedMinutes, 420); assert.equal(day.expectedBreakMinutes, 60); }
+  }
+  const originals = await Promise.all(receiptRefs.map(async ref => (await ref.get()).data()));
+  const preview = await previewClosureAlerts(admin, competence, deps);
+  assert.deepEqual(new Set(preview.alerts.map(alert => alert.employeeUid)), new Set([people[1].uid, people[2].uid]), 'the legacy-critical day and extended coverage remain blocking');
+  await assert.rejects(closeCompetence(admin, { competence, expectedVersion: 0 }, deps), { code: 'PTRP_CLOSURE_CRITICAL_ALERT' });
+  for (const alert of preview.alerts) await justifyClosureAlert(admin, { action: 'justifyAlert', competence, expectedVersion: 0,
+    employeeUid: alert.employeeUid, fingerprint: alert.fingerprint, reason: 'Synthetic DP reviewed the true short interval; punches preserved.' }, deps);
+  await closeCompetence(admin, { competence, expectedVersion: 0 }, deps);
+  const team = hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_${competence}`).collection('versions').doc('1').collection('people');
+  assert.deepEqual((await team.doc(people[0].uid).get()).get('breakReviewDates') ?? [], []);
+  assert.deepEqual((await team.doc(people[1].uid).get()).get('breakReviewDates'), [workDate]);
+  assert.deepEqual((await team.doc(people[2].uid).get()).get('breakReviewDates'), [workDate]);
+  for (const person of people) await generateBankMonth(admin, { action: 'generate', competence, expectedVersion: 1, employeeUid: person.uid }, bankDeps);
+  const readiness = await readPayrollReadiness(admin, competence, bankDeps);
+  assert.equal(readiness.people.find(person => person.uid === people[0].uid)?.status, 'ready', JSON.stringify(readiness));
+  assert.equal(readiness.people.find(person => person.uid === people[1].uid)?.status, 'review');
+  assert.equal(readiness.people.find(person => person.uid === people[2].uid)?.status, 'review');
+  assert.deepEqual(await Promise.all(receiptRefs.map(async ref => (await ref.get()).data())), originals, 'closure and payroll keep all recorded punches intact');
 });

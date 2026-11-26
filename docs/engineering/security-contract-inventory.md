@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **593**
-- Totalmente contratados: **284**
+- Arquivos de rota: **597**
+- Totalmente contratados: **288**
 - Legados congelados: **309**
 - Exceções temporárias: **0**
 - Violações: **0**
@@ -167,6 +167,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/dp/time-recording/closures/[competence]` | PATCH ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/closures/[competence]/route.ts](../../src/app/api/dp/time-recording/closures/[competence]/route.ts) |
 | `/api/dp/time-recording/day-corrections` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/day-corrections/route.ts](../../src/app/api/dp/time-recording/day-corrections/route.ts) |
 | `/api/dp/time-recording/employees/[employeeUid]` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/employees/[employeeUid]/route.ts](../../src/app/api/dp/time-recording/employees/[employeeUid]/route.ts) |
+| `/api/dp/time-recording/employees/[employeeUid]/review-requests` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/employees/[employeeUid]/review-requests/route.ts](../../src/app/api/dp/time-recording/employees/[employeeUid]/review-requests/route.ts) |
 | `/api/dp/time-recording/fiscal-options` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/fiscal-options/route.ts](../../src/app/api/dp/time-recording/fiscal-options/route.ts) |
 | `/api/dp/time-recording/journey-location` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/journey-location/route.ts](../../src/app/api/dp/time-recording/journey-location/route.ts) |
 | `/api/dp/time-recording/journey-location/lease` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/journey-location/lease/route.ts](../../src/app/api/dp/time-recording/journey-location/lease/route.ts) |
@@ -177,6 +178,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/dp/time-recording/mirrors` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/mirrors/route.ts](../../src/app/api/dp/time-recording/mirrors/route.ts) |
 | `/api/dp/time-recording/mirrors/pdf` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/mirrors/pdf/route.ts](../../src/app/api/dp/time-recording/mirrors/pdf/route.ts) |
 | `/api/dp/time-recording/month` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/month/route.ts](../../src/app/api/dp/time-recording/month/route.ts) |
+| `/api/dp/time-recording/month-view` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/month-view/route.ts](../../src/app/api/dp/time-recording/month-view/route.ts) |
 | `/api/dp/time-recording/offline-cycles` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/offline-cycles/route.ts](../../src/app/api/dp/time-recording/offline-cycles/route.ts) |
 | `/api/dp/time-recording/offline-permits` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/offline-permits/route.ts](../../src/app/api/dp/time-recording/offline-permits/route.ts) |
 | `/api/dp/time-recording/options` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/options/route.ts](../../src/app/api/dp/time-recording/options/route.ts) |
@@ -185,6 +187,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/dp/time-recording/pending-receipts` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/pending-receipts/route.ts](../../src/app/api/dp/time-recording/pending-receipts/route.ts) |
 | `/api/dp/time-recording/receipts/[receiptId]` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/receipts/[receiptId]/route.ts](../../src/app/api/dp/time-recording/receipts/[receiptId]/route.ts) |
 | `/api/dp/time-recording/receipts/export` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/receipts/export/route.ts](../../src/app/api/dp/time-recording/receipts/export/route.ts) |
+| `/api/dp/time-recording/review-requests/[requestId]` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/review-requests/[requestId]/route.ts](../../src/app/api/dp/time-recording/review-requests/[requestId]/route.ts) |
 | `/api/dp/time-recording/signer-status` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/signer-status/route.ts](../../src/app/api/dp/time-recording/signer-status/route.ts) |
 | `/api/dp/time-recording/time-bank` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/time-bank/route.ts](../../src/app/api/dp/time-recording/time-bank/route.ts) |
 | `/api/dp/time/absence-types` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time/absence-types/route.ts](../../src/app/api/dp/time/absence-types/route.ts) |
@@ -474,6 +477,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/jobs/dp/absences/tacit-approval` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/dp/absences/tacit-approval/route.ts](../../src/app/api/jobs/dp/absences/tacit-approval/route.ts) |
 | `/api/jobs/dp/time-closing/overdue` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/dp/time-closing/overdue/route.ts](../../src/app/api/jobs/dp/time-closing/overdue/route.ts) |
 | `/api/jobs/dp/time-recording/automatic-absences` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/dp/time-recording/automatic-absences/route.ts](../../src/app/api/jobs/dp/time-recording/automatic-absences/route.ts) |
+| `/api/jobs/dp/time-recording/review-requests` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/dp/time-recording/review-requests/route.ts](../../src/app/api/jobs/dp/time-recording/review-requests/route.ts) |
 | `/api/jobs/financial-budgets/generate` | POST | `LEGACY_BASELINE` | [src/app/api/jobs/financial-budgets/generate/route.ts](../../src/app/api/jobs/financial-budgets/generate/route.ts) |
 | `/api/jobs/financial-inbox/maintenance` | POST | `LEGACY_BASELINE` | [src/app/api/jobs/financial-inbox/maintenance/route.ts](../../src/app/api/jobs/financial-inbox/maintenance/route.ts) |
 | `/api/jobs/hr/onboarding-document-discard` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/hr/onboarding-document-discard/route.ts](../../src/app/api/jobs/hr/onboarding-document-discard/route.ts) |

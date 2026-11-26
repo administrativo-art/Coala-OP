@@ -3856,6 +3856,8 @@ export type DPJourneyScaleValidation =
   | { mode: 'consecutive_days' }
   | { mode: 'manual_review' };
 
+export type DPCoveragePolicy = { jobRoleIds: string[]; jobFunctionIds: string[] };
+
 export type DPJourney = {
   id: string;
   lineageId: string;
@@ -3878,9 +3880,15 @@ export type DPJourney = {
   useDefinedShiftWhenShorter?: boolean;
   /**
    * Tolerância única da jornada, em minutos (art. 58 §1º da CLT: até 10 por dia): diferença do dia dentro dela não vira
-   * débito nem crédito, e é a mesma margem dos avisos de intervalo. Ausente em jornadas anteriores = sem tolerância.
+   * débito nem crédito. Vale só no início e no fim da jornada, nunca no intervalo (25/11/2026). Ausente = sem tolerância.
    */
   toleranceMinutes?: number;
+  /**
+   * Política de jornada de cobertura: para quem tem um destes cargos ou funções, um turno menor que a carga marca o
+   * início e a cobertura mínima, e a pessoa pode estender até completar a carga. Só vale com
+   * `useDefinedShiftWhenShorter` ligado. Ausente ou vazia = ninguém.
+   */
+  coveragePolicy?: DPCoveragePolicy;
   allowedShiftDefinitionIds?: string[];
   applicability: DPTimeApplicability;
   validFrom: string;
@@ -3916,7 +3924,27 @@ export type DPTimeBankCycle = {
   residualDestination: 'carry' | 'payroll' | 'review' | 'forfeit';
 };
 
+/** De onde veio uma regra da política: lei, convenção coletiva, acordo individual ou regra interna. */
+export type DPPolicyRuleSource = { origin: 'law' | 'cct' | 'individual_agreement' | 'internal'; reference?: string };
+
+export type DPPolicyTolerances = {
+  /** Entrada e saída: limite por marcação (CLT art. 58 §1º). */
+  markingMinutes: number;
+  /** Entrada e saída: limite somado no dia (CLT art. 58 §1º). */
+  dailyMinutes: number;
+  /** Intervalo: tolerância TOTAL (saída + volta) para intervalos de 15, 30 e 60 minutos. */
+  breakMinutes: { upTo15: number; upTo30: number; upTo60: number };
+  source: DPPolicyRuleSource;
+};
+
+/** Intervalo intrajornada suprimido (art. 71 §4º): paga todo o tempo suprimido, com natureza indenizatória. */
+export type DPPolicyIntrajornada = { code: string; ratePercent: number; source: DPPolicyRuleSource };
+
 export type DPOvertimePolicy = {
+  /** Presente = a política manda nas tolerâncias do dia; ausente = vale a tolerância da jornada. */
+  tolerances?: DPPolicyTolerances;
+  /** Presente (com `tolerances`) = o intervalo suprimido é apurado. */
+  intrajornada?: DPPolicyIntrajornada;
   id: string;
   lineageId: string;
   version: number;

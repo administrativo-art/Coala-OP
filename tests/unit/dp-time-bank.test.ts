@@ -253,3 +253,30 @@ describe('Banco de horas: ciclo e extrato', () => {
     assert.deepEqual([withCarry.openingMinutes, withCarry.balanceMinutes], [90, 10]);
   });
 });
+
+describe('Banco na Política de jornada de cobertura (25/11/2026)', () => {
+  // Líder: turno 09:00–15:15 (6h líquidas), carga 8h, tolerância 5. Pode estender até 18:00 (início + 8h + 1h).
+  const coverage: BankShift = { type: 'work', startTime: '09:00', endTime: '15:15', overnight: false, plannedMinutes: 360,
+    referenceMinutes: 480, toleranceMinutes: 5, journeyId: 'j40', coverage: true };
+  const at8 = (shiftValue: BankShift, ...times: string[]) => computeBankDay(day({ date: '2026-12-01', shift: shiftValue,
+    markings: punches('2026-12-01', ...times) }));
+
+  it('cumpriu só o turno de 6h: −2h no banco, como as demais', () => {
+    assert.equal(at8(coverage, '09:00', '12:00', '12:15', '15:15').deltaMinutes, -120);
+  });
+
+  it('completou a carga e saiu 3 min depois do limite: dentro da tolerância, sem extra', () => {
+    const result = at8(coverage, '09:00', '12:00', '13:00', '18:03');
+    assert.equal(result.deltaMinutes, 0);
+    assert.equal(result.toleranceApplied, true);
+  });
+
+  it('saiu 6 min depois do limite: conta inteiro', () => {
+    assert.equal(at8(coverage, '09:00', '12:00', '13:00', '18:06').deltaMinutes, 6);
+  });
+
+  it('fora da política, o mesmo horário compara a saída com o fim do turno (sem tolerância)', () => {
+    const attendant = { ...coverage, coverage: undefined };
+    assert.equal(at8(attendant, '09:00', '12:00', '13:00', '18:03').deltaMinutes, 3);
+  });
+});

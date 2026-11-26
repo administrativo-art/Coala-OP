@@ -4,7 +4,7 @@ import test from 'node:test';
 import type { Firestore } from 'firebase-admin/firestore';
 import type { ServerUserContext } from '../../src/lib/auth-server';
 import { defaultAdminPermissions } from '../../src/types';
-import { buildStatement, monthTotals, type BankDay, type BankManualMovement } from '../../src/features/dp/time-bank/core';
+import { buildStatement, monthTotals, TIME_BANK_ALGORITHM_VERSION, type BankDay, type BankManualMovement } from '../../src/features/dp/time-bank/core';
 import type { BankMonthDocument } from '../../src/features/dp/time-bank/service.server';
 import { mirrorSnapshotHash, MIRROR_RENDERER_VERSION, type MirrorSnapshot } from '../../src/features/dp/time-adjustments/mirror-core';
 import { sha256 } from '../../src/features/dp/time-adjustments/closure-core';
@@ -16,6 +16,8 @@ import type { ClosureReleaseDependencies } from '../../src/features/service-port
 import type { PortalPrincipal } from '../../src/features/service-portal/types';
 
 type Row = Record<string, unknown>;
+// These tests inject in-memory databases. A missing port must never use real ADC.
+process.env.GOOGLE_APPLICATION_CREDENTIALS = '/dev/null';
 class MemoryDatabase {
   rows = new Map<string, Row>();
   private queue = Promise.resolve();
@@ -84,7 +86,7 @@ function fixture() {
     deltaMinutes: index === 0 ? 60 : null, toleranceApplied: false, abonoMinutes: 0, nightMinutes: 0, absences: [], unjustifiedAbsence: false,
     policy: { id: 'policy', version: 1 }, issues: [], lines: index === 0 ? [{ nature: 'payroll_overtime', minutes: 60, reason: 'worked_more', ratePercent: 50 }] : [] }));
   days[1].absences = [{ id: 'private-absence-id', effect: 'excused_absence' }];
-  const month: BankMonthDocument = { schemaVersion: 1, algorithmVersion: 'time-bank-v3', uid, competence, closureVersion: 1,
+  const month: BankMonthDocument = { schemaVersion: 1, algorithmVersion: TIME_BANK_ALGORITHM_VERSION, uid, competence, closureVersion: 1,
     days, totals: monthTotals(days), inputHash: 'b'.repeat(64), generatedAt: '2026-03-03T12:00:00Z', createdBy: 'internal-actor', policies: [{ id: 'policy', version: 1 }] };
   const mirror: MirrorSnapshot = { schemaVersion: 1, title: 'Espelho de ponto', workspaceId: 'coala', competence, closureVersion: 1, manifestHash,
     employee: { uid, name: 'Ana', cpf: '12345678901' }, employer: { legalName: 'Empresa A', cnpj }, generatedAt: '2026-03-03T12:00:00Z', clockSource: 'server',
@@ -365,4 +367,19 @@ test('unrelated legacy calculations from the previous month do not block a month
   f.hr.rows.set(previous + '/versions/1/timeBank/' + uid, { ...f.month, competence: '2026-01', algorithmVersion: 'legacy-bank' });
   const preview = await previewClosureRelease(f.context, f.selection, f.deps);
   assert.equal(preview.content.payroll.payrollOvertimeMinutes, 60);
+});
+
+test('closed v3 calculation reaches accounting without reprocessing or changing its source', async () => {
+  const f = fixture();
+  const path = f.frozen + '/timeBank/' + uid;
+  const saved = { ...f.hr.rows.get(path)!, algorithmVersion: 'time-bank-v3' };
+  f.hr.rows.set(path, saved);
+  const before = structuredClone(saved);
+  const preview = await previewClosureRelease(f.context, f.selection, f.deps);
+  assert.equal(preview.content.payroll.payrollOvertimeMinutes, 60);
+  const result = await f.release();
+  const released = await readReleasedClosure(f.principal, f.grantId, result.releaseId, f.deps);
+  assert.ok(released);
+  assert.deepEqual(f.hr.rows.get(path), before);
+  assert.equal(f.hr.rows.get(f.closurePath)?.version, 1);
 });

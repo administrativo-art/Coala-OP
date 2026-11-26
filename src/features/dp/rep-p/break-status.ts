@@ -3,7 +3,7 @@
  * escalado de hoje e pelas classificações declaradas pelo colaborador. A sugestão nunca reclassifica uma batida,
  * nunca bloqueia o registro (art. 74) e não é apuração.
  */
-import { fiscalClock, minutesOf, plannedBreakMinutesOf, toleranceOf, type DayMarking, type DayShift } from "./day-model";
+import { COVERAGE_LONG_DAY_BREAK_MINUTES, coverageOf, fiscalClock, minutesOf, plannedBreakMinutesOf, type DayMarking, type DayShift } from "./day-model";
 
 // Antecedência dos avisos: provisória até decisão do programador.
 export const BREAK_INFO_AHEAD_MINUTES = 15;
@@ -45,7 +45,24 @@ export function plannedPausesOf(shift: DayShift) {
   return 1;
 }
 
+/**
+ * Política de jornada de cobertura: quem vai estender além de 6h precisa de 1h de intervalo (numa pausa só, se o
+ * turno não permite fracionar). O aviso orienta antes e durante a pausa; nunca bloqueia a batida.
+ */
 export function breakStatus(shift: DayShift | null, markings: Pick<DayMarking, "markedAt" | "classification">[], now: number): BreakStatus | null {
+  const status = turnBreakStatus(shift, markings, now);
+  if (!status || !shift || !coverageDay(shift) || status.level === "danger" || status.usedMinutes >= COVERAGE_LONG_DAY_BREAK_MINUTES) return status;
+  const split = shift.breakSplit === "multiple" ? "" : " numa pausa só";
+  const note = `Vai estender além de 6h? Faça ${COVERAGE_LONG_DAY_BREAK_MINUTES / 60}h de intervalo${split}.`;
+  return { ...status, detail: status.detail ? `${status.detail} ${note}` : note };
+}
+
+/** Mesma condição da tela do dia (`coverageOf`): turno comum, não noturno, não manual e com carga maior que o turno. */
+function coverageDay(shift: DayShift | null) {
+  return Boolean(shift && coverageOf(shift, shift.manualOrder != null ? [shift] : []));
+}
+
+function turnBreakStatus(shift: DayShift | null, markings: Pick<DayMarking, "markedAt" | "classification">[], now: number): BreakStatus | null {
   if (!shift || shift.type !== "work" || shift.breakType === "none" || !shift.endTime) return null;
   if (!markings.length) return null;
   const total = plannedBreakMinutesOf(shift);
@@ -78,13 +95,14 @@ export function breakStatus(shift: DayShift | null, markings: Pick<DayMarking, "
   const base = { usedMinutes: used, totalMinutes: total, pausesDone: closed.length, plannedPauses: planned, inPause };
   const progress = planned === 1 ? null
     : `Usados ${used} de ${total} min · ${closed.length}${planned ? ` de ${planned}` : ""} ${closed.length === 1 && !planned ? "pausa" : "pausas"}`;
-  const above = toleranceOf(shift);
+  // Sem tolerância no intervalo (decisão de 25/11/2026). Na cobertura, até 1h é permitido para quem vai estender.
+  const breakLimit = coverageDay(shift) ? Math.max(total, COVERAGE_LONG_DAY_BREAK_MINUTES) : total;
   const journeyEnded = classified.at(-1)?.classification?.purpose === "journey_end";
   if (journeyEnded && used < total) {
     return { ...base, level: "danger", headline: "Jornada finalizada sem o intervalo completo", detail: `Foram classificados ${used} de ${total} min de intervalo. A batida continua válida e o dia segue para conferência.` };
   }
-  if (used > total + above) {
-    return { ...base, level: "danger", headline: `Intervalo passou de ${total} min (${used} min)`, detail: above ? `Tolerância de ${above} min da jornada excedida.` : "A jornada não tem tolerância." };
+  if (used > breakLimit) {
+    return { ...base, level: "danger", headline: `Intervalo passou de ${breakLimit} min (${used} min)`, detail: "O intervalo não tem tolerância." };
   }
 
   // Fixo (único ou intercalado): proximidade do início e do fim de cada horário.
@@ -100,7 +118,15 @@ export function breakStatus(shift: DayShift | null, markings: Pick<DayMarking, "
     const label = segments.length > 1 ? `${index + 1}ª pausa ` : "Intervalo ";
     if (inPause) {
       const back = end - now;
-      return { ...base, level: back < -above ? "danger" : back <= 2 ? "warn" : "info",
+      // Cobertura: passar do horário do turno é esperado para quem vai estender; o limite é 1h de pausa.
+      const coverageBack = coverageDay(shift) && pauseStart !== null ? pauseStart + COVERAGE_LONG_DAY_BREAK_MINUTES - now : null;
+      if (coverageBack !== null && back < 0) {
+        return { ...base, level: coverageBack < 0 ? "danger" : coverageBack <= 2 ? "warn" : "info",
+          headline: coverageBack < 0 ? `Passou de 1h de intervalo há ${-coverageBack} min`
+            : `Intervalo de 1h para estender · volte às ${hhmm(pauseStart! + COVERAGE_LONG_DAY_BREAK_MINUTES)} (${left(coverageBack)})`,
+          detail: progress };
+      }
+      return { ...base, level: back < 0 ? "danger" : back <= 2 ? "warn" : "info",
         headline: back < 0 ? `Passou do fim do intervalo há ${-back} min` : `Em intervalo · volte às ${segment.end} (${left(back)})`, detail: progress };
     }
     if (now > end) return { ...base, level: "danger", headline: `${label}${segment.start}–${segment.end} não foi feita`, detail: "Registre a saída para o intervalo assim que puder." };

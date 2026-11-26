@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { INTRAJORNADA_MIN_RATE_PERCENT, TOLERANCE_CEILING } from './policy-rules';
+
 const idSchema = z.string().trim().min(1).max(180);
 
 function isCalendarDate(value: string) {
@@ -97,6 +99,10 @@ const journeyFieldsObjectSchema = z.object({
   expectedBreakMinutes: z.number().int().min(0).max(480).optional(),
   useDefinedShiftWhenShorter: z.boolean().optional(),
   toleranceMinutes: z.number().int().min(0, 'A tolerância não pode ser negativa.').max(10, 'A tolerância vai até 10 minutos por dia (art. 58 §1º da CLT).').optional(),
+  coveragePolicy: z.object({
+    jobRoleIds: z.array(idSchema).max(50),
+    jobFunctionIds: z.array(idSchema).max(50),
+  }).strict().optional(),
   allowedShiftDefinitionIds: z.array(idSchema).max(100).optional(),
   applicability: applicabilitySchema,
   validFrom: dateSchema,
@@ -145,6 +151,7 @@ const journeyUpdateDataSchema = journeyFieldsObjectSchema.partial().extend({
   description: journeyFieldsObjectSchema.shape.description.nullable(),
   allowedShiftDefinitionIds: journeyFieldsObjectSchema.shape.allowedShiftDefinitionIds.nullable(),
   toleranceMinutes: journeyFieldsObjectSchema.shape.toleranceMinutes.nullable(),
+  coveragePolicy: journeyFieldsObjectSchema.shape.coveragePolicy.nullable(),
   validTo: journeyFieldsObjectSchema.shape.validTo.nullable(),
 }).refine((value) => Object.keys(value).length > 0);
 export const updateJourneySchema = z.discriminatedUnion('action', [
@@ -186,7 +193,33 @@ const overtimeCategorySchema = z.preprocess((value) => {
   return normalized;
 }, overtimeCategoryFieldsSchema);
 
+const ruleSourceSchema = z.object({
+  origin: z.enum(['law', 'cct', 'individual_agreement', 'internal']),
+  reference: z.string().trim().max(240).optional(),
+}).strict();
+const toleranceField = (max: number, label: string) => z.number().int().min(0, 'A tolerância não pode ser negativa.')
+  .max(max, `${label} vai até ${max} min.`);
+const tolerancesSchema = z.object({
+  markingMinutes: toleranceField(TOLERANCE_CEILING.markingMinutes, 'A tolerância por marcação'),
+  dailyMinutes: toleranceField(TOLERANCE_CEILING.dailyMinutes, 'A tolerância no dia'),
+  breakMinutes: z.object({
+    upTo15: toleranceField(TOLERANCE_CEILING.upTo15, 'A tolerância do intervalo de 15 min'),
+    upTo30: toleranceField(TOLERANCE_CEILING.upTo30, 'A tolerância do intervalo de 30 min'),
+    upTo60: toleranceField(TOLERANCE_CEILING.upTo60, 'A tolerância do intervalo de 60 min'),
+  }).strict(),
+  source: ruleSourceSchema,
+}).strict().refine((value) => value.dailyMinutes >= value.markingMinutes, {
+  message: 'O limite do dia não pode ser menor que o limite por marcação.', path: ['dailyMinutes'],
+});
+const intrajornadaSchema = z.object({
+  code: z.string().trim().min(2).max(40),
+  ratePercent: z.number().min(INTRAJORNADA_MIN_RATE_PERCENT, `O adicional mínimo é de ${INTRAJORNADA_MIN_RATE_PERCENT}%.`).max(1000),
+  source: ruleSourceSchema,
+}).strict();
+
 const overtimeFieldsObjectSchema = z.object({
+  tolerances: tolerancesSchema.optional(),
+  intrajornada: intrajornadaSchema.optional(),
   name: z.string().trim().min(2).max(120),
   description: z.string().trim().max(1000).optional(),
   collectiveAgreementReference: z.string().trim().max(240).optional(),
@@ -216,6 +249,9 @@ const overtimeFieldsObjectSchema = z.object({
 }).strict();
 
 function refineOvertimePolicy(value: z.infer<typeof overtimeFieldsObjectSchema>, context: z.RefinementCtx) {
+  if (value.intrajornada && !value.tolerances) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['tolerances'], message: 'Para apurar o intervalo intrajornada, informe as tolerâncias.' });
+  }
   if (value.validTo && value.validTo < value.validFrom) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['validTo'], message: 'O fim da vigência deve ser igual ou posterior ao início.' });
   }
@@ -229,6 +265,8 @@ function refineOvertimePolicy(value: z.infer<typeof overtimeFieldsObjectSchema>,
 
 export const createOvertimePolicySchema = overtimeFieldsObjectSchema.extend({ supersedesId: idSchema.optional() }).superRefine(refineOvertimePolicy);
 const overtimeUpdateDataSchema = overtimeFieldsObjectSchema.partial().extend({
+  tolerances: overtimeFieldsObjectSchema.shape.tolerances.nullable(),
+  intrajornada: overtimeFieldsObjectSchema.shape.intrajornada.nullable(),
   description: overtimeFieldsObjectSchema.shape.description.nullable(),
   collectiveAgreementReference: overtimeFieldsObjectSchema.shape.collectiveAgreementReference.nullable(),
   validTo: overtimeFieldsObjectSchema.shape.validTo.nullable(),

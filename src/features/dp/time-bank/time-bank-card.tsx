@@ -41,6 +41,7 @@ export const REASON_LABELS: Record<BankLineReason, string> = {
   manual_adjustment: "Ajuste manual do banco",
   payroll_settlement: "Saldo lançado na folha",
   credit_expired: "Crédito vencido",
+  break_suppressed: "Intervalo intrajornada suprimido (indenizatório)",
 };
 const hm = (minutes: number, signed = false) => {
   const sign = minutes < 0 ? "−" : signed && minutes > 0 ? "+" : "";
@@ -208,7 +209,7 @@ export function TimeBankCard({ firebaseUser, employeeUid, date, canManage = fals
               <span className={detailed ? "font-semibold text-ds-ink" : "min-w-0 truncate"}><span className="font-semibold text-ds-ink">{dateBR(item.date).slice(0, 5)}</span>{detailed ? null : " · "}{detailed ? null : REASON_LABELS[item.line.reason]}</span>
               {detailed ? <span className="text-ds-ink-muted">{REASON_LABELS[item.line.reason]}</span> : null}
               <span className={`shrink-0 font-ds-mono font-semibold ${item.line.nature === "bank_debit" ? "text-ds-danger" : "text-ds-ink"}`}>
-                {item.line.nature === "bank_credit" ? hm(item.line.minutes, true) : item.line.nature === "bank_debit" ? hm(-item.line.minutes) : `${hm(item.line.minutes)} ${item.line.nature === "payroll_overtime" ? `folha ${item.line.ratePercent ?? 0}%` : item.line.nature === "payroll_discount" ? "desconto na folha" : "revisão"}`}
+                {item.line.nature === "bank_credit" ? hm(item.line.minutes, true) : item.line.nature === "bank_debit" ? hm(-item.line.minutes) : `${hm(item.line.minutes)} ${item.line.nature === "payroll_overtime" ? `folha ${item.line.ratePercent ?? 0}%` : item.line.nature === "payroll_discount" ? "desconto na folha" : item.line.nature === "payroll_indemnity" ? `${item.line.categoryId ?? "intrajornada"} · folha` : "revisão"}`}
               </span>
               {employeeUid && canManage && item.line.reason === "pending_approval" && item.line.categoryId ? <Button size="sm" variant="ds-secondary" disabled={busy}
                 onClick={() => void approveOvertime(item.date, item.line.categoryId!, item.line.minutes)}>Aprovar extra</Button> : null}

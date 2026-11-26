@@ -1,4 +1,5 @@
 import 'server-only';
+import { coverageResolutionField } from '@/lib/dp-coverage-policy';
 
 import { createHash } from 'node:crypto';
 import { addDays, format, parseISO } from 'date-fns';
@@ -534,7 +535,8 @@ async function prepareRevisionCoverage(tx: Transaction, actor: ServerUserContext
     journeyResolution: { journeyId: resolution.journey.id, lineageId: resolution.journey.lineageId,
       version: resolution.journey.version, name: resolution.journey.name, resolvedBy: resolution.resolvedBy,
       validationMode: resolution.journey.scaleValidation?.mode ?? 'consecutive_days',
-      maxConsecutiveWorkDays: resolution.journey.weeklyRest?.maxConsecutiveWorkDays ?? 6, resolvedAt: now },
+      maxConsecutiveWorkDays: resolution.journey.weeklyRest?.maxConsecutiveWorkDays ?? 6, resolvedAt: now,
+      ...coverageResolutionField(reference) },
     referenceRevisionId: referenceRef.id, createdAt: now, updatedAt: now };
   const overlay = await prepareActiveRevisionOperationalChanges({ tx, schedule, workspaceId: actor.workspace_id,
     changes: [{ shiftId, previous: null, next: shift }], actorId: actor.decoded.uid, reason: 'absence_coverage' });

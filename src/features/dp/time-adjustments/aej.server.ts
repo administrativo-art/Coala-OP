@@ -121,6 +121,7 @@ export async function exportAej(context: ServerUserContext, input: AejExportInpu
     const bankDays = bank.flatMap((month) => month.days);
     const bankLines = bankLinesWithMovements(bank, movements)
       .filter((item) => item.date >= input.startDate && item.date <= input.endDate);
+    // A parcela indenizatória do intervalo é verba de folha: o AEJ não tem registro para ela e a supressão já está nas marcações.
     const bankDates = [...new Set(bankLines.map((item) => item.date))];
     const absences: AejAbsence[] = [
       ...bankDays.filter((day) => day.kind === 'rest_day' && !day.workedMinutes).map((day) => ({ date: day.date, kind: '1' as const })),

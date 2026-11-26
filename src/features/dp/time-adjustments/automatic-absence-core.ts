@@ -24,3 +24,15 @@ export function adjustmentRestoresAutomaticAbsence(record: {
   return operations.some((operation) => (operation.kind === 'include' || operation.kind === 'correct')
     && typeof operation.inclusion?.markedAt === 'string' && Boolean(operation.inclusion.markedAt));
 }
+
+/**
+ * Prazo da falta automática de um dia com vários turnos: o maior entre eles; turno flexível sem janela vale o dia
+ * inteiro. Fonte única para a rotina de falta e para o aviso da revisão antecipada.
+ */
+export function automaticAbsenceDayDeadline(date: string,
+  shifts: Array<{ startTime: string; endTime: string; overnight: boolean; windowless: boolean }>, timeZone: string) {
+  return shifts.map((shift) => shift.windowless
+    ? automaticAbsenceDeadline(date, '00:00', '23:59', false, timeZone)
+    : automaticAbsenceDeadline(date, shift.startTime, shift.endTime, shift.overnight, timeZone))
+    .sort((a, b) => b.dueAt.localeCompare(a.dueAt))[0] ?? null;
+}

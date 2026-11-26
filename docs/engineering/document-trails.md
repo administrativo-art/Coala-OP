@@ -77,5 +77,3 @@ Os anexos do formulário de admissão só entram no Acervo após `status=complet
 
 
 26/11/2026 — trilha de localização: todos os registros de `generatedDocuments` têm pasta projetada **Empresa → Documentos gerados**, `editorDocuments` tem **Empresa → Documentos do editor** e uploads RH ainda não arquivados têm **Empresa → Recebidos a classificar**. Reutilizam registros, IDs, autorização, paginação e bytes das origens; não são novas coleções ou produtores Storage. Gerados assinados exigem solicitação correspondente, versão congelada e hashes coerentes antes do download. Upload `filed` continua na pasta do titular; Empresa mantém categoria. Ver [contrato e custo](flows/document-central.md). Não certifica produtores externos não inventariados.
-
-

@@ -737,6 +737,21 @@ private fun purposeColor(purpose: String?) = when (purpose) {
     }
 }
 
+/** Pedido de revisão antecipada: "Revisei este dia" nunca em dia ímpar ou sem batidas (o servidor também recusa). */
+@Composable private fun ReviewCard(review: ReviewRequest, day: ServerDay?, busy: Boolean, onReviewed: () -> Unit) {
+    val blocked = day?.incidents?.any { it == "odd" || it == "missing" } == true
+    Column(Modifier.fillMaxWidth().background(Tokens.accentSoft, RoundedCornerShape(12.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Revise este dia", style = MaterialTheme.typography.titleSmall)
+        Text(review.reasonLabel?.let { "O DP pediu: ${it.lowercase()}." } ?: "A rotina diária encontrou um ponto a conferir neste dia.",
+            color = Tokens.ink, style = MaterialTheme.typography.bodySmall)
+        if (blocked) Text("Falta batida neste dia: peça a correção das batidas ou justifique com uma ausência.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+        else {
+            Text("Se estiver tudo certo, confirme. Confirmar não muda batidas nem o espelho.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            Action("Revisei este dia", secondary = true, enabled = !busy, onClick = onReviewed)
+        }
+    }
+}
+
 @Composable private fun RecordsTab(state: TimeState, busy: Boolean, vm: TimeViewModel, onReceipt: (DayPunch) -> Unit,
     onAdjust: (String) -> Unit, onAbsence: (String) -> Unit, onDay: (String) -> Unit, onArchive: () -> Unit) {
     val first = state.month.atDay(1)
@@ -758,14 +773,26 @@ private fun purposeColor(purpose: String?) = when (purpose) {
         .filter { date -> state.markings.any { it.workDate == date.toString() } || state.shifts.any { it.date == date.toString() } || state.treatments.any { it.workDate == date.toString() } }
     val readings = days.associateWith { date -> TimeRules.recordDay(date.toString(), state.markings, state.shifts.firstOrNull { it.date == date.toString() }, state.treatments, state.today) }
     val withAdjustment = state.adjustments.filter { it.status == "in_review" }.map { it.workDate }.toSet()
-    val toReview = days.filter { it.toString() !in state.automaticAbsences
+    // Contrato central: com os dias do servidor, "a conferir" segue as ocorrências da web; sem eles, a leitura local.
+    val serverToday = state.serverToday ?: state.today.toString()
+    val toReview = if (state.serverDays.isNotEmpty()) days.filter { date -> date.toString() < serverToday && date.toString() !in state.automaticAbsences
+        && state.serverDays[date.toString()]?.incidents?.isNotEmpty() == true }
+    else days.filter { it.toString() !in state.automaticAbsences
         && readings[it]?.first in setOf(com.coalaone.go.domain.RecordDayState.MISSING, com.coalaone.go.domain.RecordDayState.REVIEW) }
+    val openReviews = state.reviewRequests.filter { it.status == "open" }.associateBy { it.date }
+    if (openReviews.isNotEmpty()) CardBlock {
+        Text("${openReviews.size} ${if (openReviews.size == 1) "dia" else "dias"} para revisar", style = MaterialTheme.typography.titleMedium)
+        Text("Confira as batidas e peça ajuste se houver erro. A revisão pode ser feita em horário de trabalho.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+        Action(if (filter == "to_review") "Mostrar todos" else "Ver dias para revisar", secondary = true, enabled = !busy) {
+            filter = if (filter == "to_review") "all" else "to_review" }
+    }
     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         CountTile("${days.count { d -> state.markings.any { it.workDate == d.toString() } }}", "dias com batida", Tokens.ink, Tokens.surface, filter == "all", Modifier.weight(1f).fillMaxHeight()) { filter = "all" }
         CountTile("${toReview.size}", "a conferir", if (toReview.isEmpty()) Tokens.ink else Tokens.warning, if (toReview.isEmpty()) Tokens.surface else Tokens.warningBg, filter == "review", Modifier.weight(1f).fillMaxHeight()) { filter = "review" }
         CountTile("${withAdjustment.count { d -> days.any { it.toString() == d } }}", "ajuste em análise", if (withAdjustment.isEmpty()) Tokens.ink else Tokens.amberInk, if (withAdjustment.isEmpty()) Tokens.surface else Tokens.amberBg, filter == "adjustment", Modifier.weight(1f).fillMaxHeight()) { filter = "adjustment" }
     }
-    val shown = when (filter) { "review" -> toReview; "adjustment" -> days.filter { it.toString() in withAdjustment }; else -> days }
+    val shown = when (filter) { "review" -> toReview; "adjustment" -> days.filter { it.toString() in withAdjustment }
+        "to_review" -> days.filter { it.toString() in openReviews }; else -> days }
     if (days.isEmpty()) EmptyState("Nenhuma batida neste mês")
     else if (shown.isEmpty()) EmptyState(if (filter == "review") "Nenhum dia a conferir" else "Nenhum ajuste em análise", "Toque em \"dias com batida\" para ver o mês inteiro.")
     shown.forEach { date ->
@@ -783,6 +810,7 @@ private fun purposeColor(purpose: String?) = when (purpose) {
                 }
                 when {
                     key in withAdjustment -> StatusChip("Ajuste em análise", Tokens.amberInk, Tokens.amberBg)
+                    key in openReviews -> StatusChip("Para revisar", Tokens.wine, Tokens.accentSoft)
                     key in state.automaticAbsences -> StatusChip("Falta registrada", Tokens.danger, Tokens.dangerBg)
                     reading == com.coalaone.go.domain.RecordDayState.MISSING -> StatusChip("Sem batida", Tokens.warning, Tokens.warningBg)
                     reading == com.coalaone.go.domain.RecordDayState.REVIEW -> StatusChip("A conferir", Tokens.warning, Tokens.warningBg)
@@ -797,6 +825,8 @@ private fun purposeColor(purpose: String?) = when (purpose) {
             }
             if (open) {
                 ShiftPills(shift)
+                state.serverDays[key]?.extendUntil?.let { Text("Pode estender até $it", color = Tokens.muted, style = MaterialTheme.typography.bodySmall) }
+                openReviews[key]?.let { review -> ReviewCard(review, state.serverDays[key], busy) { vm.markReviewed(review.id) } }
                 if (key in state.automaticAbsences) Text("Falta registrada automaticamente após 24 horas sem batida, solicitação de ausência ou ajuste. Você ainda pode solicitar ausência ou pedir ajuste deste dia.",
                     color = Tokens.danger, style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.fillMaxWidth().background(Tokens.dangerBg, RoundedCornerShape(12.dp)).padding(12.dp))

@@ -10,6 +10,15 @@ runConfig:
   maxInstances: 1
 
 env:
+  # Publicação técnica: ativação das regras e da revisão depende de decisão própria.
+  - variable: DP_TIME_POLICY_RULES_ENABLED
+    value: "false"
+    availability:
+      - RUNTIME
+  - variable: DP_TIME_REVIEW_ENABLED
+    value: "false"
+    availability:
+      - RUNTIME
   - variable: NODE_OPTIONS
     value: "--max-old-space-size=4096"
     availability:

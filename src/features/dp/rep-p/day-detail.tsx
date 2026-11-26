@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import { CalendarPlus, ChevronLeft, ChevronRight, Clock3, FileText, Info, MapPin, Moon, RefreshCw, Share2 } from "lucide-react";
 
 import { PanelSection, SidePanel } from "@/components/patterns/side-panel";
+import type { DPReviewReason, TimeReviewView } from "@/features/dp/time-review/core";
 import { Button } from "@/components/ui/button";
 import { StatusPill, type StatusPillVariant } from "@/components/ui/status-pill";
 import { DayLine, LegendItem } from "@/features/dp/time-adjustments/day-line";
@@ -17,6 +18,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { absenceStatus, adjustmentStateOf, balanceOf, durationLabel, incidentFact, INCIDENTS, MarkingClassificationEditor,
   type ClassificationActions, type ReceiptActions } from "./day-list";
 import { fiscalClock, INCIDENT_SEVERITY, minutesOf, plannedBreakMinutesOf, toleranceOf, type DayMarking, type DayView } from "./day-model";
+import { ReviewRequestSection } from "./review-request-section";
 import { ReceiptPill } from "./marking-ui";
 import { expectedPunchesOf, MARKING_PURPOSES, nextMarkingOf, PurposeDot, purposeLabel, suggestedLabel, type MarkingPurpose } from "./record-strip";
 import { ADJUSTMENT_STATUS_VARIANT } from "./time-recording-views";
@@ -49,6 +51,7 @@ const NATURE: Record<BankStatementLine["line"]["nature"], { title: (line: BankSt
   bank_debit: { title: () => "Banco de horas · débito", sign: -1, tone: "bg-ds-danger-bg text-ds-danger", mark: "−" },
   payroll_overtime: { title: (line) => `Folha · hora extra${line.ratePercent ? ` ${line.ratePercent}%` : ""}`, sign: 1, tone: "bg-ds-info-bg text-ds-info", mark: "$" },
   payroll_discount: { title: () => "Folha · desconto", sign: -1, tone: "bg-ds-danger-bg text-ds-danger", mark: "$" },
+  payroll_indemnity: { title: (line) => `Folha · intervalo intrajornada${line.categoryId ? ` (${line.categoryId})` : ""}`, sign: 1, tone: "bg-ds-info-bg text-ds-info", mark: "$" },
   review: { title: () => "Em conferência pelo DP", sign: 0, tone: "bg-ds-caution-bg text-ds-caution", mark: "?" },
 };
 
@@ -229,12 +232,15 @@ function TimelineGap({ kind, minutes, open }: { kind: "work" | "break"; minutes:
  * passam pelo pedido ao DP e a classificação muda só a leitura da jornada.
  */
 export function DayDetailPanel({ day, days, today, unitNames, receipts, classifications, onClose, onNavigate, onRequestAbsence, adjustments,
-  onRequestAdjustment, onOpenAdjustment, readOnly = false, markingMode = null, bank, onRecord, employeeUid }: {
+  onRequestAdjustment, onOpenAdjustment, readOnly = false, markingMode = null, bank, onRecord, employeeUid,
+  review = null, onMarkReviewed, onRequestReview }: {
   day: DayView | null; days: DayView[]; today: string; unitNames: Map<string, string>; receipts: ReceiptActions | null;
   classifications: ClassificationActions | null; onClose: () => void; onNavigate: (date: string) => void;
   onRequestAbsence: (date: string) => void; adjustments: AdjustmentView[]; onRequestAdjustment: (date: string) => void;
   onOpenAdjustment: (id: string) => void; readOnly?: boolean; markingMode?: "official" | "pilot" | "disabled" | null;
   bank: DayBank | "unavailable" | null; onRecord?: () => void; employeeUid: string;
+  review?: TimeReviewView | null; onMarkReviewed?: (id: string) => Promise<void>;
+  onRequestReview?: (date: string, reason: DPReviewReason) => Promise<void>;
 }) {
   if (!day) return null;
   const work = day.shift?.type === "work" ? day.shift : null;
@@ -265,7 +271,8 @@ export function DayDetailPanel({ day, days, today, unitNames, receipts, classifi
   // Prévia do resultado e tolerância: a mesma regra da apuração (tolerância única da jornada).
   const difference = past && work && !day.absence && effective.length && effective.length % 2 === 0 && day.plannedWorkMinutes !== null
     ? day.workedMinutes - day.plannedWorkMinutes : null;
-  const toleranceApplied = difference !== null && difference !== 0 && Math.abs(difference) <= toleranceOf(work);
+  const toleranceApplied = difference !== null && difference !== 0
+    && (work?.policyTolerances ? day.balanceMinutes === 0 : Math.abs(difference) <= toleranceOf(work));
 
   return (
     <SidePanel open onOpenChange={(open) => !open && onClose()}
@@ -307,6 +314,9 @@ export function DayDetailPanel({ day, days, today, unitNames, receipts, classifi
           </div>
         </PanelSection>
       ) : null}
+
+      <ReviewRequestSection day={day} today={today} review={review} readOnly={readOnly}
+        onMarkReviewed={onMarkReviewed} onRequestReview={onRequestReview} />
 
       {day.incidents.length || pending.length || day.absence ? (
         <div className="space-y-2">

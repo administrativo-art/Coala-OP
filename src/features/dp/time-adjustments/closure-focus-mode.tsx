@@ -244,7 +244,7 @@ function FocusDay({ day, adjustments, bank, unitNames, employeeName, employeeUid
                 <div key={index} className="flex items-center justify-between gap-3 rounded-ds-md border border-ds-border px-3 py-2 text-sm">
                   <span className="min-w-0"><span className="block font-bold text-ds-ink">{REASON_LABELS[item.line.reason]}</span>
                     <span className="block text-xs text-ds-ink-muted">{item.line.nature === "payroll_overtime" ? `Folha · ${item.line.ratePercent ?? 0}%` : item.line.nature === "bank_credit" ? "Banco · crédito"
-                      : item.line.nature === "bank_debit" ? "Banco · débito" : item.line.nature === "payroll_discount" ? "Folha · desconto" : "Em conferência pelo DP"}</span></span>
+                      : item.line.nature === "bank_debit" ? "Banco · débito" : item.line.nature === "payroll_discount" ? "Folha · desconto" : item.line.nature === "payroll_indemnity" ? `Folha · ${item.line.categoryId ?? "intrajornada"}` : "Em conferência pelo DP"}</span></span>
                   <span className="font-ds-mono font-extrabold">{durationLabel(item.line.minutes)}</span>
                 </div>
               )) : <p className="text-sm text-ds-ink-muted">{bank ? "Nada lançado para este dia (igual ao previsto, na tolerância ou em conferência)." : "Apuração indisponível agora."}</p>}

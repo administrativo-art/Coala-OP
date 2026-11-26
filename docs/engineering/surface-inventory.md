@@ -1,8 +1,8 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **593 rotas de API** e **24 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **597 rotas de API** e **24 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
-Inclui **71 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
+Inclui **72 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
 ## Páginas fora do dashboard
 
@@ -192,6 +192,7 @@ Inclui **71 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/dp/time-recording/closures/[competence]` | PATCH | [src/app/api/dp/time-recording/closures/[competence]/route.ts](../../src/app/api/dp/time-recording/closures/%5Bcompetence%5D/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/day-corrections` | GET, POST | [src/app/api/dp/time-recording/day-corrections/route.ts](../../src/app/api/dp/time-recording/day-corrections/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/employees/[employeeUid]` | POST | [src/app/api/dp/time-recording/employees/[employeeUid]/route.ts](../../src/app/api/dp/time-recording/employees/%5BemployeeUid%5D/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/dp/time-recording/employees/[employeeUid]/review-requests` | POST | [src/app/api/dp/time-recording/employees/[employeeUid]/review-requests/route.ts](../../src/app/api/dp/time-recording/employees/%5BemployeeUid%5D/review-requests/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/fiscal-options` | GET | [src/app/api/dp/time-recording/fiscal-options/route.ts](../../src/app/api/dp/time-recording/fiscal-options/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/journey-location` | POST | [src/app/api/dp/time-recording/journey-location/route.ts](../../src/app/api/dp/time-recording/journey-location/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/journey-location/lease` | POST | [src/app/api/dp/time-recording/journey-location/lease/route.ts](../../src/app/api/dp/time-recording/journey-location/lease/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
@@ -202,6 +203,7 @@ Inclui **71 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/dp/time-recording/mirrors` | GET, POST | [src/app/api/dp/time-recording/mirrors/route.ts](../../src/app/api/dp/time-recording/mirrors/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/mirrors/pdf` | GET | [src/app/api/dp/time-recording/mirrors/pdf/route.ts](../../src/app/api/dp/time-recording/mirrors/pdf/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/month` | GET | [src/app/api/dp/time-recording/month/route.ts](../../src/app/api/dp/time-recording/month/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/dp/time-recording/month-view` | GET | [src/app/api/dp/time-recording/month-view/route.ts](../../src/app/api/dp/time-recording/month-view/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/offline-cycles` | POST | [src/app/api/dp/time-recording/offline-cycles/route.ts](../../src/app/api/dp/time-recording/offline-cycles/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/offline-permits` | POST | [src/app/api/dp/time-recording/offline-permits/route.ts](../../src/app/api/dp/time-recording/offline-permits/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/options` | GET | [src/app/api/dp/time-recording/options/route.ts](../../src/app/api/dp/time-recording/options/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
@@ -210,6 +212,7 @@ Inclui **71 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/dp/time-recording/pending-receipts` | GET | [src/app/api/dp/time-recording/pending-receipts/route.ts](../../src/app/api/dp/time-recording/pending-receipts/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/receipts/[receiptId]` | GET, POST | [src/app/api/dp/time-recording/receipts/[receiptId]/route.ts](../../src/app/api/dp/time-recording/receipts/%5BreceiptId%5D/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/receipts/export` | GET | [src/app/api/dp/time-recording/receipts/export/route.ts](../../src/app/api/dp/time-recording/receipts/export/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/dp/time-recording/review-requests/[requestId]` | POST | [src/app/api/dp/time-recording/review-requests/[requestId]/route.ts](../../src/app/api/dp/time-recording/review-requests/%5BrequestId%5D/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/signer-status` | GET | [src/app/api/dp/time-recording/signer-status/route.ts](../../src/app/api/dp/time-recording/signer-status/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time-recording/time-bank` | GET, POST | [src/app/api/dp/time-recording/time-bank/route.ts](../../src/app/api/dp/time-recording/time-bank/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time/absence-types` | GET, POST | [src/app/api/dp/time/absence-types/route.ts](../../src/app/api/dp/time/absence-types/route.ts) | [dp-absences](flows/dp-absences.md) |
@@ -499,6 +502,7 @@ Inclui **71 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/jobs/dp/absences/tacit-approval` | POST | [src/app/api/jobs/dp/absences/tacit-approval/route.ts](../../src/app/api/jobs/dp/absences/tacit-approval/route.ts) | [dp-absences](flows/dp-absences.md) |
 | `/api/jobs/dp/time-closing/overdue` | POST | [src/app/api/jobs/dp/time-closing/overdue/route.ts](../../src/app/api/jobs/dp/time-closing/overdue/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/jobs/dp/time-recording/automatic-absences` | POST | [src/app/api/jobs/dp/time-recording/automatic-absences/route.ts](../../src/app/api/jobs/dp/time-recording/automatic-absences/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/jobs/dp/time-recording/review-requests` | POST | [src/app/api/jobs/dp/time-recording/review-requests/route.ts](../../src/app/api/jobs/dp/time-recording/review-requests/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/jobs/financial-budgets/generate` | POST | [src/app/api/jobs/financial-budgets/generate/route.ts](../../src/app/api/jobs/financial-budgets/generate/route.ts) | [financial-budgets](flows/financial-budgets.md) |
 | `/api/jobs/financial-inbox/maintenance` | POST | [src/app/api/jobs/financial-inbox/maintenance/route.ts](../../src/app/api/jobs/financial-inbox/maintenance/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/jobs/hr/onboarding-document-discard` | POST | [src/app/api/jobs/hr/onboarding-document-discard/route.ts](../../src/app/api/jobs/hr/onboarding-document-discard/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
@@ -700,6 +704,7 @@ Inclui **71 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `systemNoticesDailyMonitor` | `onSchedule` | [functions/src/system-notice-jobs.ts](../../functions/src/system-notice-jobs.ts) | [system-notices](flows/system-notices.md) |
 | `terminateUser` | `onCall` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `timeClosingOverdueJob` | `onSchedule` | [functions/src/system-notice-jobs.ts](../../functions/src/system-notice-jobs.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `timeReviewDailyJob` | `onSchedule` | [functions/src/system-notice-jobs.ts](../../functions/src/system-notice-jobs.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `uberExpenseCandidateWritten` | `onDocumentWritten` | [functions/src/uber-sftp/jobs.ts](../../functions/src/uber-sftp/jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `uberSftpDailySync` | `onSchedule` | [functions/src/uber-sftp/jobs.ts](../../functions/src/uber-sftp/jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `uberTransactionCandidateWritten` | `onDocumentWritten` | [functions/src/uber-sftp/jobs.ts](../../functions/src/uber-sftp/jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |

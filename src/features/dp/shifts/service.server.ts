@@ -1,4 +1,5 @@
 import 'server-only';
+import { coverageResolutionField } from '@/lib/dp-coverage-policy';
 
 import { FieldValue, Timestamp, type QueryDocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
 
@@ -281,6 +282,7 @@ export async function saveWorkShift(params: {
         validationMode: journey.scaleValidation?.mode ?? 'consecutive_days',
         maxConsecutiveWorkDays: journey.weeklyRest?.maxConsecutiveWorkDays ?? 6,
         resolvedAt: now,
+        ...coverageResolutionField(reference),
       },
       referenceRevisionId: referenceRef.id,
       updatedAt: now,
