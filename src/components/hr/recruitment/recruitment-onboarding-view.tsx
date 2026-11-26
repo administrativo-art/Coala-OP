@@ -269,6 +269,7 @@ const SIGNATURE_WORKFLOW_STATUS_LABELS: Record<string, string> = {
   rejected: 'Assinatura recusada',
   delivery_failed: 'Falha na entrega',
   send_failed: 'Falha no envio',
+  send_unconfirmed: 'Envio sem confirmação',
 };
 
 function formatOnboardingDate(value?: string | null) {
@@ -3075,7 +3076,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
   const signatureCompleted = selectedSignatureDocuments.length > 0
     && selectedSignatureDocuments.every(document => ['signed', 'signed_archived_pending_employee', 'archived'].includes(document.status));
   const signaturePackageFailedDocument = selectedSignatureDocuments.find(document =>
-    ['generation_failed', 'generation_blocked', 'send_failed', 'delivery_failed', 'rejected'].includes(document.status)
+    ['generation_failed', 'generation_blocked', 'send_failed', 'send_unconfirmed', 'delivery_failed', 'rejected'].includes(document.status)
   );
   const signaturePackageReference = selectedSignatureDocuments.find(document => document.signatureRequestId)
     ?? selectedSignatureDocuments[0];
@@ -3111,11 +3112,11 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
   ];
   const signatureCurrentStepIndex = signatureMainSteps.findIndex(step => !step.done);
   const signaturePackageEditable = canGenerateDocumentsProcess && canActOnSignaturePhase && activePhaseId === 'signature_preparation' &&
-    !selectedSignatureDocuments.some(document => ['sent', 'viewed', 'partially_signed', 'signed', 'archived'].includes(document.status));
+    !selectedSignatureDocuments.some(document => ['send_unconfirmed', 'sent', 'viewed', 'partially_signed', 'signed', 'archived'].includes(document.status));
   let selectedOperationalStatus = resolveOnboardingOperationalStatus(selectedProcess, new Date(linkClock));
   if (selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled' && signatureWorkflow && ['signature_preparation', 'signature'].includes(selectedProcess.currentStage ?? '')) {
     const selectedDocuments = signatureWorkflow.documents.filter(document => document.selected);
-    const failedDocument = selectedDocuments.find(document => ['generation_failed', 'generation_blocked', 'send_failed', 'delivery_failed', 'rejected'].includes(document.status));
+    const failedDocument = selectedDocuments.find(document => ['generation_failed', 'generation_blocked', 'send_failed', 'send_unconfirmed', 'delivery_failed', 'rejected'].includes(document.status));
     const allSigned = selectedDocuments.length > 0 && selectedDocuments.every(document => ['signed', 'signed_archived_pending_employee', 'archived'].includes(document.status));
     const sent = selectedDocuments.some(document => ['sent', 'viewed', 'partially_signed'].includes(document.status));
     const readyToSend = selectedDocuments.some(document => document.status === 'ready_to_send');
@@ -4516,7 +4517,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                       {signatureTemplates.map((template, index) => {
                         const workflowDocument = selectedSignatureDocuments.find(document => document.templateId === template.id);
                         const failed = workflowDocument
-                          ? ['generation_failed', 'generation_blocked', 'send_failed', 'delivery_failed', 'rejected'].includes(workflowDocument.status)
+                          ? ['generation_failed', 'generation_blocked', 'send_failed', 'send_unconfirmed', 'delivery_failed', 'rejected'].includes(workflowDocument.status)
                           : false;
                         return (
                           <div key={template.id} className="rounded-xl border border-violet-300 bg-white p-3">

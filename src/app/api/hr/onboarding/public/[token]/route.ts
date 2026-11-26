@@ -1,3 +1,6 @@
+import { reportSystemError } from "@/lib/observability";
+import { validateOnboardingUploadReference } from "@/lib/hr/onboarding-upload-reference";
+import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { stripUndefined } from "@/features/hr/lib/schemas";
 import { z } from "zod";
 import { submitOpenOnboardingProcess } from "@/lib/hr/onboarding-process-write.server";
@@ -59,7 +62,6 @@ import {
   onboardingDocumentExtractionCacheId,
   type OnboardingDocumentExtractionRecord,
 } from '@/features/hr/onboarding/document-ai-extraction';
-import { reportSystemError } from '@/lib/observability';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -485,11 +487,6 @@ function isRateLimited(key: string) {
   return current.count > SUBMIT_LIMIT_MAX;
 }
 
-function isAllowedStorageUrl(value: unknown): value is string {
-  return typeof value === 'string' &&
-    value.startsWith('https://firebasestorage.googleapis.com/') &&
-    value.length <= 1200;
-}
 
 async function getOnboardingByToken(token: string) {
   const snap = await hrDbAdmin
@@ -567,9 +564,9 @@ function publicPayload(id: string, data: FirebaseFirestore.DocumentData) {
   };
 }
 
-const readContract = defineSecurityContract({ schemaVersion: 1, id: "hr.onboarding.public.read", version: 1, surface: { method: "GET", path: "/api/hr/onboarding/public/[token]" }, exposure: "public", identity: { kind: "public-token", purpose: "onboarding-form-read" }, authorization: { kind: "custom", strategy: "open-onboarding-public-token" }, resourceScope: { kind: "custom", strategy: "onboarding-token-process" }, input: { kind: "schema", schema: "onboarding-public-read", unknownFields: "reject" }, effects: { mode: "read", audit: "none" }, errorExposure: "sanitized" });
+const readContract = defineSecurityContract({ schemaVersion: 1, id: "hr.onboarding.public.read", version: 1, surface: { method: "GET", path: "/api/hr/onboarding/public/[token]" }, exposure: "public", identity: { kind: "public-token", purpose: "onboarding-form-read" }, authorization: { kind: "custom", strategy: "open-onboarding-public-token" }, resourceScope: { kind: "custom", strategy: "onboarding-token-process" }, input: { kind: "schema", schema: "onboarding-public-read", unknownFields: "reject" }, effects: { mode: "read", audit: "server-authoritative" }, errorExposure: "sanitized" });
 const readEnforcer = defineSecurityEnforcer<NextRequest, { params: Promise<{ token: string }> }, unknown, undefined, { cleanToken: string }, NonNullable<Awaited<ReturnType<typeof getOnboardingByToken>>>>({
-  id: "onboarding-public-read-v1", guarantees: ["purpose-bound-token", "authorization:open-onboarding-public-token", "scope:onboarding-token-process", "input-validated", "fields-allowlisted"],
+  id: "onboarding-public-read-v1", guarantees: ["server-authoritative-audit", "purpose-bound-token", "authorization:open-onboarding-public-token", "scope:onboarding-token-process", "input-validated", "fields-allowlisted"],
   async enforce({ request, routeContext }) {
     const cleanToken = trimText((await routeContext.params).token, 120);
     if (!/^[A-Za-z0-9_-]{1,120}$/.test(cleanToken) || request.nextUrl.searchParams.size) throw new AppError({ code: "ONBOARDING_PUBLIC_READ_INVALID", kind: "VALIDATION" });
@@ -590,7 +587,7 @@ export const GET = secureRoute({ contract: readContract, enforcer: readEnforcer 
     tokenHash: sha256(cleanToken),
     ...clientEvidence(request),
     at: accessedAt,
-  }).catch(error => console.error('[onboarding] Falha ao auditar acesso público.', error));
+  }).catch(cause => { throw new AppError({ code: 'ONBOARDING_PUBLIC_ACCESS_AUDIT_FAILED', kind: 'UNEXPECTED_APPLICATION', cause }); });
   return jsonSuccess(publicPayload(doc.id, serializeHrValue(data) as FirebaseFirestore.DocumentData));
 });
 
@@ -665,13 +662,12 @@ export const POST = secureRoute({ contract: submissionContract, enforcer: submis
       const submitted = rawDocuments[document.id];
       if (!submitted || typeof submitted !== 'object' || Array.isArray(submitted)) return document;
       const submittedData = submitted as Record<string, unknown>;
-      const fileUrl = isAllowedStorageUrl(submittedData.fileUrl) ? submittedData.fileUrl : null;
-      if (!fileUrl) return document;
+      const { fileUrl, filePath } = validateOnboardingUploadReference({ token: security.input.token, bucket: firebaseClientConfig.storageBucket, fileUrl: submittedData.fileUrl, filePath: submittedData.filePath, existingPath: document.filePath });
       return {
         ...document,
         status: 'received' as const,
         fileUrl,
-        filePath: trimText(submittedData.filePath, 700) || document.filePath || null,
+        filePath,
         fileHashSha256: /^[a-f0-9]{64}$/i.test(trimText(submittedData.sha256, 64))
           ? trimText(submittedData.sha256, 64).toLowerCase()
           : document.fileHashSha256 ?? null,
@@ -712,7 +708,7 @@ export const POST = secureRoute({ contract: submissionContract, enforcer: submis
         provider_registration: { ...workflow.steps.provider_registration, status: 'active' },
       },
     }, 'registration_review', now, 'provider');
-    await submitOpenOnboardingProcess(doc.ref, {
+    const submittedProcess = await submitOpenOnboardingProcess(doc.ref, {
       documents: nextDocuments,
       publicFormAnswers,
       publicFormSubmittedAt: data.publicFormSubmittedAt ?? now,
@@ -726,8 +722,7 @@ export const POST = secureRoute({ contract: submissionContract, enforcer: submis
         : now,
       status: 'reviewing_documents',
       updatedAt: now,
-    }, cleanToken);
-    await doc.ref.collection('audit').add({
+    }, cleanToken, { auditId: protocol, audit: {
       action: 'PJ_PROVIDER_REGISTRATION_SUBMITTED',
       protocol,
       tokenHash: sha256(cleanToken),
@@ -736,9 +731,9 @@ export const POST = secureRoute({ contract: submissionContract, enforcer: submis
       privacyNoticeHash: notice.hash,
       ...clientEvidence(request),
       at: now,
-    });
-    const saved = await doc.ref.get();
-    return jsonSuccess(publicPayload(saved.id, serializeHrValue(saved.data()) as FirebaseFirestore.DocumentData));
+    } });
+
+    return jsonSuccess(publicPayload(doc.id, serializeHrValue(submittedProcess) as FirebaseFirestore.DocumentData));
   }
 
   let publicFormAnswers = sanitizePublicAnswers(rawAnswers);
@@ -834,23 +829,14 @@ export const POST = secureRoute({ contract: submissionContract, enforcer: submis
   try {
     submittedExtractions = await loadSubmittedDocumentExtractions(doc.ref, rawDocuments);
   } catch (error) {
-    reportSystemError({
-      error,
-      code: 'ONBOARDING_DOCUMENT_EXTRACTION_LOAD_FAILED',
-      source: 'api',
-      operation: 'load-onboarding-document-extractions',
-      routeOrJob: '/api/hr/onboarding/public/[token]',
-      metadata: { processId: doc.id },
-    });
-    return jsonError('Não foi possível validar a análise dos documentos enviados.', 500);
+    throw new AppError({ code: 'ONBOARDING_DOCUMENT_EXTRACTION_LOAD_FAILED', kind: 'UNEXPECTED_APPLICATION', safeMessage: 'Não foi possível validar a análise dos documentos enviados.', cause: error });
   }
 
   const nextDocuments = expectedDocuments.map((document) => {
     const submitted = rawDocuments[document.id];
     if (!submitted || typeof submitted !== 'object' || Array.isArray(submitted)) return document;
     const submittedData = submitted as Record<string, unknown>;
-    const fileUrl = isAllowedStorageUrl(submittedData.fileUrl) ? submittedData.fileUrl : null;
-    if (!fileUrl) return document;
+    const { fileUrl, filePath } = validateOnboardingUploadReference({ token: security.input.token, bucket: firebaseClientConfig.storageBucket, fileUrl: submittedData.fileUrl, filePath: submittedData.filePath, existingPath: document.filePath });
     const sourceFileHashSha256 = /^[a-f0-9]{64}$/i.test(trimText(submittedData.sha256, 64))
       ? trimText(submittedData.sha256, 64).toLowerCase()
       : (document as OnboardingDocument & { fileHashSha256?: string | null }).fileHashSha256 ?? '';
@@ -866,7 +852,7 @@ export const POST = secureRoute({ contract: submissionContract, enforcer: submis
       ...document,
       ...extracted,
       fileUrl,
-      filePath: trimText(submittedData.filePath, 700) || (document.filePath ?? null),
+      filePath,
       fileHashSha256: sourceFileHashSha256 || null,
       note: trimText(submittedData.note, 500) || (document.note ?? null),
       receivedAt: now,
@@ -889,8 +875,7 @@ export const POST = secureRoute({ contract: submissionContract, enforcer: submis
     allergyNoticeSnapshotId = await ensureAllergyNoticeSnapshot(notice, now);
     imageVoiceConsentSnapshotId = await ensureImageVoiceConsentSnapshot(imageVoiceTerm, now);
   } catch (error) {
-    console.error('[onboarding] Falha ao preservar o Aviso de Privacidade.', error);
-    return jsonError('Não foi possível validar a versão do Aviso de Privacidade.', 500);
+    throw new AppError({ code: 'ONBOARDING_PRIVACY_SNAPSHOT_FAILED', kind: 'UNEXPECTED_APPLICATION', safeMessage: 'Não foi possível validar a versão do Aviso de Privacidade.', cause: error });
   }
   const previousAcceptance = data.publicPrivacyAcceptance && typeof data.publicPrivacyAcceptance === 'object'
     ? data.publicPrivacyAcceptance as Record<string, unknown>
@@ -966,7 +951,7 @@ export const POST = secureRoute({ contract: submissionContract, enforcer: submis
     ...(guideBecameOutdated ? { latestGuideRequiresRegeneration: true } : {}),
   };
 
-  await submitOpenOnboardingProcess(doc.ref, {
+  const submittedProcess = await submitOpenOnboardingProcess(doc.ref, {
     documents: nextDocuments,
     candidateName: publicFormAnswers.fullName,
     publicFormAnswers,
@@ -999,29 +984,7 @@ export const POST = secureRoute({ contract: submissionContract, enforcer: submis
         ? 'collecting_documents'
         : data.status,
     updatedAt: now,
-  }, cleanToken);
-
-  await doc.ref.collection('consentimentos_imagem_voz_historico').doc(protocol).set({
-    ...imageVoiceConsent,
-    evento: imageVoiceAuthorized ? 'autorizacao_concedida' : 'autorizacao_nao_concedida',
-    created_at: now,
-  });
-
-  const existingEmployeeId = await syncPrivacyAndConsentToExistingEmployee({
-    candidateEmail: data.candidateEmail,
-    imageVoiceConsent,
-    privacyAcknowledgement: {
-      ...publicPrivacyAcceptance,
-      onboarding_id: doc.id,
-    },
-    protocol,
-    now,
-  }).catch(error => {
-    console.error('[onboarding] Falha ao sincronizar privacidade e consentimento com colaborador existente.', error);
-    return null;
-  });
-
-  await doc.ref.collection('audit').add({
+  }, cleanToken, { auditId: protocol, audit: {
     action: 'PUBLIC_FORM_SUBMITTED',
     candidateId: data.candidateId ?? null,
     candidateEmail: data.candidateEmail ?? null,
@@ -1051,8 +1014,9 @@ export const POST = secureRoute({ contract: submissionContract, enforcer: submis
     identityCorrectionChangedFields: identityChanges,
     clinicRevalidationRequired: identityCorrectionConsumed && schedulingEmailSentAt ? false : null,
     asoGuideRequiresRegeneration: guideBecameOutdated,
-    existing_employee_consent_synced: Boolean(existingEmployeeId),
-    existing_employee_id: existingEmployeeId,
+    existing_employee_consent_synced: null,
+    existing_employee_id: null,
+    consent_projection_status: 'pending',
     formalization_id: doc.id,
     candidate_id: data.candidateId ?? null,
     invitation_id: data.invitationId ?? null,
@@ -1093,8 +1057,29 @@ export const POST = secureRoute({ contract: submissionContract, enforcer: submis
     submitted_at: now,
     ...clientEvidence(request),
     at: now,
+  }, relatedWrites: [{ ref: doc.ref.collection('consentimentos_imagem_voz_historico').doc(protocol), data: {
+    ...imageVoiceConsent,
+    evento: imageVoiceAuthorized ? 'autorizacao_concedida' : 'autorizacao_nao_concedida',
+    created_at: now,
+  } }] });
+
+
+
+  const existingEmployeeId = await syncPrivacyAndConsentToExistingEmployee({
+    candidateEmail: data.candidateEmail,
+    imageVoiceConsent,
+    privacyAcknowledgement: {
+      ...publicPrivacyAcceptance,
+      onboarding_id: doc.id,
+    },
+    protocol,
+    now,
+  }).catch(error => {
+    console.error('[onboarding] Falha ao sincronizar privacidade e consentimento com colaborador existente.', error);
+    return null;
   });
 
-  const saved = await doc.ref.get();
-  return jsonSuccess(publicPayload(saved.id, serializeHrValue(saved.data()) as FirebaseFirestore.DocumentData));
+  await doc.ref.collection('audit').doc(protocol).set({ existing_employee_consent_synced: Boolean(existingEmployeeId), existing_employee_id: existingEmployeeId, consent_projection_status: existingEmployeeId ? 'complete' : 'not_linked_or_pending' }, { merge: true }).catch(error => { reportSystemError({ error, code: 'ONBOARDING_CONSENT_PROJECTION_AUDIT_FAILED', source: 'api', operation: 'update-consent-projection-audit', routeOrJob: '/api/hr/onboarding/public/[token]' }); });
+
+  return jsonSuccess(publicPayload(doc.id, serializeHrValue(submittedProcess) as FirebaseFirestore.DocumentData));
 });

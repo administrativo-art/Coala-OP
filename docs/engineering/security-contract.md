@@ -85,3 +85,23 @@ O último comando escreve o inventário e só deve ser usado quando seu conteúd
 ## Limites
 
 O gate reconhece a forma estrutural `export const METHOD = secureRoute(...)` somente quando `secureRoute` vem do módulo canônico, inclusive com alias de importação; uma função local homônima não satisfaz o contrato. Ele não substitui revisão de código, testes de autorização, DAST, regras do Firestore, configuração de infraestrutura nem reteste. O baseline inicial preserva entrega incremental, mas todas as rotas nele permanecem não validadas por este mecanismo até a migração individual.
+
+## Revisão local das rotas migradas (26/11/2026)
+
+Correções ainda sem publicação: falhas reconhecidas de token/sessão viram 401; bloqueios de acesso viram 403; falhas de infraestrutura permanecem 500 reportáveis, com causa preservada. A criação de pagamento expõe somente regras marcadas e revisadas, incluindo salário, favorecido, boleto e consultoria; erros técnicos não são classificados por texto genérico. Bootstrap rejeita parâmetros e coleções desconhecidos.
+
+O GET público de admissão preserva a auditoria existente PUBLIC_LINK_ACCESSED (leitura de negócio, auditoria server-authoritative), e o POST registra PUBLIC_FORM_SUBMITTED. Uma falha de extração/snapshot passa por um único limite de erro com cause; não se reporta antes de relançar. A leitura falha se a auditoria de acesso não puder ser persistida.
+
+Erros marcados do kit/proveniência têm mensagem controlada e podem ser reportáveis para reconciliação; isso não promete mensagem de provedor ou status 400 para toda falha. Entradas controladas do provedor são 400, arquivo ausente é 404 reportável, resultado externo incerto é 503 sem retry automático, e falha inesperada é 500 com texto fixo. Envio/adição de signatário exige consultar o acompanhamento antes de repetir. Dados brutos da resposta da Autentique não são usados na mensagem.
+
+Os três métodos do workflow contábil entram no contrato ao corrigir o P1: permissões existentes accountant.view/manage, sem afirmar escopo de unidade inexistente. Auditoria de cada ação continua explicitamente parcial (contrato audit none), e validações de JSON/multipart permanecem nas ações. A migração estrutural não resolve P2/P3/P4 da revisão por si só.
+
+Complemento da revisão independente: o protocolo, encerramento do link, submissão e auditoria autoritativa são atômicos; no CLT, o histórico de consentimento integra essa transação. A projeção para conta existente acontece depois e não substitui a evidência da submissão. As mensagens legadas de acesso usam correspondência exata, nunca prefixo com diagnóstico arbitrário. URLs são conferidas na string original antes de normalização.
+
+Criação de assinatura tem claim transacional persistente. Resultado perdido/erro posterior vira send_unconfirmed e não libera criação após prazo, troca de status, geração ou novo posicionamento. Sem ID do provedor, a reconciliação informa pendência manual, sem recriar. Adição da empresa também fica bloqueada enquanto o provedor não comprovar o signatário; leituras posteriores que o confirmem reconciliam sem outra mutação. Reconciliação consulta até 31 IDs conhecidos adicionais (pacote e 30 componentes), sob demanda, sem varredura ou polling novo.
+
+Na preparação concorrente, cada composição usa diretório UUID exclusivo e gravação com ifGenerationMatch=0; a transação seleciona o par exato de PDF/manifesto. O claim de envio compara a revisão updateTime lida para preparar as posições. A reconciliação também lê as solicitações canônicas, valida origem/titular congelados e repara vínculos de componentes quando o ID confirmado sobreviveu à falha de projeção, sem outra criação no provedor. A verificação transacional adicional de componentes é limitada aos IDs conhecidos (máximo30), sem consulta global recorrente.
+
+O arquivamento compartilhado de assinatura avulsa, inclusive pelo webhook, valida remoção/descarte, fonte histórica e vínculos antes do download e novamente após ele. A atualização final da projeção precede o estado terminal da solicitação e a publicação; se for rejeitada, essas etapas não executam. As transações de projeção e Acervo ficam em bancos distintos e não constituem uma transação distribuída.
+
+Se a publicação de avulso falhar após arquivar, o retorno existente revalida fonte, descarte e vínculos e retoma somente a publicação idempotente, sem outro download/criação nem reversão de retirada manual.
