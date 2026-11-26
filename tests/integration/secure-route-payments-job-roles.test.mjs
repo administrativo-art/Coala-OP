@@ -16,6 +16,7 @@ const roles = await import('../../src/app/api/hr/roles/route.ts');
 const role = await import('../../src/app/api/hr/roles/[roleId]/route.ts');
 const bootstrap = await import('../../src/app/api/client/bootstrap/route.ts');
 const publicOnboarding = await import('../../src/app/api/hr/onboarding/public/[token]/route.ts');
+const accountant = await import('../../src/app/api/hr/onboarding/[id]/accountant-workflow/route.ts');
 const signatures = await import('../../src/app/api/hr/onboarding/[id]/signature-documents/route.ts');
 
 const PASSWORD = 'synthetic-password-123';
@@ -141,7 +142,7 @@ test('carregamento inicial: 401, entrada, filtro por permissão e cadastro incom
   await dbAdmin.collection('users').doc('routes-nobody').update({ profileCompliance: { status: 'pending', policyVersion: 1 } });
   try {
     assert.equal((await call('?collections=currentUser', nobody)).status, 200);
-    assert.equal((await call('?collections=currentUser,users', nobody)).status, 401);
+    assert.equal((await call('?collections=currentUser,users', nobody)).status, 403);
   } finally {
     await dbAdmin.collection('users').doc('routes-nobody').update({ profileCompliance: { status: 'complete', policyVersion: 1 } });
   }
@@ -262,9 +263,10 @@ function publicSubmission() {
     req.headers.set('x-forwarded-for', ip);
     return publicOnboarding.POST(req, context(token));
   };
-  const upload = (documents) => Object.fromEntries(documents.map((item) => [item.id, {
-    fileUrl: `https://firebasestorage.googleapis.com/v0/b/demo/o/${item.id}`, filePath: `onboarding/sintetico/${item.id}`, sha256: 'a'.repeat(64),
-  }]));
+  const upload = (documents, token) => Object.fromEntries(documents.map((item) => {
+    const filePath = `hr/onboarding/${token}/${item.id}.pdf`;
+    return [item.id, { fileUrl: `https://firebasestorage.googleapis.com/v0/b/${process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}/o/${encodeURIComponent(filePath)}`, filePath, sha256: 'a'.repeat(64) }];
+  }));
   const consents = (view) => ({
     privacyAcceptance: { noticeVersion: view.privacyNotice.version, noticeHash: view.privacyNotice.hash, acknowledged: true,
       allergyAcknowledged: true, allergyNoticeVersion: view.privacyNotice.allergyNoticeVersion, allergyNoticeHash: view.privacyNotice.allergyNoticeHash },
@@ -276,7 +278,7 @@ function publicSubmission() {
 test('página pública de admissão: envio PJ completo grava o aceite e avança a etapa', { timeout: 180_000 }, async () => {
   const { processes, future, read, submitForm, upload, consents } = publicSubmission();
   const pj = processes.doc('routes-public-submit-pj');
-  await pj.set({ publicToken: 'token-submit-pj', candidateName: 'Representante Sintético', employmentRelationshipType: 'pj', status: 'pending', publicTokenExpiresAt: future, documents: [],
+  await pj.set({ publicToken: 'token-submit-pj', candidateName: 'Representante Sintético', employmentRelationshipType: 'pj', status: 'pending', publicTokenExpiresAt: future, documents: [{ id: 'cnpj_card', label: 'CNPJ sintetico', required: true, status: 'pending' }],
     pjWorkflow: { currentStep: 'provider_registration', steps: { provider_registration: { status: 'active' }, registration_review: { status: 'pending' } } } });
   try {
     const pjView = await read('token-submit-pj');
@@ -284,7 +286,13 @@ test('página pública de admissão: envio PJ completo grava o aceite e avança 
       representativeCpf: '12345678909', representativeQualification: 'Sócio administrador', authoritySource: 'social_contract', bankMethod: 'pix',
       bankHolderName: 'Empresa Sintética', bankHolderDocument: '12345678000195', pixKey: 'chave-sintetica', pixKeyType: 'random', bankName: 'Banco', bankAgency: '1', bankAccount: '2', bankAccountType: 'checking',
       email: 'pj@example.test', dataAccuracyConfirmed: true, representationAuthorityConfirmed: true, invoiceAcknowledged: true };
-    const pjSent = await submitForm('token-submit-pj', { answers: pjAnswers, documents: upload(pjView.documents.filter((item) => item.required)), ...consents(pjView) }, '198.51.100.2');
+    const tampered = upload(pjView.documents.filter(item => item.required), 'token-submit-pj');
+    Object.values(tampered)[0].filePath = 'financial/private-proof.pdf';
+    const denied = await submitForm('token-submit-pj', { answers: pjAnswers, documents: tampered, ...consents(pjView) }, '198.51.100.5');
+    assert.equal(denied.status, 400);
+    assert.equal((await payload(denied)).error.code, 'ONBOARDING_DOCUMENT_REFERENCE_INVALID');
+    assert.equal((await pj.get()).get('publicFormSubmittedAt'), undefined);
+    const pjSent = await submitForm('token-submit-pj', { answers: pjAnswers, documents: upload(pjView.documents.filter((item) => item.required), 'token-submit-pj'), ...consents(pjView) }, '198.51.100.2');
     const pjBody = await payload(pjSent);
     assert.equal(pjSent.status, 200, JSON.stringify(pjBody));
     const storedPj = (await pj.get()).data();
@@ -304,7 +312,7 @@ test('página pública de admissão: envio CLT completo', { timeout: 180_000 }, 
     const cltView = await read('token-submit-clt');
     const answers = { fullName: 'Pessoa Sintética', cpf: '12345678909', maritalStatus: 'Solteiro(a)', hasChildren: 'no',
       emergencyName: 'Contato Sintético', emergencyPhone: '(98) 99999-0000', emergencyRelation: 'Mãe/Pai', hasFoodRestriction: 'no' };
-    const sent = await submitForm('token-submit-clt', { answers, documents: upload(cltView.documents), ...consents(cltView) }, '198.51.100.1');
+    const sent = await submitForm('token-submit-clt', { answers, documents: upload(cltView.documents, 'token-submit-clt'), ...consents(cltView) }, '198.51.100.1');
     const sentBody = await payload(sent);
     assert.equal(sent.status, 200, JSON.stringify(sentBody));
     assert.match(sent.headers.get('cache-control'), /no-store/);
@@ -329,4 +337,33 @@ test('pagamento do recibo: rota inicializa, rejeita campos extras e bloqueia env
   const unavailable = await receiptPayment.POST(request('POST', path, admin), context);
   assert.equal(unavailable.status, 409);
   assert.equal((await payload(unavailable)).error.code, 'DOCUMENT_RECEIPT_PAYMENT_INTER_UNAVAILABLE');
+});
+
+
+test('payment creation preserves missing Pix and salary rule messages without a bank call', async () => {
+  const employee = hrDbAdmin.collection('employees').doc('routes-no-pix-beneficiary');
+  const { financialDbAdmin } = await import('../../src/lib/firebase-financial-admin.ts');
+  const expense = financialDbAdmin.collection('expenses').doc('routes-salary-expense');
+  await employee.set({ status: 'active' });
+  await employee.collection('field_values').doc('employee.cpf').set({ value_text: '12345678909' });
+  await expense.set({ workspaceId: 'coala', status: 'pending', provisionType: 'actual', payrollEarningType: 'salary', employeeId: employee.id, totalValue: 10, description: 'Synthetic salary' });
+  const input = { sourceType: 'salary', sourceId: expense.id, expenseId: expense.id, beneficiaryReference: { sourceType: 'employee', sourceId: employee.id }, amount: 10, description: 'Synthetic salary', scheduledFor: '2099-01-01' };
+  try {
+    const noPix = await payments.POST(request('POST', '/api/financial/payment-requests', admin, input), none);
+    assert.equal(noPix.status, 400);
+    assert.match((await payload(noPix)).error.message, /Pix/);
+    const wrongValue = await payments.POST(request('POST', '/api/financial/payment-requests', admin, { ...input, amount: 12 }), none);
+    assert.equal(wrongValue.status, 400);
+    assert.match((await payload(wrongValue)).error.message, /valor/i);
+  } finally { await hrDbAdmin.recursiveDelete(employee); await expense.delete(); }
+});
+
+
+test('accountant methods enforce identity and permission before privileged files or effects', async () => {
+  const path = '/api/hr/onboarding/synthetic/accountant-workflow';
+  const context = { params: Promise.resolve({ id: 'synthetic' }) };
+  for (const method of ['GET', 'POST', 'PATCH']) {
+    assert.equal((await accountant[method](request(method, path), context)).status, 401);
+    assert.equal((await accountant[method](request(method, path, nobody), context)).status, 403);
+  }
 });

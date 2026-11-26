@@ -1,3 +1,5 @@
+import { AutentiqueRuleError, AutentiqueProviderError } from "@/lib/autentique.server";
+import { OnboardingPersonRuleError } from "@/features/privacy/onboarding-person.server";
 import { getStorage } from "firebase-admin/storage";
 import { NextResponse, type NextRequest } from "next/server";
 import { ZodError } from "zod";
@@ -73,7 +75,10 @@ function asRuleResponse(cause: unknown) {
   if (cause instanceof ZodError) {
     return new AppError({ code: "ADMISSION_SIGNATURE_INPUT_INVALID", kind: "VALIDATION", safeMessage: "Os dados enviados para esta ação são inválidos.", cause });
   }
-  return cause instanceof AdmissionDocumentError
+  if (cause instanceof AutentiqueRuleError) return new AppError({ code: "ADMISSION_SIGNATURE_PROVIDER_RULE", kind: "VALIDATION", safeMessage: cause.message, cause });
+  if (cause instanceof AutentiqueProviderError) return new AppError({ code: "ADMISSION_SIGNATURE_PROVIDER_UNCONFIRMED", kind: "TRANSIENT_EXTERNAL", retryable: false, safeMessage: "Não foi possível confirmar o resultado. Atualize o acompanhamento das assinaturas antes de reenviar ou adicionar signatários.", cause });
+  if (cause && typeof cause === "object" && "code" in cause && (cause.code === 404 || cause.code === "storage/object-not-found")) return new AppError({ code: "ADMISSION_SIGNATURE_FILE_MISSING", kind: "NOT_FOUND", reportable: true, safeMessage: "Arquivo indisponível. Confira o acompanhamento antes de continuar.", cause });
+  return cause instanceof AdmissionDocumentError || cause instanceof OnboardingPersonRuleError
     ? new AppError({ code: "ADMISSION_DOCUMENT_REJECTED", kind: "VALIDATION", safeMessage: cause.message, reportable: true, cause })
     : cause;
 }
@@ -338,7 +343,14 @@ export const POST = secureRoute({ contract: actionContract, enforcer: actionEnfo
     }
     return NextResponse.json(serializeHrValue(result));
   } catch (cause) {
-    if (!PARTICIPANT_ACTIONS.has(action)) throw asRuleResponse(cause);
+    if (!PARTICIPANT_ACTIONS.has(action)) {
+      const mapped = asRuleResponse(cause);
+      if (mapped instanceof AppError) throw mapped;
+      throw new AppError({ code: "ADMISSION_SIGNATURE_OPERATION_UNCONFIRMED", kind: "UNEXPECTED_APPLICATION", retryable: false,
+        safeMessage: SEND_ACTIONS.has(action)
+          ? "Não foi possível confirmar o resultado. Atualize o acompanhamento das assinaturas antes de reenviar ou adicionar signatários."
+          : "Não foi possível concluir a operação. Consulte o acompanhamento das assinaturas.", cause });
+    }
     if (cause instanceof ParticipantActionUserError) reject(cause.message);
     if (isAppError(cause) && cause.kind === "VALIDATION") throw cause;
     // Falha do provedor ou interna: o usuário recebe o texto fixo; o detalhe vai só para o monitoramento.

@@ -1,3 +1,4 @@
+import { toRouteAccessError } from "@/lib/security/route-access.server";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { requireUser, type ServerUserContext } from "@/lib/auth-server";
@@ -127,7 +128,7 @@ const contract = defineSecurityContract({
   identity: { kind: "active-user" },
   authorization: { kind: "none" },
   resourceScope: { kind: "none" },
-  input: { kind: "schema", schema: "client.bootstrap.collections", unknownFields: "strip" },
+  input: { kind: "schema", schema: "client.bootstrap.collections", unknownFields: "reject" },
   effects: { mode: "read", audit: "none" },
   errorExposure: "sanitized",
 });
@@ -136,9 +137,14 @@ export const GET = secureRoute({
   contract,
   enforcer: createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, ServerUserContext, BootstrapCollection[]>(contract, {
     authenticate: ({ request }) => requireUser(request).catch((cause) => {
-      throw new AppError({ code: "CLIENT_BOOTSTRAP_UNAUTHORIZED", kind: "AUTHENTICATION", safeMessage: "Não autorizado.", cause });
+      const mapped = toRouteAccessError(cause, "CLIENT_BOOTSTRAP");
+      if (mapped.kind === "AUTHENTICATION") throw new AppError({ code: "CLIENT_BOOTSTRAP_UNAUTHORIZED", kind: "AUTHENTICATION", safeMessage: "Não autorizado.", cause });
+      throw mapped;
     }),
     parseInput: ({ request }) => {
+      if ([...request.nextUrl.searchParams.keys()].some(key => key !== 'collections') || request.nextUrl.searchParams.getAll('collections').length > 1) {
+        throw new AppError({ code: "CLIENT_BOOTSTRAP_QUERY_INVALID", kind: "VALIDATION" });
+      }
       const collections = parseCollections(request);
       if (collections.length === 0) {
         throw new AppError({ code: "CLIENT_BOOTSTRAP_COLLECTIONS_REQUIRED", kind: "VALIDATION", safeMessage: "Informe ao menos uma coleção." });

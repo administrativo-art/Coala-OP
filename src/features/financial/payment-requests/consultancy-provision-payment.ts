@@ -1,3 +1,4 @@
+import { paymentRequestError } from "./business-error";
 import type { PaymentBeneficiaryReference } from "../beneficiaries/types";
 
 export type ConsultancyProvisionPaymentInput = {
@@ -35,52 +36,52 @@ function isoDay(value: unknown) {
 /** Checks the exact forecast and beneficiary before a request can reach Inter. */
 export function assertConsultancyProvisionPaymentTarget(input: ConsultancyProvisionPaymentInput, expense: Target | null, employee: Target | null, workspaceId = "coala", requestId?: string) {
   if (!input.expenseId || input.sourceId !== input.expenseId || expense?.id !== input.expenseId) {
-    throw new Error("O Pix da consultoria deve usar a própria provisão como origem.");
+    throw paymentRequestError("O Pix da consultoria deve usar a própria provisão como origem.");
   }
   if (input.beneficiaryReference.sourceType !== "employee" || !employee || employee.id !== input.beneficiaryReference.sourceId || employee.status !== "active") {
-    throw new Error("O favorecido da consultoria não corresponde a um cadastro ativo.");
+    throw paymentRequestError("O favorecido da consultoria não corresponde a um cadastro ativo.");
   }
-  if (expense.consultancyEmployeeId !== employee.id) throw new Error("A provisão não possui vínculo confirmado com este favorecido.");
-  if (!/^[a-f0-9-]{32,40}$/i.test(String(expense.consultancyContractDocumentId ?? ""))) throw new Error("A provisão não possui aditivo identificado.");
+  if (expense.consultancyEmployeeId !== employee.id) throw paymentRequestError("A provisão não possui vínculo confirmado com este favorecido.");
+  if (!/^[a-f0-9-]{32,40}$/i.test(String(expense.consultancyContractDocumentId ?? ""))) throw paymentRequestError("A provisão não possui aditivo identificado.");
   if ((expense.workspaceId && expense.workspaceId !== workspaceId) || expense.status !== "provisioned" || expense.provisionType !== "forecast") {
-    throw new Error("A despesa não é uma provisão de consultoria aberta neste ambiente.");
+    throw paymentRequestError("A despesa não é uma provisão de consultoria aberta neste ambiente.");
   }
   const series = String(expense.provisionSeriesKey ?? "");
   const competence = String(expense.provisionCompetence ?? "");
   if (!/^recurring:consultoria-rh:[a-z0-9-]+$/.test(series) || !/^\d{4}-(?:0[1-9]|1[0-2])$/.test(competence)) {
-    throw new Error("A provisão não tem identidade de consultoria de RH válida.");
+    throw paymentRequestError("A provisão não tem identidade de consultoria de RH válida.");
   }
   if (normalized(expense.supplier) !== normalized(employee.name) || !normalized(employee.name)) {
-    throw new Error("O nome do favorecido diverge do fornecedor da provisão.");
+    throw paymentRequestError("O nome do favorecido diverge do fornecedor da provisão.");
   }
-  if (series !== `recurring:consultoria-rh:${slug(employee.name)}`) throw new Error("A série da provisão diverge do favorecido.");
+  if (series !== `recurring:consultoria-rh:${slug(employee.name)}`) throw paymentRequestError("A série da provisão diverge do favorecido.");
   const dueDate = isoDay(expense.dueDate);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate) || dueDate.slice(0, 7) !== competence || input.scheduledFor !== dueDate) {
-    throw new Error("O Pix deve ser programado para o vencimento da competência da provisão.");
+    throw paymentRequestError("O Pix deve ser programado para o vencimento da competência da provisão.");
   }
   const expectedCents = cents(expense.totalValue);
   if (expectedCents === null || cents(input.amount) !== expectedCents || String(expense.description ?? "").trim() !== input.description.trim()) {
-    throw new Error("O valor ou a descrição do Pix diverge da provisão.");
+    throw paymentRequestError("O valor ou a descrição do Pix diverge da provisão.");
   }
   if (expense.paidAt || expense.linkedBankTransactionId || expense.paymentState === "paid") {
-    throw new Error("A provisão já possui evidência de pagamento.");
+    throw paymentRequestError("A provisão já possui evidência de pagamento.");
   }
   const linkedRequestId = String(expense.paymentRequestId ?? "").trim();
   if (linkedRequestId && linkedRequestId !== requestId) {
-    throw new Error("A provisão já possui outra solicitação bancária.");
+    throw paymentRequestError("A provisão já possui outra solicitação bancária.");
   }
   const installments = expense.installments;
   if (!Array.isArray(installments) || installments.length !== 1) {
-    throw new Error("A provisão deve conter exatamente uma parcela.");
+    throw paymentRequestError("A provisão deve conter exatamente uma parcela.");
   }
   const installment = installments[0] as Record<string, unknown>;
   if (installment.status !== "pending" || installment.paidAt || installment.linkedBankTransactionId || installment.paymentRequestId) {
-    throw new Error("A parcela da provisão já possui pagamento ou solicitação vinculada.");
+    throw paymentRequestError("A parcela da provisão já possui pagamento ou solicitação vinculada.");
   }
-  if (isoDay(installment.dueDate) !== dueDate) throw new Error("O vencimento da parcela diverge da provisão.");
+  if (isoDay(installment.dueDate) !== dueDate) throw paymentRequestError("O vencimento da parcela diverge da provisão.");
   const installmentAmount = cents(installment.value ?? installment.amount ?? installment.totalValue);
   if (installmentAmount !== null && installmentAmount !== expectedCents) {
-    throw new Error("A parcela diverge do valor total da provisão.");
+    throw paymentRequestError("A parcela diverge do valor total da provisão.");
   }
 }
 
@@ -89,29 +90,29 @@ export function assertConsultancyActualPaymentTarget(input: ConsultancyProvision
   if (!input.expenseId || input.expenseId !== `consultancy_actual_${input.sourceId}` || expense?.id !== input.expenseId
     || expense?.sourceType !== "consultancy_contract_payment" || expense?.reconciledProvisionId !== input.sourceId
     || expense?.provisionType !== "actual" || expense?.status !== "pending" || expense.workspaceId !== workspaceId) {
-    throw new Error("A obrigação real da consultoria não corresponde à provisão original.");
+    throw paymentRequestError("A obrigação real da consultoria não corresponde à provisão original.");
   }
   if (input.beneficiaryReference.sourceType !== "employee" || !employee || employee.id !== input.beneficiaryReference.sourceId || employee.status !== "active" || normalized(expense.supplier) !== normalized(employee.name)) {
-    throw new Error("O favorecido da obrigação real não corresponde à consultoria.");
+    throw paymentRequestError("O favorecido da obrigação real não corresponde à consultoria.");
   }
-  if (expense.consultancyEmployeeId !== employee.id) throw new Error("A obrigação real perdeu o vínculo com o favorecido.");
-  if (!/^[a-f0-9-]{32,40}$/i.test(String(expense.consultancyContractDocumentId ?? ""))) throw new Error("A obrigação real perdeu o aditivo identificado.");
+  if (expense.consultancyEmployeeId !== employee.id) throw paymentRequestError("A obrigação real perdeu o vínculo com o favorecido.");
+  if (!/^[a-f0-9-]{32,40}$/i.test(String(expense.consultancyContractDocumentId ?? ""))) throw paymentRequestError("A obrigação real perdeu o aditivo identificado.");
   if (!/^recurring:consultoria-rh:[a-z0-9-]+$/.test(String(expense.provisionSeriesKey ?? "")) || !/^\d{4}-(?:0[1-9]|1[0-2])$/.test(String(expense.provisionCompetence ?? ""))) {
-    throw new Error("A obrigação real não tem identidade de competência válida.");
+    throw paymentRequestError("A obrigação real não tem identidade de competência válida.");
   }
-  if (expense.provisionSeriesKey !== `recurring:consultoria-rh:${slug(employee.name)}`) throw new Error("A série da obrigação real diverge do favorecido.");
+  if (expense.provisionSeriesKey !== `recurring:consultoria-rh:${slug(employee.name)}`) throw paymentRequestError("A série da obrigação real diverge do favorecido.");
   const dueDate = isoDay(expense.dueDate);
   if (input.scheduledFor !== dueDate || dueDate.slice(0, 7) !== expense.provisionCompetence || cents(input.amount) !== cents(expense.totalValue) || input.description.trim() !== String(expense.description ?? "").trim()) {
-    throw new Error("Data, valor ou descrição do Pix divergem da obrigação real.");
+    throw paymentRequestError("Data, valor ou descrição do Pix divergem da obrigação real.");
   }
   const linkedRequestId = String(expense.paymentRequestId ?? "").trim();
   if ((linkedRequestId && linkedRequestId !== requestId) || expense.paidAt || expense.linkedBankTransactionId || expense.paymentState === "paid") {
-    throw new Error("A obrigação real já possui outro pagamento ou solicitação.");
+    throw paymentRequestError("A obrigação real já possui outro pagamento ou solicitação.");
   }
   const installments = expense.installments;
-  if (!Array.isArray(installments) || installments.length !== 1)throw new Error("A obrigação real deve ter uma parcela.");
+  if (!Array.isArray(installments) || installments.length !== 1)throw paymentRequestError("A obrigação real deve ter uma parcela.");
   const installment = installments[0] as Record<string, unknown>;
   if (installment.status !== "pending" || installment.paidAt || installment.linkedBankTransactionId || (installment.paymentRequestId && installment.paymentRequestId !== requestId) || cents(installment.value ?? installment.amount) !== cents(expense.totalValue)) {
-    throw new Error("A parcela real mudou ou já foi paga.");
+    throw paymentRequestError("A parcela real mudou ou já foi paga.");
   }
 }
