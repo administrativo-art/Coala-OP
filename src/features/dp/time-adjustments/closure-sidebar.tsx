@@ -14,7 +14,7 @@ export function ClosureSidebar({ mode, title, subtitle, groups, query, onQueryCh
 }) {
   const pct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
   return (
-    <aside className="flex max-h-[42vh] w-full shrink-0 flex-col overflow-hidden rounded-[12px] bg-[#0f172a] px-[11px] pb-[11px] pt-[15px] text-slate-100 lg:sticky lg:top-4 lg:max-h-[calc(100vh-9rem)] lg:w-[230px]">
+    <aside className="flex max-h-[42vh] w-full shrink-0 flex-col overflow-hidden rounded-[12px] bg-[#0f172a] px-[11px] pb-[11px] pt-[15px] text-slate-100 lg:sticky lg:top-[68px] lg:max-h-[calc(100vh-84px)] lg:w-[230px]">
       <div className="flex items-center gap-2 px-[5px]">
         <ClipboardCheck className="h-[15px] w-[15px] shrink-0 text-[#db2777]" strokeWidth={2.4} />
         <div className="min-w-0">

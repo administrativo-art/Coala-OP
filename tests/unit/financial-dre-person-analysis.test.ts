@@ -120,3 +120,30 @@ test("mantém salário de agosto em agosto quando a competência legada está à
   assert.equal(analysis.employerCost, 1_044.10);
   assert.equal(analysis.people[0]?.employeeName, "Maria Silva");
 });
+
+test("beneficiária external informativa não entra na visão de colaboradores; empregado informativo permanece", async () => {
+  const { calculateDreExpenses } = await import("../../src/features/financial/lib/dre-expense-calculation");
+  const dentalAccounts = { dental: { name: "Plano odontológico", drePosition: "pessoal", isDreAccount: true } };
+  const dental = [{ id: "dental-october", accountingContractVersion: 1, competenceMonth: "2026-10", status: "provisioned", accountPlan: "dental", totalValue: 60.10, hasPersonAllocations: true,
+    personAllocations: [
+      { employeeId: "external:beneficiaria", employeeName: "Beneficiária externa", accountPlanId: "dental", analysisType: "informational" as const, amount: 30.05, resultCenter: "Administrativo" },
+      { employeeId: "employee-1", employeeName: "Colaboradora exemplo", accountPlanId: "dental", analysisType: "informational" as const, amount: 30.05, resultCenter: "Administrativo" },
+    ] }];
+  const before = structuredClone(dental);
+  const accountingBefore = calculateDreExpenses({ expenses: dental, accounts: dentalAccounts, monthKey: "2026-10", resultCenterNames: { Administrativo: "Administrativo" } });
+  const analysis = buildDrePersonAnalysis({ expenses: dental, accounts: dentalAccounts, monthKey: "2026-10" });
+  assert.deepEqual(analysis.people.map(p => p.employeeId), ["employee-1"]);
+  assert.equal(analysis.people[0].informational, 30.05); assert.equal(analysis.people[0].salary, 0); assert.equal(analysis.people[0].bonuses, 0);
+  assert.deepEqual(dental, before, "a filtragem da visão não altera os lançamentos originais");
+  assert.equal(accountingBefore.totalsByPosition.pessoal, 60.10);
+  assert.deepEqual(calculateDreExpenses({ expenses: dental, accounts: dentalAccounts, monthKey: "2026-10", resultCenterNames: { Administrativo: "Administrativo" } }), accountingBefore);
+});
+test("referência legada não tipada como external permanece sem inferir vínculo pelo nome", () => {
+  const analysis = buildDrePersonAnalysis({ accounts, monthKey: "2026-10", expenses: [{ id: "legacy", competenceMonth: "2026-10", status: "pending", totalValue: 10, accountPlan: "salary", hasPersonAllocations: true,
+    personAllocations: [{ employeeId: "legacy-unknown", employeeName: "Beneficiária externa (texto livre)", accountPlanId: "salary", analysisType: "informational", amount: 10, resultCenter: "Administrativo" }] }] });
+  assert.equal(analysis.people[0].employeeId, "legacy-unknown"); assert.equal(analysis.informational, 10);
+});
+test("namespace external também é excluído quando chega pelo fallback de folha", () => {
+  const analysis = buildDrePersonAnalysis({ accounts, monthKey: "2026-10", expenses: [{ id: "direct-external", competenceMonth: "2026-10", status: "pending", description: "Salário | Beneficiária externa", supplierId: "external:legacy-beneficiary", accountPlan: "salary", totalValue: 20 }] });
+  assert.equal(analysis.people.length, 0); assert.equal(analysis.employerCost, 0);
+});

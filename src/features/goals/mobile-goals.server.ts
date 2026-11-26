@@ -111,7 +111,7 @@ export async function loadMobileUnitGoals(actor: ServerUserContext, kioskId: str
       method: period.goalMethodSnapshot ?? null,
       activeDays: period.distributionMode === "scheduled_days" ? scheduleEvidence[index]!.dateKeys : undefined,
     };
-    const team = mobileGoalTeam(employeeGoals);
+    const team = mobileGoalTeam(employeeGoals, scheduleEvidence[index]!.workedDaysByEmployeeId);
     const prize = mobileGoalPrize(input, team);
     return {
       id: period.id,

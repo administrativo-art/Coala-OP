@@ -2,7 +2,7 @@ import 'server-only';
 
 import { FieldValue, Timestamp, type DocumentSnapshot, type QueryDocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
 
-import { buildGoalClosureBonusSnapshot } from '@/lib/goal-bonus-snapshot';
+import { buildGoalClosureBonusSnapshot, countGoalScheduledWork } from '@/lib/goal-bonus-snapshot';
 import { countsDPShiftTowardGoals } from '@/lib/dp-external-coverage';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { AppError } from '@/lib/observability/app-error';
@@ -59,11 +59,6 @@ function monthKeysBetween(startKey: string, endKey: string) {
     if (month === 13) { year += 1; month = 1; }
   }
   return result;
-}
-
-function extractShiftTimes(label: string) {
-  const match = label.match(/\((\d{2}:\d{2})[–\-](\d{2}:\d{2})\)/u);
-  return match ? { start: match[1], end: match[2] } : null;
 }
 
 function assertCanManage(context: ServerUserContext, kioskId: string) {
@@ -155,20 +150,24 @@ async function loadClosureEvidence(
   const employeeDateKeysByGoalId: Record<string, string[]> = {};
   const employeeDayCountsByGoalId: Record<string, number> = {};
   const employeeDailyTargetsByGoalId: Record<string, number> = {};
+  const scheduledCountsByGoalId: Record<string, { days: number; turns: number }> = {};
+  const workedDateSetsByEmployeeId = new Map<string, Set<string>>();
+  const officialGoalShifts = eligibleWorkShifts.map((shift) => ({
+    userId: String(shift.get('userId')),
+    date: String(shift.get('date')),
+    startTime: String(shift.get('startTime') ?? ''),
+    endTime: String(shift.get('endTime') ?? ''),
+  }));
 
   for (const goal of eligibleEmployeeGoals) {
     const goalUsesSchedule = periodUsesSchedule || goal.distributionMode === 'scheduled_days';
-    const dates = goalUsesSchedule
-      ? [...new Set(eligibleWorkShifts.flatMap((shift) => {
-          if (shift.get('userId') !== goal.employeeId) return [];
-          if (goal.shiftId) {
-            const configured = period.shifts?.find((candidate) => candidate.id === goal.shiftId);
-            const times = configured ? extractShiftTimes(configured.label ?? '') : null;
-            if (!times || shift.get('startTime') !== times.start || shift.get('endTime') !== times.end) return [];
-          }
-          return [String(shift.get('date'))];
-        }))].sort()
-      : [];
+    const work = countGoalScheduledWork(goal, period, officialGoalShifts);
+    const scheduledDates = work.dates;
+    const personDates = workedDateSetsByEmployeeId.get(goal.employeeId) ?? new Set<string>();
+    scheduledDates.forEach((date) => personDates.add(date));
+    workedDateSetsByEmployeeId.set(goal.employeeId, personDates);
+    scheduledCountsByGoalId[goal.id] = { days: scheduledDates.length, turns: work.turns };
+    const dates = goalUsesSchedule ? scheduledDates : [];
     const goalDateKeys = goalUsesSchedule && dates.length > 0 ? dates : calendarKeys;
     const dayCount = Math.max(goalDateKeys.length, 1);
     employeeDateKeysByGoalId[goal.id] = goalDateKeys;
@@ -188,7 +187,11 @@ async function loadClosureEvidence(
     employeeDayCountsByGoalId,
     employeeDailyTargetsByGoalId,
   };
-  return { period, eligibleEmployeeGoals, closureSnapshot, externalEmployeeIds: [...externalEmployeeIds].sort() };
+  return { period, workedDaysByEmployeeId: Object.fromEntries([...workedDateSetsByEmployeeId]
+    .map(([employeeId, dates]) => [employeeId, dates.size])), eligibleEmployeeGoals: eligibleEmployeeGoals.map((goal) => ({ ...goal,
+    scheduledDays: scheduledCountsByGoalId[goal.id]?.days ?? 0,
+    scheduledTurnCount: scheduledCountsByGoalId[goal.id]?.turns ?? 0,
+  })), closureSnapshot, externalEmployeeIds: [...externalEmployeeIds].sort() };
 }
 
 export async function transitionGoalPeriod(params: {
@@ -246,6 +249,7 @@ export async function transitionGoalPeriod(params: {
           period: evidence.period,
           employeeGoals: evidence.eligibleEmployeeGoals,
           periodDayCount: evidence.closureSnapshot.periodDayCount,
+          workedDaysByEmployeeId: evidence.workedDaysByEmployeeId,
           source: 'closure',
         })
       : null;

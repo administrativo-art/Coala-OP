@@ -4,13 +4,11 @@ import { assertFirestoreEmulatorSafety } from "../helpers/firestore-emulator-saf
 assertFirestoreEmulatorSafety({ projectId: "demo-coala-repository", databaseId: "coala-financeiro" });
 const { financialDbAdmin: db } = await import("../../src/lib/firebase-financial-admin.ts");
 const { WORKSPACE_ID } = await import("../../src/lib/workspace.ts");
-const { Timestamp } = await import("firebase-admin/firestore");
 const { AppError } = await import("../../src/lib/observability/app-error.ts");
 const { executeFeeAction, listFeeRecords, listFeeCandidates } = await import("../../src/features/financial/acquirer-fees/repository.server.ts");
 const { queryFeeEvidence } = await import("../../src/features/financial/acquirer-fees/source.server.ts");
 const { reviewPixSnapshot } = await import("../../src/features/financial/sales-reconciliation/pix-source.ts");
 const { financialAgentMappingSchema } = await import("../../src/features/financial/agent/contracts.ts");
-const { registerReportedPayment, queueMatchedBankPayment } = await import("../../src/features/financial/obligations/service.server.ts");
 const { cardXml } = await import("../helpers/acquirer-fee-fixtures.ts");
 
 const prefix = "acquirer-fee-integration";
@@ -65,102 +63,13 @@ async function fixture(suffix, { cards = false } = {}) {
   return { call, create, batch, preview, request, deps, mappingRef, pixRef, rows, head, unit, centerId, accountPlanId, xmlCalls: () => xmlCalls };
 }
 
-test("Pix concorrente/retry cria uma despesa, sem XML, pagamentos, obrigação ou banco; evento cruza mês", async () => {
-  const f = await fixture("concurrent");
-  const results = await Promise.all([f.call("create", f.create), f.call("create", f.create)]);
-  assert.equal(results[0].record.expenseId, results[1].record.expenseId);
-  assert.equal(results.filter(r => r.idempotent).length, 1);
-  const ref = db.collection("expenses").doc(results[0].record.expenseId), expense = (await ref.get()).data();
-  assert.equal(expense.totalValue, 0.05); assert.equal(expense.status, "paid");
-  assert.equal(expense.competenceMonth, "2026-08");
-  assert.equal(expense.competenceDate.toDate().toISOString().slice(0, 10), "2026-08-31");
-  assert.equal(expense.paidAt.toDate().toISOString().slice(0, 10), "2026-09-01");
-  assert.equal(expense.sourceSettlement.kind, "acquirer_fee");
-  assert.equal(expense.cashEffectIncludedInNetReceivable, true);
-  assert.equal(expense.settlementSummary.balanceAmountCents, 0);
-  assert.equal(expense.settlementSummary.confirmedCashAmountCents, 0);
-  for (const name of ["payments", "paymentSplits", "transactions", "financialObligations", "bankPaymentRequests"]) {
-    assert.equal((await db.collection(name).where("expenseId", "==", ref.id).limit(1).get()).empty, true);
-  }
-  await assert.rejects(registerReportedPayment(ref.id, { idempotencyKey: "none" }, { uid: prefix }), code("EXPENSE_SETTLED_AT_SOURCE"));
-  await assert.rejects(queueMatchedBankPayment({ batch: db.batch(), expenseId: ref.id, expense, bankTransactionId: "none", principalAmount: .05, cashAmount: .05, paidAt: Timestamp.now(), actor: { uid: prefix } }), code("EXPENSE_SETTLED_AT_SOURCE"));
-  assert.equal((await listFeeRecords(f.request, context)).records.length, 1);
-  assert.equal(f.xmlCalls(), 0);
-});
-
-test("MDR soma decimal antes de arredondar, competência anterior, candidato usa dia da competência", async () => {
-  const f = await fixture("cards", { cards: true });
-  assert.equal(f.batch.amountCents, 1); assert.equal(f.batch.competenceDate, "2026-09-01");
-  const manualRef = own(db.collection("expenses").doc(`${prefix}-manual`));
-  const dueDate = Timestamp.fromDate(new Date("2026-09-04T12:00:00Z"));
-  const original = { obligationId: `obl_${manualRef.id}`, totalValue: .01, description: "Taxas avulsas", status: "pending", paymentMethod: "single",
-    competenceMonth: "2026-09", competenceDate: dueDate, dueDate, accountId: f.accountPlanId, accountPlan: f.accountPlanId,
-    resultCenterId: f.centerId, installments: [{ number: 1, dueDate, value: .01, status: "pending" }], notes: "Antes" };
-  await manualRef.set(original);
-  assert.equal((await listFeeCandidates(f.request, f.centerId, undefined, context)).candidates.length, 0);
-  assert.equal((await listFeeCandidates({ ...f.request, referenceDate: f.batch.competenceDate }, f.centerId, undefined, context)).candidates[0].id, manualRef.id);
-  await assert.rejects(f.call("create", f.create), code("ACQUIRER_FEE_MANUAL_CANDIDATE"));
-  const link = { batchId: f.batch.id, fingerprint: f.batch.fingerprint, existingExpenseId: manualRef.id };
-  assert.equal((await f.call("link", link)).record.expenseId, manualRef.id);
-  assert.equal((await f.call("link", link)).idempotent, true);
-  const paid = (await manualRef.get()).data();
-  assert.equal(paid.workspaceId, WORKSPACE_ID); assert.equal(paid.installments[0].status, "paid");
-  assert.equal(paid.competenceDate.toDate().toISOString().slice(0, 10), f.batch.competenceDate);
-  await manualRef.update({ notes: "Nota posterior" });
-  await assert.rejects(f.call("cancel", { batchId: f.batch.id }), code("ACQUIRER_FEE_INPUT_INVALID"));
-  await f.call("cancel", { batchId: f.batch.id, reason: "Correção de vínculo" });
-  const restored = (await manualRef.get()).data();
-  assert.equal(restored.workspaceId, undefined); assert.equal(restored.sourceSettlement, undefined);
-  assert.equal(restored.status, "pending"); assert.equal(restored.notes, "Nota posterior");
-  assert.deepEqual(restored.installments, original.installments); assert.deepEqual(restored.competenceDate, original.competenceDate);
-});
-
-test("origem alterada, overlap parcial e correção explícita preservam despesa cancelada e histórico", async () => {
-  const f = await fixture("changes");
-  const first = await f.call("create", f.create);
-  f.rows[0].reviewEvidence.amounts.fee = 6;
-  await assert.rejects(f.call("create", f.create), code("ACQUIRER_FEE_STALE_PREVIEW"));
-  let fresh = await f.call("preview"), batch = fresh.batches[0];
-  await assert.rejects(f.call("create", { ...f.create, fingerprint: batch.fingerprint }), code("ACQUIRER_FEE_SOURCE_CHANGED"));
-  f.rows.push({ ...f.rows[0], rowId: "c".repeat(64), reviewEvidence: { ...f.rows[0].reviewEvidence, eventId: "another-event", e2eId: "another-e2e" } });
-  f.head.summary.transactionCount = 2;
-  fresh = await f.call("preview"); batch = fresh.batches[0];
-  await assert.rejects(f.call("create", { ...f.create, batchId: batch.id, fingerprint: batch.fingerprint }), code("ACQUIRER_FEE_OVERLAP"));
-  // Correction is possible even when the provider XML/snapshot is now unavailable.
-  await f.call("cancel", { batchId: f.batch.id, reason: "Fonte reprocessada" }, { ...f.deps, readPix: async () => { throw new Error("must not query source"); } });
-  assert.equal((await db.collection("expenses").doc(first.record.expenseId).get()).data().status, "cancelled");
-  const revised = { ...f.create, batchId: batch.id, fingerprint: batch.fingerprint };
-  await assert.rejects(f.call("create", revised), code("ACQUIRER_FEE_REASON"));
-  const next = await f.call("create", { ...revised, reason: "Nova fonte validada" });
-  assert.notEqual(next.record.expenseId, first.record.expenseId);
-  const history = await listFeeRecords(f.request, context);
-  assert.equal(history.records.filter(r => r.active).length, 1);
-  assert.equal(history.records.filter(r => !r.active).length, 1);
-});
-
-test("admin não ultrapassa workspace, conta-folha e centro exclusivos; mapping/head revalidam na transação", async () => {
-  const f = await fixture("scope");
-  await assert.rejects(f.call("create", f.create, f.deps, { ...context, isDefaultAdmin: false }), code("ACQUIRER_FEE_FORBIDDEN"));
-  await assert.rejects(f.call("create", f.create, f.deps, { ...context, workspace_id: "foreign" }), code("FINANCIAL_AGENT_MAPPING_SCOPE"));
-  await db.collection("resultCenters").doc(f.centerId).update({ unitIds: [f.unit, "another-unit"] });
-  await assert.rejects(f.call("create", f.create), code("CASH_WITHDRAWAL_CENTER_INVALID"));
-  await db.collection("resultCenters").doc(f.centerId).update({ unitIds: [f.unit] });
-  const child = own(db.collection("accounts").doc(`${prefix}-child`)); await child.set({ parentId: f.accountPlanId });
-  await assert.rejects(f.call("create", f.create), code("CASH_WITHDRAWAL_ACCOUNT_INVALID"));
-  await child.delete();
-  const originalMapping = financialAgentMappingSchema.parse((await f.mappingRef.get()).data());
-  await f.mappingRef.update({ kioskId: "another-unit" });
-  await assert.rejects(f.call("create", f.create, { ...f.deps, readMapping: async () => originalMapping }), code("FINANCIAL_AGENT_MAPPING_REQUIRED"));
-  await f.mappingRef.set(originalMapping);
-  await f.pixRef.update({ sourceHash: "d".repeat(64) });
-  await assert.rejects(f.call("create", f.create), code("ACQUIRER_FEE_SOURCE_CHANGED"));
-});
-
-test("correção não sobrescreve alteração financeira de outro fluxo", async () => {
-  const f = await fixture("guard");
-  const first = await f.call("create", f.create);
-  await db.collection("expenses").doc(first.record.expenseId).update({ totalValue: 3 });
-  await assert.rejects(f.call("cancel", { batchId: f.batch.id, reason: "Correção" }), code("ACQUIRER_FEE_CHANGED"));
+test("prévia e candidatos legados permanecem consultáveis; nova criação/vínculo requer venda conciliada", async () => {
+ const f = await fixture("legacy-guard");
+ assert.ok(f.preview.batches.length);
+ await assert.rejects(f.call("create", f.create), code("ACQUIRER_FEE_RECOGNITION_REQUIRED"));
+ await assert.rejects(f.call("link", { batchId:f.batch.id, fingerprint:f.batch.fingerprint, existingExpenseId:"manual" }), code("ACQUIRER_FEE_RECOGNITION_REQUIRED"));
+ assert.equal((await listFeeRecords(f.request, context)).records.length,0);
+ assert.equal((await listFeeCandidates(f.request,f.centerId,undefined,context)).candidates.length,0);
 });
 
 test("origem Stone 404 real fica pendente; inesperados não são engolidos; teto antes de buscar origens", async () => {

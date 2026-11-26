@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { createHash } from 'node:crypto';
+import { indexedPersonScheduleIds, personScheduleIndexRefs } from './person-schedule-index.server';
 import { FieldValue, Timestamp, type DocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { scheduleShiftFingerprint } from '@/lib/dp-schedule-publication';
@@ -29,9 +29,7 @@ function personKey(value: Shift | null) {
   }
   return { userId, competence: date.slice(0, 7) };
 }
-function indexRef(userId: string, competence: string) {
-  return dbAdmin.collection('dp_personScheduleIndex').doc(createHash('sha256').update(`${userId}:${competence}`).digest('hex'));
-}
+
 
 /**
  * Call after domain reads and before any transaction writes. The schedule snapshot must come from
@@ -50,6 +48,10 @@ export async function prepareActiveRevisionOperationalChanges(params: {
   if (!changes.length || changes.length > MAX_CHANGES_PER_TRANSACTION || new Set(changes.map((change) => change.shiftId)).size !== changes.length) {
     invalid('DP_OPERATIONAL_CHANGE_LIMIT', 'Há turnos demais ou repetidos nesta operação.');
   }
+  const closedDates = new Set<string>(schedule.get('closedDates') ?? []);
+  if (changes.some(({ next }) => next?.type === 'work' && typeof next.date === 'string' && closedDates.has(next.date))) {
+    invalid('DP_OPERATIONAL_DAY_CLOSED', 'A unidade está fechada na data do turno.');
+  }
   const revisionRef = scheduleRef.collection('revisions').doc(revisionId);
   const overlayRef = scheduleRef.collection('operationalOverlays').doc(revisionId);
   const entryRefs = changes.map((change) => overlayRef.collection('entries').doc(id(change.shiftId)));
@@ -63,7 +65,7 @@ export async function prepareActiveRevisionOperationalChanges(params: {
     const person = personKey(change.next);
     return person ? [[`${person.userId}:${person.competence}`, person] as const] : [];
   })).values()];
-  const indexRefs = newPeople.map((person) => indexRef(person.userId, person.competence));
+  const indexRefs = newPeople.map((person) => personScheduleIndexRefs(dbAdmin, person.userId, person.competence)[0]);
   const [manifest, bases, overlays, personRows, indexes] = await Promise.all([
     tx.get(revisionRef), tx.getAll(...baseRefs), tx.getAll(...entryRefs),
     peopleRefs.length ? tx.getAll(...peopleRefs) : [],
@@ -140,14 +142,9 @@ export async function readActiveRevisionShift(tx: Transaction, schedule: Documen
 
 /** Candidate index is a superset; each schedule pointer is checked in this transaction. */
 export async function readActiveRevisionPersonMonth(tx: Transaction, userId: string, competence: string): Promise<Array<Shift & { id: string; scheduleId: string }>> {
-  const index = await tx.get(indexRef(id(userId), competence));
-  if (!index.exists) return [];
-  if (index.get('userId') !== userId || index.get('competence') !== competence) invalid('DP_OPERATIONAL_INDEX_INVALID', 'O índice da pessoa está inconsistente.');
-  const scheduleIds = index.get('scheduleIds');
-  if (!Array.isArray(scheduleIds) || scheduleIds.length > MAX_CANDIDATE_SCHEDULES
-    || scheduleIds.some((candidate) => typeof candidate !== 'string' || !candidate || candidate.includes('/'))) {
-    invalid('DP_OPERATIONAL_INDEX_INVALID', 'O índice da pessoa está inconsistente.');
-  }
+  id(userId);
+  const indexes = await tx.getAll(...personScheduleIndexRefs(dbAdmin, userId, competence));
+  const scheduleIds = indexedPersonScheduleIds(indexes, userId, competence, MAX_CANDIDATE_SCHEDULES);
   if (scheduleIds.length > 20) invalid('DP_OPERATIONAL_DAY_SCHEDULE_LIMIT', 'Há escalas candidatas demais para validar o dia.');
   const schedules = scheduleIds.length ? await tx.getAll(...scheduleIds.map((candidate) => dbAdmin.collection('dp_schedules').doc(candidate))) : [];
   const result: Array<Shift & { id: string; scheduleId: string }> = [];

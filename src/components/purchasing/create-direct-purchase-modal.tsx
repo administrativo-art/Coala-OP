@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { CurrencyInput } from '@/components/ui/currency-input';
+import { AccountPlanTreeSelect } from '@/components/purchasing/account-plan-tree-select';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
@@ -65,12 +66,18 @@ const schema = z.object({
   paymentDueDate: z.string().min(1, 'Informe a data.'),
   estimatedReceiptDate: z.string().optional(),
   deliveryFee: z.coerce.number().min(0).optional(),
+  serviceFee: z.coerce.number().min(0).optional(),
+  serviceFeeAccountPlanId: z.string().optional(),
+  serviceFeePaymentMode: z.enum(['included_with_goods', 'separate'] as const).optional(),
   freightPaymentMode: z.enum(['included_with_goods', 'separate'] as const).optional(),
   freightSupplierName: z.string().optional(),
   trackingInfo: z.string().optional(),
   notes: z.string().optional(),
   destinationKioskId: z.string().optional(),
 }).superRefine((values, context) => {
+  if (Number(values.serviceFee || 0) > 0 && !values.serviceFeeAccountPlanId) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['serviceFeeAccountPlanId'], message: 'Selecione o plano de contas da taxa.' });
+  }
   if (
     Number(values.deliveryFee || 0) > 0 &&
     values.freightPaymentMode === 'separate' &&
@@ -247,7 +254,7 @@ export function CreateDirectPurchaseModal({ open, onOpenChange, defaultDestinati
   const { kiosks } = useKiosks();
   const accessibleKiosks = useMemo(() => kiosks.filter(kiosk => user && canAccessUnit(user, kiosk.id, { isDefaultAdmin })), [kiosks, user, isDefaultAdmin]);
   const { createPurchase } = usePurchaseOrders();
-  const { paymentCards, flattenedAccountPlans } = usePurchasingFinancialOptions();
+  const { paymentCards, accountPlans, flattenedAccountPlans } = usePurchasingFinancialOptions();
   const [items, setItems] = useState<DraftItem[]>([newDraftItem()]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -264,6 +271,9 @@ export function CreateDirectPurchaseModal({ open, onOpenChange, defaultDestinati
       paymentDueDate: today,
       estimatedReceiptDate: today,
       deliveryFee: 0,
+      serviceFee: 0,
+      serviceFeeAccountPlanId: '',
+      serviceFeePaymentMode: 'included_with_goods',
       freightPaymentMode: 'separate',
       freightSupplierName: '',
       trackingInfo: '',
@@ -282,14 +292,15 @@ export function CreateDirectPurchaseModal({ open, onOpenChange, defaultDestinati
   const paymentMethod = form.watch('paymentMethod');
   const paymentCardKey = form.watch('paymentCardKey') ?? '';
   const deliveryFee = Number(form.watch('deliveryFee') || 0);
+  const serviceFee = Number(form.watch('serviceFee') || 0);
   const freightPaymentMode = (form.watch('freightPaymentMode') || 'separate') as PurchaseFreightPaymentMode;
   const selectedPaymentCard = useMemo(
     () => paymentCards.find((card) => getPaymentCardKey(card.accountId, card.methodId) === paymentCardKey) ?? null,
     [paymentCards, paymentCardKey],
   );
   const total = useMemo(
-    () => items.reduce((sum, item) => sum + item.quantityOrdered * item.unitPriceOrdered, 0) + deliveryFee,
-    [deliveryFee, items],
+    () => items.reduce((sum, item) => sum + item.quantityOrdered * item.unitPriceOrdered, 0) + deliveryFee + serviceFee,
+    [deliveryFee, serviceFee, items],
   );
 
   const updateItem = (key: string, patch: Partial<DraftItem>) => {
@@ -363,6 +374,7 @@ export function CreateDirectPurchaseModal({ open, onOpenChange, defaultDestinati
     const supplier = entities.find(e => e.id === values.supplierId);
     const defaultGoodsPlan = flattenedAccountPlans.find((plan) => plan.id === purchasingDefaults.goodsAccountPlanId);
     const defaultFreightPlan = flattenedAccountPlans.find((plan) => plan.id === purchasingDefaults.freightAccountPlanId);
+    const serviceFeePlan = flattenedAccountPlans.find((plan) => plan.id === values.serviceFeeAccountPlanId);
 
     try {
       const orderId = await createPurchase({
@@ -394,6 +406,10 @@ export function CreateDirectPurchaseModal({ open, onOpenChange, defaultDestinati
             ? values.freightSupplierName?.trim()
             : undefined,
         deliveryFee,
+        serviceFee,
+        serviceFeeAccountPlanId: serviceFee > 0 ? values.serviceFeeAccountPlanId : undefined,
+        serviceFeeAccountPlanName: serviceFee > 0 ? serviceFeePlan?.name : undefined,
+        serviceFeePaymentMode: serviceFee > 0 ? values.serviceFeePaymentMode : undefined,
         trackingInfo: values.trackingInfo || undefined,
         notes: values.notes || undefined,
         items: validItems.map(({ productId, baseItemId, itemName, operationalCategoryId, unit, purchaseUnitType, quantityOrdered, unitPriceOrdered, entryType }) => {
@@ -831,6 +847,29 @@ export function CreateDirectPurchaseModal({ open, onOpenChange, defaultDestinati
                     )}
                   />
                 )}
+              </div>
+            </div>
+
+            <div className="rounded-[14px] border border-zinc-200 bg-white p-5">
+              <h3 className="text-base font-black tracking-[-0.02em] text-zinc-950">Taxa de serviço da compra on-line</h3>
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField control={form.control} name="serviceFee" render={({ field }) => (
+                  <FormItem><FormLabel>Valor da taxa</FormLabel><FormControl><CurrencyInput value={Number(field.value || 0)} onChange={field.onChange} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="serviceFeeAccountPlanId" render={({ field }) => (
+                  <FormItem><FormLabel>Plano de contas da taxa</FormLabel>
+                    <AccountPlanTreeSelect value={field.value || '__none__'} onChange={(value) => field.onChange(value === '__none__' ? '' : value)} options={accountPlans} placeholder="Selecione o plano de contas" noneLabel="Sem taxa" allowNone disabled={serviceFee <= 0} />
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="serviceFeePaymentMode" render={({ field }) => (
+                  <FormItem className="sm:col-span-2"><FormLabel>Como a taxa será paga?</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || 'included_with_goods'} disabled={serviceFee <= 0}>
+                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                      <SelectContent><SelectItem value="included_with_goods">Junto com a mercadoria</SelectItem><SelectItem value="separate">Em pagamento separado</SelectItem></SelectContent>
+                    </Select><FormMessage />
+                  </FormItem>
+                )} />
               </div>
             </div>
 

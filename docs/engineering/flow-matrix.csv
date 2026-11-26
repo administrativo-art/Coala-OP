@@ -21,7 +21,7 @@ src/app/dashboard/dp/requests/page.tsx,active,collaborator-requests,
 src/app/dashboard/documents/generator/page.tsx,active,document-generation,
 src/app/dashboard/documents/editor/page.tsx,active,document-generation,Entrada do editor interno com três caminhos: documento em branco, usar um modelo e criar modelo.
 src/app/dashboard/documents/editor/[id]/page.tsx,active,document-generation,Editor interno Tiptap de documento livre (rascunho; prévia timbrada e finalização pelo servidor; Salvar como modelo).
-src/app/dashboard/documents/editor/documents/page.tsx,active,document-generation,Listagem própria dos documentos do editor (filtro Todos/Rascunhos/Finalizados; paginação por cursor; abrir). Também acessível pela pasta Documentos do editor no Acervo.
+src/app/dashboard/documents/editor/documents/page.tsx,active,document-generation,Listagem própria dos documentos do editor (filtro Todos/Rascunhos/Finalizados; paginação por cursor; abrir). Fora do Acervo.
 src/app/dashboard/documents/editor/templates/page.tsx,active,document-generation,Lista de modelos do editor (filtro por situação; usar; publicar e arquivar para revisores).
 src/app/dashboard/documents/editor/templates/[tid]/page.tsx,active,document-generation,Editor interno em modo modelo (salvar versão; prévia de exemplo; publicar para revisores).
 src/app/dashboard/documents/management/page.tsx,navigation,document-templates;document-generation,
@@ -64,7 +64,7 @@ src/app/dashboard/financial/cash-closures/page.tsx,active,cash-closures,
 src/app/dashboard/financial/cash-closures/sessions/[sessionId]/page.tsx,active,cash-closures,
 src/app/dashboard/financial/cash-closures/sessions/new/page.tsx,active,cash-closures,
 src/app/dashboard/financial/cash-deposits/page.tsx,active,cash-deposits,
-src/app/dashboard/financial/cash-flow/agent/page.tsx,active,cash-flow,
+src/app/dashboard/financial/cash-flow/agent/page.tsx,redirect,cash-flow,Visao do caixa (management); A receber (receivables); Antecipacoes Stone (padrao).
 src/app/dashboard/financial/budget-comparison/page.tsx,active,cash-flow,Consulta de orçamento e despesas da competência
 src/app/dashboard/financial/cash-flow/page.tsx,active,cash-flow,
 src/app/dashboard/financial/cash-flow/receivables/page.tsx,active,receivables,
@@ -79,6 +79,8 @@ src/app/dashboard/financial/expenses/page.tsx,active,expenses,
 src/app/dashboard/financial/expenses/pending-audit/page.tsx,redirect,expenses,/dashboard/financial/expenses?status=pending_audit
 src/app/dashboard/financial/financial-flow/page.tsx,redirect,cash-flow,/dashboard/financial/cash-flow
 src/app/dashboard/financial/inbox/page.tsx,redirect,financial-inbox,/dashboard/financial/expenses/inbox
+src/app/dashboard/financial/month-closing/expenses/page.tsx,active,month-closing,Fluxo de Despesas do fechamento mensal (somente leitura).
+src/app/dashboard/financial/month-closing/page.tsx,active,month-closing,Tela inicial do fechamento mensal (somente leitura).
 src/app/dashboard/financial/page.tsx,active,financial-overview,Painel com indicadores
 src/app/dashboard/financial/payment-requests/page.tsx,redirect,payment-requests,/dashboard/financial/expenses/authorizations
 src/app/dashboard/financial/reconciliation/card-statements/page.tsx,active,card-statements,
@@ -94,6 +96,7 @@ src/app/dashboard/forms/models/[modelId]/page.tsx,active,forms,
 src/app/dashboard/forms/models/new/page.tsx,active,forms,
 src/app/dashboard/forms/page.tsx,active,forms,
 src/app/dashboard/goals/analysis/page.tsx,active,goals,
+src/app/dashboard/goals/guide/page.tsx,active,goals,
 src/app/dashboard/goals/history/page.tsx,redirect,goals,/dashboard/goals/analysis?tab=closures
 src/app/dashboard/goals/page.tsx,redirect,goals,/dashboard/goals/tracking
 src/app/dashboard/goals/registration/page.tsx,active,goals,
@@ -179,4 +182,5 @@ src/app/dashboard/users/inactive/page.tsx,active,people-access,
 src/app/dashboard/users/page.tsx,redirect,people-access,/dashboard/dp/collaborators
 src/app/dashboard/documents/history/page.tsx,active,document-central,Histórico agregado por origem autorizada; diferencia eventos de estados atuais legados.
 src/app/dashboard/documents/generated/manage/page.tsx,active,document-generation,Gestão detalhada de revisão auditoria e assinatura dos documentos gerados.
+src/app/dashboard/dp/prestadores/page.tsx,active,people-access,Gestao de escritorios e contas individuais de prestadores com escopo empregador e competencia.
 src/app/dashboard/documents/archive/page.tsx,active,document-central;document-generation,Pastas paginadas das fontes gerados editor e recebidos a classificar com ACL da origem.

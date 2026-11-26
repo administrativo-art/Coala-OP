@@ -161,7 +161,7 @@ export function UnitDetailPanel({
           </PanelSection>
 
           <PanelSection title="Operação" aside={COVERAGE_MODE_LABELS[coverageMode]}>
-            <PanelField label="Cobertura">
+            <PanelField label="Alerta da escala">
               <span className={coverage.needsConfiguration ? "text-ds-warn" : undefined}>{coverage.text}</span>
             </PanelField>
             <PanelField label={`Turnos vinculados · ${pluralize(shifts.length, "turno", "turnos")}`}>

@@ -425,6 +425,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
   const financialPersonnelCostsViewWatch = form.watch('permissions.financial.personnelCosts.view' as any);
   const financialPaymentRequestsViewWatch = form.watch('permissions.financial.paymentRequests.view' as any);
   const financialCashClosuresViewWatch = form.watch('permissions.financial.cashClosures.view' as any);
+  const financialMonthClosingsViewWatch = form.watch('permissions.financial.monthClosings.view' as any);
   const financialCashDepositsViewWatch = form.watch('permissions.financial.cashDeposits.view' as any);
   const financialSettingsViewWatch = form.watch('permissions.financial.settings.view' as any);
   const dpViewWatch = form.watch('permissions.dp.view' as any);
@@ -891,6 +892,15 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
                                     {renderPermissionSwitch("permissions.financial.cashClosures.adjustExpected" as any, "Corrigir esperado do PDV", "Permite criar ou restaurar um ajuste manual justificado sem alterar a composição importada.", !financialCashClosuresViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.cashClosures.reopen" as any, "Reabrir fechamento", "Permite reabrir um fechamento já concluído para correção.", !financialCashClosuresViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.cashClosures.resync" as any, "Ressincronizar PDV", "Permite atualizar os valores registrados pelo PDV.", !financialCashClosuresViewWatch, true)}
+                                  </div>
+                                </div>
+
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Fechamento do mês</h4>
+                                  {renderPermissionSwitch("permissions.financial.monthClosings.view" as any, "Ver fechamento do mês", "Permite abrir o fechamento financeiro mensal da empresa e conferir o que falta em cada fluxo. Os itens de despesa só aparecem para quem também visualiza despesas.", !financialViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.financial.monthClosings.close" as any, "Fechar o mês", "Permite fechar a competência quando todos os fluxos estiverem conferidos. Ainda não disponível nesta versão.", !financialMonthClosingsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.monthClosings.reopen" as any, "Reabrir o mês", "Permite reabrir uma competência fechada, com motivo. Ainda não disponível nesta versão.", !financialMonthClosingsViewWatch, true)}
                                   </div>
                                 </div>
 

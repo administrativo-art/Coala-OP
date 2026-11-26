@@ -1,11 +1,12 @@
 "use client";
+import Link from "next/link";
 
 import { PageHero } from "@/components/patterns/page-hero";
 import { CompetenceClosureSection } from "@/features/dp/time-adjustments/closure-section";
 import { useAuth } from "@/hooks/use-auth";
 
 export default function DpTimeClosurePage() {
-  const { firebaseUser, permissions, isDefaultAdmin, activeUsers } = useAuth();
+  const { firebaseUser, permissions, isDefaultAdmin, users } = useAuth();
   if (!isDefaultAdmin && permissions.dp?.timeClosure?.close !== true && permissions.dp?.timeClosure?.reopen !== true) {
     return <p className="p-6 text-muted-foreground">Sem permissão para acessar o fechamento do ponto.</p>;
   }
@@ -16,7 +17,8 @@ export default function DpTimeClosurePage() {
         title="Fechamento do ponto"
         subtitle="Congela o mês com a declaração de cada pessoa. Pedido de ausência ou ajuste sem decisão impede o fechamento."
       />
-      <CompetenceClosureSection firebaseUser={firebaseUser} people={activeUsers} />
+      <Link href="/dashboard/dp/prestadores" className="inline-block text-sm font-semibold underline">Gerenciar acesso de prestadores</Link>
+      <CompetenceClosureSection firebaseUser={firebaseUser} people={users} />
     </div>
   );
 }

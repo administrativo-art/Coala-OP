@@ -50,7 +50,7 @@ function collectionMod11(value: string) {
  * verificadores de cada bloco e geral) e traz o valor efetivo, que o chamador
  * deve comparar com o valor confirmado da cobrança.
  */
-export function governmentCollectionBarcode(value: string) {
+export function validatedCollectionBarcode(value: string) {
   const digits = String(value ?? "").replace(/\D/g, "");
   if (!/^8/.test(digits) || ![44, 48].includes(digits.length)) return null;
   const valueIdentifier = digits[2];
@@ -62,9 +62,13 @@ export function governmentCollectionBarcode(value: string) {
     if (blocks.some((block) => mod(block.slice(0, 11)) !== Number(block[11]))) return null;
     barcode = blocks.map((block) => block.slice(0, 11)).join("");
   }
-  if (barcode[1] !== "5") return null;
   if (mod(barcode.slice(0, 3) + barcode.slice(4)) !== Number(barcode[3])) return null;
   const effectiveValue = valueIdentifier === "6" || valueIdentifier === "8";
   const amountCents = effectiveValue ? Number(barcode.slice(4, 15)) : null;
-  return { barcode, amountCents: amountCents && amountCents > 0 ? amountCents : null };
+  return { barcode, segment: barcode[1], amountCents: amountCents && amountCents > 0 ? amountCents : null };
+}
+
+export function governmentCollectionBarcode(value: string) {
+  const parsed = validatedCollectionBarcode(value);
+  return parsed?.segment === "5" ? { barcode: parsed.barcode, amountCents: parsed.amountCents } : null;
 }

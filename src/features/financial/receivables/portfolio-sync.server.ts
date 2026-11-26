@@ -25,7 +25,10 @@ const snapshotCollection = "stonePortfolioSnapshots";
 const lockCollection = "stonePortfolioSyncLocks";
 const maxCachedXmlBytes = 800_000;
 const maxDays = 731;
-const projectionVersion = 2;
+// 3: parcelas trazem bandeira, tipo de conta, nº de parcelas e MDR da captura.
+const projectionVersion = 3;
+/** Versões que ainda contêm a posição de direitos (2.4). A 1 é anterior a ela. */
+const hasRights = (version: unknown) => version === 2 || version === 3;
 const rightsVersion = 1;
 const rightsSchema = z.object({
   workspaceId: z.string().min(1), stoneCode: stoneAgendaQuerySchema.shape.stoneCode,
@@ -67,7 +70,8 @@ async function readSource(stoneCode: string) {
 
 /** One read per day. Completed days are cached, so regular runs call Stone only
  * for newly published files and never consume the rate limit on every page view. */
-async function readDay(stoneCode: string, referenceDate: string) {
+/** Lê o arquivo diário da Stone pelo cache imutável (stonePortfolioFiles); busca e guarda na primeira vez. */
+export async function readDay(stoneCode: string, referenceDate: string) {
   const ref = financialDbAdmin.collection(fileCollection).doc(fileId(stoneCode, referenceDate));
   const cached = await ref.get();
   let xml: string;
@@ -196,10 +200,10 @@ export async function readStonePortfolio(stoneCode: string) {
   if (snapshot.get("workspaceId") !== WORKSPACE_ID || snapshot.get("stoneCode") !== stoneCode ||
     snapshot.get("mappingId") !== source.mappingId || snapshot.get("accountId") !== source.accountId ||
     snapshot.get("kioskId") !== source.kioskId || snapshot.get("firstCaptureDate") !== source.firstCaptureDate ||
-    ![1, projectionVersion].includes(snapshot.get("projectionVersion"))) {
+    ![1, 2, projectionVersion].includes(snapshot.get("projectionVersion"))) {
     throw new AppError({ code: "STONE_PORTFOLIO_SNAPSHOT_SCOPE", kind: "DATA_INTEGRITY" });
   }
-  if (snapshot.get("projectionVersion") === projectionVersion) {
+  if (hasRights(snapshot.get("projectionVersion"))) {
     const rights = rightsSchema.safeParse(snapshot.get("rightsPosition"));
     if (!rights.success || rights.data.workspaceId !== WORKSPACE_ID ||
       rights.data.stoneCode !== stoneCode || rights.data.referenceDate !== snapshot.get("asOf")) {
@@ -207,17 +211,26 @@ export async function readStonePortfolio(stoneCode: string) {
     }
   }
   return { status: "synchronized" as const, ...snapshot.data(), latestAvailableDate,
-    rightsPosition: snapshot.get("projectionVersion") === projectionVersion ? snapshot.get("rightsPosition") : null,
+    rightsPosition: hasRights(snapshot.get("projectionVersion")) ? snapshot.get("rightsPosition") : null,
     stale: snapshot.get("asOf") !== latestAvailableDate };
 }
 
-export async function syncEnabledStonePortfolios(now = new Date()) {
+/** Carteiras Stone habilitadas do workspace (no máximo 20). */
+export async function listEnabledStonePortfolioSources() {
   const sources = await financialDbAdmin.collection(sourceCollection)
     .where("enabled", "==", true).limit(21).get();
   if (sources.size > 20) throw new AppError({ code: "STONE_PORTFOLIO_SOURCE_LIMIT", kind: "EXPECTED_BUSINESS" });
-  const stoneCodes = sources.docs.map(doc => portfolioSourceSchema.parse(doc.data()))
-    .filter(source => source.workspaceId === WORKSPACE_ID).map(source => source.stoneCode);
+  return sources.docs.map(doc => portfolioSourceSchema.parse(doc.data()))
+    .filter(source => source.workspaceId === WORKSPACE_ID);
+}
+
+export async function syncEnabledStonePortfolios(now = new Date()) {
+  const enabled = await listEnabledStonePortfolioSources();
   const results = [];
-  for (const stoneCode of stoneCodes) results.push(await syncStonePortfolio(stoneCode, now));
+  for (const source of enabled) results.push(await syncStonePortfolio(source.stoneCode, now));
+  // Depois da carteira, confere e salva o "Recebido" do mês com os mesmos arquivos guardados.
+  // Import dinâmico evita ciclo de módulos (a conferência lê a carteira).
+  const { refreshStoneReceiptSnapshots } = await import("../receipts-reconciliation/stone-account-daily.server");
+  await refreshStoneReceiptSnapshots(enabled, readDay, now);
   return results;
 }

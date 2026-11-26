@@ -18,7 +18,9 @@ export type PurchaseOrderConfirmationIssueCode =
   | "stock_item_registration"
   | "freight_account_plan"
   | "freight_payment_mode"
-  | "freight_supplier";
+  | "freight_supplier"
+  | "service_fee_account_plan"
+  | "service_fee_duplicate";
 
 export type PurchaseOrderConfirmationIssue = {
   code: PurchaseOrderConfirmationIssueCode;
@@ -39,6 +41,8 @@ type ReadinessOrder = Pick<
   | "receiptMode"
   | "estimatedReceiptDate"
   | "deliveryFee"
+  | "serviceFee"
+  | "serviceFeeAccountPlanId"
   | "freightAccountPlanId"
   | "freightPaymentMode"
   | "freightSupplierName"
@@ -52,6 +56,7 @@ type ReadinessItem = Pick<
   | "itemTreatment"
   | "entryType"
   | "itemDestination"
+  | "itemName"
 >;
 
 function hasText(value: unknown) {
@@ -198,6 +203,22 @@ export function getPurchaseOrderConfirmationIssues(
         scope: "order",
       });
     }
+  }
+  if (Number(order.serviceFee ?? 0) > 0 && !hasText(order.serviceFeeAccountPlanId)) {
+    issues.push({
+      code: "service_fee_account_plan",
+      label: "Defina o plano de contas da taxa de serviço",
+      scope: "order",
+    });
+  }
+  if (Number(order.serviceFee ?? 0) > 0 && items.some((item) =>
+    (item.itemTreatment === "expense" || item.itemTreatment === "service") &&
+    /taxa de servi[çc]o/i.test(item.itemName ?? ""))) {
+    issues.push({
+      code: "service_fee_duplicate",
+      label: "Remova a taxa de serviço dos itens antes de usar o campo próprio",
+      scope: "items",
+    });
   }
 
   return issues;

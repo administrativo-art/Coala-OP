@@ -4,7 +4,6 @@ import test from "node:test";
 import { parseStoneAgendaXml } from "../../src/lib/integrations/stone/agenda-parser";
 import { reviewReceivablePeriod, type ReceivablePeriodResult } from "../../src/features/financial/receivables/period-review";
 import { receivableAnswer, receivableQuestions, receivableRowMatches, type ReceivableQuestion } from "../../src/features/financial/receivables/analysis";
-import { navigationActiveHref } from "../../src/lib/navigation-active-href";
 
 const period = { kioskId: "unit", stoneCode: "123", from: "2026-09-20", through: "2026-09-21" };
 function transaction(id: string, due = "20261020", paid = false, cancelled = false) {
@@ -85,13 +84,15 @@ test("todas as perguntas preservam data de corte, limites e evidência original"
   assert.deepEqual(data, original);
 });
 
-test("recebíveis e agente preservam destinos, proteção e uma única consulta compartilhada", () => {
+test("recebíveis preserva a rota própria e os redirecionamentos do agente", () => {
   const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
-  const root = "/dashboard/financial/cash-flow";
-  assert.equal(navigationActiveHref([root, `${root}/receivables`, `${root}/agent`], `${root}/agent`, "topic=receivables"), `${root}/agent`);
-  assert.equal(navigationActiveHref([root, `${root}/receivables`, `${root}/agent`], `${root}/receivables`, ""), `${root}/receivables`);
-  assert.match(read("src/components/sidebar.tsx"), /label: "Recebíveis".*cash-flow\/receivables.*show: isDefaultAdmin/);
-  for (const route of ["receivables", "agent"]) assert.match(read(`src/app/dashboard/financial/cash-flow/${route}/page.tsx`), /ReceivablesPage/);
+  const sidebar = read("src/components/sidebar.tsx");
+  assert.doesNotMatch(sidebar, /label: "Recebíveis"/);
+  assert.match(read("src/app/dashboard/financial/cash-flow/receivables/page.tsx"), /ReceivablesPage/);
+  const agent = read("src/app/dashboard/financial/cash-flow/agent/page.tsx");
+  assert.match(agent, /topic === "management"\) redirect\("\/dashboard\/financial\/cash-flow"\)/);
+  assert.match(agent, /topic === "receivables"\) redirect\("\/dashboard\/financial\/cash-flow\/receivables"\)/);
+  assert.match(agent, /redirect\("\/dashboard\/financial\/stone-anticipations"\)/);
   const page = read("src/features/financial/receivables/receivables-page.tsx");
   assert.match(page, /if \(!isDefaultAdmin\)/);
   assert.match(page, /data\.scope\.mappingId !== mapping\.id/);

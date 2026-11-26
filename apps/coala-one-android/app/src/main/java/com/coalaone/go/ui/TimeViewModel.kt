@@ -31,6 +31,7 @@ import javax.inject.Inject
 data class TimeState(val options: TimeOptions? = null, val clockOffset: Long? = null, val clockSource: ClockSource = ClockSource.NONE, val unitId: String? = null,
     val today: LocalDate = LocalDate.now(), val month: YearMonth = YearMonth.now(), val markings: List<OwnMarking> = emptyList(), val shifts: List<OwnShift> = emptyList(),
     val automaticAbsences: Set<String> = emptySet(),
+    val dayCorrections: List<DayCorrection> = emptyList(),
     val adjustments: List<Adjustment> = emptyList(), val treatments: List<Treatment> = emptyList(), val truncated: Boolean = false, val last: MarkingResponse? = null, val sentAdjustment: Adjustment? = null,
     val bank: TimeBankResponse? = null, val bankDate: String? = null, val mirror: MirrorStatus? = null, val mirrorCompetence: String? = null,
     val mirrorYear: Int? = null, val mirrors: Map<String, MirrorStatus> = emptyMap(),
@@ -221,14 +222,19 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         val (start, end) = TimeRules.monthRange(month)
         val key = month.toString()
         val markings = api.markings(start, end); val shifts = api.timeMonth(key); val adjustments = api.adjustments(key)
+        val dayCorrections = api.dayCorrections(key)
         mutable.update { current ->
-            val scheduledUnit = shifts.shifts.firstOrNull { it.date == current.today.toString() && it.type == "work" }?.unitId
+            val date = current.today.toString()
+            val segments = TimeRules.manualSegments(shifts.shifts, date)
+            val scheduledUnit = if (segments.isNotEmpty())
+                TimeRules.currentManualSegment(segments, markings.markings, date)?.unitId
+            else shifts.shifts.firstOrNull { it.date == date && it.type == "work" }?.unitId
             current.copy(month = month, monthDataAvailable = true, markings = markings.markings, truncated = markings.truncated || shifts.truncated, shifts = shifts.shifts,
                 automaticAbsences = shifts.automaticAbsences.toSet(),
-                adjustments = adjustments.adjustments, treatments = adjustments.treatments,
+                adjustments = adjustments.adjustments, treatments = adjustments.treatments, dayCorrections = dayCorrections.items,
                 dayLoad = if (month == YearMonth.from(current.today)) DayLoad.READ else DayLoad.PENDING,
                 // The unit is never chosen by hand: the shift's unit when it is released, otherwise the person's first unit.
-                unitId = scheduledUnit?.takeIf { id -> current.options?.executionUnits?.any { it.id == id } == true }
+                unitId = if (attempt != null) current.unitId else scheduledUnit?.takeIf { id -> current.options?.executionUnits?.any { it.id == id } == true }
                     ?: current.options?.executionUnits?.firstOrNull()?.id ?: current.unitId)
         }
     }
@@ -497,6 +503,11 @@ data class PendingAttempt(val purpose: String?, val unitId: String?, val firstTr
         val competence = mutable.value.month.toString()
         then(cacheFile(directory, "time-documents", "espelho-ponto-$competence.pdf", api.mirrorPdf(competence)))
     }
+    fun respondToDayCorrection(item: DayCorrection, reason: String, adjustmentId: String?) = serverRun("Resposta enviada ao RH.") {
+        api.respondToDayCorrection(DayCorrectionResponse(id = item.id, expectedVersion = item.version, reason = reason.trim(), adjustmentId = adjustmentId))
+        readMonth(mutable.value.month)
+    }
+
     fun requestAdjustment(attemptId: String, workDate: String, operations: List<AdjustmentRequestOperation>, reason: String) = serverRun {
         val state = mutable.value
         val unitToday = LocalDate.parse(TimeRules.workDate(officialNow(state), TimeRules.unitZone(state.options, state.unitId)))

@@ -47,7 +47,7 @@ O escopo passado à função não comprova autorização nem titularidade da fil
 O XML é validado pelo parser existente, inclusive StoneCode, dia, versão e duplicidades.
 Somente capturas de `FinancialTransactions` com moeda BRL, data local do recorte e
 valor positivo exato em centavos viram fatos de venda. Débito e pré-pago débito
-usam códigos 1/3; crédito e pré-pago crédito, 2/4, conforme o
+usam códigos 1/3; crédito e pré-pago crédito, 2/4; voucher, 5, conforme o
 [contrato AccountType Stone](https://conciliacao.stone.com.br/reference/accounttype).
 Outros códigos ficam pendentes. Movimentos da seção de contas não duplicam receita.
 
@@ -58,14 +58,24 @@ Cancelamento/estorno, desconto de cancelamento, chargeback e estorno de chargeba
 apontamentos distintos na interface. Eles não são compensados como novas vendas negativas:
 ficam nas evidências, com IDs, valores e contadores originais.
 Um evento adverso em qualquer seção bloqueia a captura da mesma transação nesse arquivo.
-Isso não equivale a reconstruir o histórico completo da venda.
+A conferência de cartão e voucher mostra a condição no arquivo do dia da venda.
+Eventos adversos publicados em outro dia aparecem na revisão do próprio dia do evento.
+Este fluxo não percorre a Agenda posterior por venda nem comprova crédito bancário.
+O módulo de reconhecimento de taxas continua restrito aos tipos de cartão admitidos
+por seu contrato e não usa o vínculo de voucher para contabilizar taxa de crédito.
 
 No PDV, foram reutilizados o parser do fechamento e a normalização central de canais,
 com validação anterior dos campos tolerantes: sem ID, valor ausente, divergência entre
 total e pagamentos, duplicidade e data inválida viram pendências explícitas. Valores
 monetários vêm dos campos brutos validados, sem round-trip pelo `number` do parser.
 Dinheiro/troco participa apenas da validação do total; pagamentos digitais mantêm
-índice e cupom. Cancelamento parcial de item não vira cancelamento total do cupom.
+índice e cupom. Para provar um ajuste por cancelamento de item, o total líquido
+anterior é a soma dos valores dos itens, descontados os descontos e somados os acréscimos
+informados em cada item. O valor líquido dos itens cancelados é deduzido uma única vez
+e o resultado tem que ser igual ao total final pago. Campos inválidos, ajustes adicionais
+no cabeçalho e ausência do horário de recebimento impedem essa prova. Em cartão,
+o último cancelamento comprovado precisa preceder a captura Stone; sem prova a
+divergência de status permanece.
 Quando uma forma digital possui exatamente um objeto em `detalhes`, NSU e código de
 autorização textuais válidos são preservados. Em cartão, somente um detalhe que identifica
 explicitamente a Stone em `subadquirente`, `adquirente` ou `gateway` permite tratar o NSU
@@ -74,6 +84,12 @@ provedor diferente, valor vazio/sentinela ou tipo inesperado não produz essa eq
 Não foi inventado um terminal comum nem uma equivalência entre status do cupom e aprovação
 da adquirente: o estado desconhecido permanece na evidência, mas não cria uma divergência
 falsa quando o restante do par individual é compatível.
+
+Decisão de 18/11/2026: crédito no PDV e voucher capturado na Stone podem ser
+conferidos como **Pagamento localizado** quando existe um único par por identidade de
+transação Stone confirmada, no mesmo workspace, unidade e dia, com valor e situação
+compatíveis. A interface preserva os dois meios. Vouchers ficam fora de pareamento por
+pedido, valor, horário ou conjunto diário. Eventos adversos continuam em atenção.
 
 Pix PDV aparece em `uncomparedPdvFacts`, não como venda ausente na Stone, quando a fonte
 Pix ainda está ausente ou parcial. Na fonte completa, o `eventId` Stone é preservado

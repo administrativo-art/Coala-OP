@@ -103,3 +103,13 @@ test('a routing prefix without compatible native origin never confirms candidate
   const candidate = await resolveStrictPersonRefs({ namespace: 'hr.candidates', id: 'manual_p' }, db);
   assert.deepEqual(candidate.refs, [{ namespace: 'hr.candidates', id: 'manual_p' }]); assert.ok(candidate.conflicts.includes('candidate_process_origin_unconfirmed'));
 });
+
+
+test("external provider identities remain independent from internal user IDs", async () => {
+  const ref = { namespace: "main.providerMembers", id: "same-id" } as const;
+  const db = lookup([{ id: "same-id", hrEmployeeId: "internal" }], [{ id: "internal", auth_uid: "same-id" }]);
+  db.providerMember = async (id) => ({ id });
+  assert.deepEqual(await resolveStrictPersonRefs(ref, db), { refs: [ref], conflicts: [] });
+  assert.equal(subjectKey(ref), "main.providerMembers:same-id");
+  assert.deepEqual(readSubjectRef(ref), ref);
+});

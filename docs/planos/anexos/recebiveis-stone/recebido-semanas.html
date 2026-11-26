@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recebimentos · auditoria</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --page:#f0eee9;--surface:#fff;--warm:#fffdf9;--input:#faf9f6;--muted:#f6f4ef;--seg:#e6e3dc;--dark:#15151c;--dark-hover:#2a2a35;
+  --border:#e3dfd6;--border-input:#dcd9d1;--divider:#f1eee8;
+  --ink:#1a1b1f;--ink2:#4a4f57;--ink-muted:#5f646c;--ink-faint:#6e737a;--on-dark:#f3f2ee;--on-dark-2:#c8c7d0;--on-dark-muted:#8e8d99;--on-dark-sub:#a9a8b3;--zero:#77768a;
+  --accent:#d13670;--accent-hover:#b8325f;--accent-ink:#a6325b;--accent-soft:#fbe7ef;--accent-row:#fbf3f6;--kicker-dark:#f08bb1;
+  --ok:#147337;--ok-bg:#e8f5ee;--warn:#c2410c;--warn-bg:#fff1e6;--danger:#be123c;--danger-bg:#ffe4e8;--info:#1d4ed8;--info-bg:#eef3fe;--neutral:#5f646c;--neutral-bg:#eceae5;
+  --alert-bg:#fff7e6;--alert-border:#f5d9a3;--alert-ink:#6b4500;
+  --shadow-lift:0 16px 36px rgba(21,21,28,.16),0 2px 6px rgba(21,21,28,.06);--shadow-side:-24px 0 60px rgba(0,0,0,.18);--shadow-cta:0 8px 24px rgba(209,54,112,.35);--scrim:rgba(21,21,28,.45);
+  --ease:cubic-bezier(.2,.8,.2,1);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:14px/1.45 "Inter Tight",-apple-system,BlinkMacSystemFont,sans-serif}
+.mono,.amt{font-family:"JetBrains Mono","Geist Mono",ui-monospace,monospace}
+button{font:inherit;cursor:pointer;color:inherit}
+.wrap{max-width:1440px;margin:0 auto;padding:20px 28px 60px;display:flex;flex-direction:column;gap:18px}
+@media(max-width:720px){.wrap{padding:16px}}
+.proto{background:var(--alert-bg);border-bottom:1px solid var(--alert-border);color:var(--alert-ink);padding:6px 28px;font-size:12px;font-weight:600}
+.kick{font-size:10.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint)}
+.spacer{flex:1}.faint{color:var(--ink-faint)}.muted{color:var(--ink-muted)}.small{font-size:12.5px}.r{text-align:right}
+.k-ok{color:var(--ok)}.k-adj{color:var(--warn)}.k-bad{color:var(--danger)}.k-wait{color:var(--info)}.k-none{color:var(--ink-faint)}
+.diff{color:var(--danger);font-weight:700}
+/* PageHero */
+.hero{background:var(--dark);color:var(--on-dark);border-radius:28px;padding:20px 26px;display:flex;flex-direction:column;gap:16px}
+.hero .kick{color:var(--kicker-dark)}
+.hero h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.03em}
+.hero .sub{font-size:13px;color:var(--on-dark-sub)}
+.hrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px}
+.hchip{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:999px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);border:0;color:var(--on-dark-2)}
+.hchip .v{font-family:"JetBrains Mono",monospace;font-size:15px;font-weight:700}.hchip .l{font-size:13px;font-weight:700}
+.hchip.ok .v{color:#7fd6a0}.hchip.danger .v{color:#ff8fa5}.hchip.info .v{color:#9db8ff}
+.btn-dark{height:36px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:none;color:var(--on-dark);font-weight:700;font-size:13px}
+.btn-dark:hover{background:rgba(255,255,255,.06)}
+/* cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:18px}
+.chead{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end;padding:16px 18px 12px}
+.chead h2{margin:2px 0 0;font-size:15.5px;font-weight:800}
+.scope{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;padding:14px 18px}
+.sel{display:flex;flex-direction:column;gap:6px;min-width:170px}
+.sel span.box{height:40px;border:1px solid var(--border-input);border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-weight:600;font-size:13.5px}
+.sel span.box:after{content:"⌄";color:var(--ink-faint);margin-left:10px}
+.sync{font-size:12px;font-weight:700;color:var(--ok);background:var(--ok-bg);border-radius:999px;height:28px;display:inline-flex;align-items:center;padding:0 12px}
+/* fluxo */
+.flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:0 18px 16px}@media(max-width:900px){.flow{grid-template-columns:1fr 1fr}}
+.flow a{display:flex;align-items:center;gap:10px;border:1px solid var(--border);background:var(--input);border-radius:12px;padding:10px 12px;text-decoration:none;color:var(--ink)}
+.flow a:hover{border-color:var(--border-input);background:var(--warm)}
+.flow a.on{border-color:var(--accent);background:var(--accent-row)}
+.flow i{font-style:normal;display:block;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}.flow b{font-size:13.5px}
+.flow .arr{margin-left:auto;color:var(--accent-ink);font-weight:800}
+/* Segmented */
+.seg{display:inline-flex;background:var(--seg);border-radius:11px;padding:3px}
+.seg button{height:32px;border:0;background:none;border-radius:9px;padding:0 14px;font-weight:700;font-size:13px;color:var(--ink-muted)}
+.seg button[aria-pressed=true]{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.jump a{color:var(--accent-ink);font-weight:700;font-size:13px;text-decoration:none;margin-left:14px}.jump a:hover{color:#8e294d;text-decoration:underline}
+/* StatusPill */
+.pill{display:inline-flex;align-items:center;height:21px;padding:0 9px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap}
+.s-ok{background:var(--ok-bg);color:var(--ok)}.s-wait{background:var(--info-bg);color:var(--info)}.s-review{background:var(--danger-bg);color:var(--danger)}.s-adj{background:var(--warn-bg);color:var(--warn)}.s-bank{background:var(--neutral-bg);color:var(--neutral)}
+/* tabela */
+.tw{overflow-x:auto}
+.tb{width:100%;border-collapse:separate;border-spacing:0}
+.tb th{font-size:10.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);padding:10px 18px;border-top:1px solid var(--divider);border-bottom:1px solid var(--divider);background:var(--muted);text-align:left;white-space:nowrap}
+.tb td{padding:13px 18px;border-bottom:1px solid var(--divider);vertical-align:top;font-size:13.5px}
+.tb th.r,.tb td.r{text-align:right}.tb td.mono{font-size:13px;font-weight:600}
+.tb tr:last-child>td{border-bottom:0}
+.tb tr.click{cursor:pointer}.tb tr.click:hover>td{background:var(--muted)}
+.tb tr.att>td{background:#fffaf4}
+.tb tr.child>td{background:var(--input)}.tb tr.child>td:first-child{padding-left:42px}
+.tb tr.open>td{background:var(--accent-row)}.tb tr.open>td:first-child{box-shadow:inset 3px 0 0 var(--accent-ink)}
+.tb td.sub{background:var(--input);padding:8px 18px 14px 42px}
+.chev{display:inline-block;width:14px;color:var(--ink-faint)}
+.foot{padding:12px 18px;border-top:1px solid var(--divider);font-size:12.5px;color:var(--ink-muted)}
+/* LiftRow */
+.rows{background:#fff;border:1px solid var(--border);border-radius:14px}
+.lift{display:flex;justify-content:space-between;gap:12px;align-items:center;width:100%;text-align:left;border:0;border-bottom:1px solid var(--divider);background:transparent;padding:13px 18px;position:relative;transition:transform .18s var(--ease),box-shadow .18s ease,border-radius .18s ease,background .18s ease}
+.lift:last-child{border-bottom:0}
+.lift:hover,.lift:focus-visible{z-index:3;transform:translateY(-3px) scale(1.006);background:#fff;border-radius:14px;box-shadow:var(--shadow-lift);outline:none}
+@media(prefers-reduced-motion:reduce){.lift:hover{transform:none}}
+.lift b{font-size:14px;font-weight:800}.amt{font-weight:700;font-size:13.5px;white-space:nowrap}
+.pp{display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap;margin-top:4px}
+/* SidePanel */
+.scrim{position:fixed;inset:0;background:var(--scrim);display:none;z-index:40}
+.panel{position:fixed;top:0;right:0;height:100dvh;width:min(920px,100vw);background:var(--warm);z-index:41;box-shadow:var(--shadow-side);transform:translateX(100%);transition:transform .2s var(--ease);display:flex;flex-direction:column;border-radius:20px 0 0 20px;overflow:hidden}
+.open .scrim{display:block}.open .panel{transform:none}
+.ph{background:var(--dark);color:var(--on-dark);padding:22px 24px;position:relative}
+.ph .kick{color:var(--kicker-dark)}.ph h2{margin:4px 0 0;font-size:20px;font-weight:800;padding-right:40px}.ph .sub{font-size:12.5px;color:var(--on-dark-sub);margin-top:2px}
+.ph .x{position:absolute;right:16px;top:16px;border:0;background:none;color:var(--on-dark-2);border-radius:9px;width:30px;height:30px;font-size:18px}.ph .x:hover{background:rgba(255,255,255,.1)}
+.ph .hl{display:flex;flex-wrap:wrap;gap:8px 24px;margin-top:14px;align-items:flex-end}
+.ph .hl div{display:flex;flex-direction:column}.ph .hl small{font-size:10.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--on-dark-muted)}.ph .hl strong{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.pb{flex:1;overflow-y:auto;padding:20px 24px 28px;display:flex;flex-direction:column;gap:16px}
+.psec{background:#fff;border:1px solid var(--border);border-radius:14px}
+.psec>header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;border-bottom:1px solid var(--divider);padding:10px 16px}
+.psec>header h3{margin:0;font-size:10.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint)}
+.psec>header span{font-size:11.5px;color:var(--ink-faint)}
+.psec>.in{padding:14px 16px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:760px){.two{grid-template-columns:1fr}}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px}
+.f .kl{font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint)}
+.f .fn{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--ink-faint);margin-left:4px;text-transform:none;letter-spacing:0;font-weight:500}
+.f .v{margin-top:2px;font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.f.wide{grid-column:1/-1}
+.ptab{width:100%;border-collapse:collapse;font-size:13px}
+.ptab th,.ptab td{padding:8px 10px;border-bottom:1px solid var(--divider);text-align:right;white-space:nowrap}
+.ptab th:first-child,.ptab td:first-child{text-align:left;white-space:normal}
+.ptab thead th{font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);background:var(--muted)}
+.ptab td:first-child{color:var(--ink-muted)}.ptab td:first-child .fn{display:block;font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--ink-faint)}
+.ptab td{font-weight:600}.ptab tr:last-child td{border-bottom:0}
+.cl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 16px}@media(max-width:760px){.cl{grid-template-columns:1fr}}
+.cl div{display:flex;gap:8px;align-items:center;font-size:13px;font-weight:600}
+.ico{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:11px;flex-shrink:0}
+.ico.k-ok{background:var(--ok-bg)}.ico.k-bad{background:var(--danger-bg)}.ico.k-adj{background:var(--warn-bg)}.ico.k-wait{background:var(--info-bg)}
+.checks{display:flex;flex-direction:column;gap:0}
+.ck{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;padding:14px 16px;border-bottom:1px solid var(--divider)}.ck:last-child{border-bottom:0}
+.ck b{font-size:14px;font-weight:800}
+.ck.bad{background:#fff7f8}.ck.warn{background:#fffaf4}
+.cmp2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0 2px}
+.cmp2 span{background:var(--input);border:1px solid var(--divider);border-radius:9px;padding:6px 10px;font-family:"JetBrains Mono",monospace;font-size:12.5px;font-weight:600;overflow-wrap:anywhere}
+.cmp2 i{display:block;font-style:normal;font-family:"Inter Tight",sans-serif;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-faint);margin-bottom:2px}
+.btn{height:36px;padding:0 14px;border:1px solid var(--border-input);background:#fff;border-radius:12px;font-weight:700;font-size:13px;color:var(--ink)}
+.btn:hover{background:var(--muted)}
+.note{border:1px solid var(--alert-border);background:var(--alert-bg);color:var(--alert-ink);border-radius:12px;padding:10px 12px;font-size:12.5px}
+.tb tr.week>td{background:#fff;border-bottom:1px solid var(--border)}.tb tr.week:hover>td{background:var(--muted)}
+.tb tr.week.open>td{background:var(--accent-row)}.tb tr.week.open>td:first-child{box-shadow:inset 3px 0 0 var(--accent-ink)}
+.tb tr.day>td{background:var(--input)}.tb tr.day.att>td{background:#fffaf4}.tb tr.day.open>td{background:var(--accent-row)}
+.bar{height:4px;border-radius:999px;background:var(--divider);margin-top:6px;overflow:hidden;margin-left:auto;max-width:140px}.bar i{display:block;height:100%;background:var(--ok);border-radius:999px}
+.wpills{display:flex;gap:4px;flex-wrap:wrap}
+.tb tr.wk{cursor:pointer}.tb tr.wk>td{background:#fff;border-bottom:1px solid var(--divider);padding-top:14px;padding-bottom:14px}
+.tb tr.wk:hover>td{background:var(--muted)}.tb tr.wk.open>td{background:#fff;border-bottom-color:transparent}
+.tb tr.wk b{font-weight:800}.wname{display:inline-block;min-width:92px}.wdates{color:var(--ink-muted);font-size:12.5px;font-weight:600;margin-left:0;padding-left:12px;border-left:2px solid var(--ink-faint);display:inline-block;line-height:1.1}
+.wdots{display:flex;gap:4px;margin:7px 0 0 20px}
+.wd{font-style:normal;width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:700;background:var(--muted);color:var(--ink-faint);box-shadow:inset 0 -2px 0 var(--border-input)}
+.wd.ok{box-shadow:inset 0 -2px 0 #7cc49a;color:var(--ink-muted)}
+.wd.bad{box-shadow:inset 0 -2px 0 var(--danger);color:var(--danger);background:#fdf3f5}
+.wd.miss{box-shadow:inset 0 -2px 0 var(--warn);color:var(--warn);background:#fff8f1}
+.wd.none{opacity:.55}
+.bpills{display:flex;flex-wrap:wrap;gap:8px;padding:0 18px 14px}
+.bpills button{height:34px;padding:0 14px;border-radius:999px;border:1px solid var(--border-input);background:#fff;font-size:13px;font-weight:700;color:var(--ink2);display:inline-flex;align-items:center;gap:7px}
+.bpills button:hover{background:var(--muted)}
+.bpills button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+.bpills .n{font-family:"JetBrains Mono",monospace;font-size:11.5px;font-weight:800;opacity:.75}.bpills .dot{width:7px;height:7px;border-radius:50%;background:var(--danger)}
+.bpills button[aria-pressed=true] .dot{background:#fff}
+.empty{margin:0 18px 16px;border:1px dashed var(--border-input);border-radius:14px;padding:28px 16px;text-align:center;color:var(--ink-muted);font-size:13px}
+</style>
+</head>
+<body>
+<div class="proto">Protótipo · dados fictícios — Conciliação de recebimento, 1ª parte — versão por semanas</div>
+<div class="wrap">
+  <div id="hero"></div>
+  <div class="card">
+    <div class="scope">
+      <label class="sel"><span class="kick">Unidade</span><span class="box">Quiosque Centro</span></label>
+      <label class="sel"><span class="kick">Conta Stone</span><span class="box">Stone · Centro</span></label>
+      <label class="sel"><span class="kick">StoneCode</span><span class="box mono">123456</span></label>
+      <label class="sel"><span class="kick">Competência</span><span class="box">Novembro 2026</span></label>
+      <span class="spacer"></span><span class="sync">✓ Arquivos Stone até 13/11 · falta 08/11</span>
+    </div>
+    <nav class="flow" aria-label="Etapas dos recebimentos">
+      <a href="#"><span><i>Etapa 01</i><b>Carteira e previsões</b></span><span class="arr">→</span></a>
+      <a href="#"><span><i>Etapa 02</i><b>Antecipações</b></span><span class="arr">→</span></a>
+      <a href="#"><span><i>Etapa 03</i><b>Taxas praticadas</b></span><span class="arr">→</span></a>
+      <a href="#" class="on" aria-current="page"><span><i>Etapa 04</i><b>Pago na conta Stone</b></span><span class="arr">→</span></a>
+    </nav>
+  </div>
+  <div id="views" style="display:flex;flex-direction:column;gap:18px"></div>
+</div>
+<div id="sheet"><div class="scrim" data-close></div><aside class="panel" role="dialog" aria-label="Auditoria da venda" id="panel"></aside></div>
+
+<script>// ---------- dados fictícios com os campos reais do arquivo Stone e do PDV ----------
+const TODAY="2026-11-14",MISSING="2026-11-08";
+let seed=41;const rnd=()=>{seed=(seed*9301+49297)%233280;return seed/233280};
+const addD=(v,n)=>{const d=new Date(v+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)};
+const r2=v=>Math.round(v*100)/100;
+const money=v=>v==null?"—":v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+const pct=v=>v==null?"—":(v*100).toFixed(2).replace(".",",")+"%";
+const dl=v=>v?v.slice(8,10)+"/"+v.slice(5,7):"—";
+const dlf=v=>v?v.slice(8,10)+"/"+v.slice(5,7)+"/"+v.slice(0,4):"—";
+const dow=v=>["dom","seg","ter","qua","qui","sex","sáb"][new Date(v+"T12:00:00Z").getUTCDay()];
+const days=(a,b)=>Math.round((new Date(b+"T12:00:00Z")-new Date(a+"T12:00:00Z"))/864e5);
+const hex=n=>Array.from({length:n},()=>"0123456789abcdef"[Math.floor(rnd()*16)]).join("");
+const num=n=>Array.from({length:n},()=>Math.floor(rnd()*10)).join("");
+const BRANDS={Visa:{code:"1"},Mastercard:{code:"2"},Elo:{code:"171"}};
+// taxas fictícias (a tabela contratada real ainda não existe no sistema)
+const RATE=(mod,brand,n)=>mod==="pix"?.0075:mod==="debito"?(brand==="Elo"?.0179:.0109):mod==="credito"?(brand==="Elo"?.0349:.0289):(brand==="Elo"?.0399:.0339)+.0035*(n-2);
+const MODL={pix:"Pix",debito:"Débito",credito:"Crédito à vista",parcelado:"Crédito parcelado"};
+const sales=[],parcels=[];let k=0;
+for(let d="2026-09-20";d<TODAY;d=addD(d,1)){
+  const mix=[["pix",3+Math.floor(rnd()*3)],["debito",2+Math.floor(rnd()*3)],["credito",1+Math.floor(rnd()*3)],["parcelado",rnd()<.55?1:0]];
+  for(const[mod,q]of mix)for(let i=0;i<q;i++){k++;
+    const brand=mod==="pix"?null:["Visa","Mastercard","Elo"][rnd()<.45?0:rnd()<.8?1:2];
+    const n=mod==="parcelado"?2+Math.floor(rnd()*5):1;
+    const gross=r2(mod==="parcelado"?140+rnd()*300:16+rnd()*130);
+    let rate=RATE(mod,brand,n);
+    if(mod==="credito"&&brand==="Mastercard"&&d>="2026-11-04"&&d<="2026-11-06")rate=.0319; // taxa fora do padrão do grupo
+    const hh=String(10+Math.floor(rnd()*11)).padStart(2,"0"),mm=String(Math.floor(rnd()*60)).padStart(2,"0"),ss=String(Math.floor(rnd()*60)).padStart(2,"0");
+    const s={id:"S"+k,date:d,time:`${hh}:${mm}:${ss}`,mod,brand,n,gross,rate,
+      pdv:{cupom:String(48000+k),hora:`${hh}:${mm}:${ss}`,valor:gross,canal:mod==="pix"?"Pix":mod==="debito"?"Débito":"Crédito",status:"Finalizada",nsu:mod==="pix"?null:num(6),aut:mod==="pix"?null:num(6),terminal:mod==="pix"?null:"PAX-"+(1+k%2),pedido:null},
+      stone:{key:mod==="pix"?null:num(12),e2e:mod==="pix"?"E1814"+num(8)+d.replace(/-/g,"")+hex(10):null,eventId:mod==="pix"?hex(8)+"-"+hex(4):null,capture:`${d.replace(/-/g,"")}${hh}${mm}${ss}`,authUtc:`${d}T${String(+hh+3).padStart(2,"0")}:${mm}:${ss}Z`,
+        brandId:brand?BRANDS[brand].code:null,accountType:mod==="pix"?null:mod==="debito"?"1 · débito":"2 · crédito",feeType:mod==="parcelado"?"1 · lojista":"—",nInst:n,captured:gross,canceled:0,events:{Captures:1,Payments:0,Cancellations:0,Chargebacks:0}},
+      match:{basis:mod==="pix"?"ID Pix (e2eId)":"NSU + autorização + terminal",conf:"alta",result:"ok"}};
+    s.pdv.nsu&&(s.stone.nsu=s.pdv.nsu,s.stone.aut=s.pdv.aut,s.stone.terminal=s.pdv.terminal);
+    sales.push(s);
+    for(let j=1;j<=n;j++){const g=r2(gross/n),mdr=r2(g*rate),net=r2(g-mdr);
+      const exp=mod==="pix"?d:mod==="debito"?addD(d,1):addD(d,30*j);
+      parcels.push({id:s.id+"-"+j,s,j,gross:g,mdr,net,exp,paid:null,paidNet:null,adv:0,advOrig:null,paymentId:null,file:null,chargeback:false})}}}
+// casos de auditoria
+sales.filter(s=>s.mod==="debito"&&s.date==="2026-11-11")[0].match={basis:"valor + horário únicos no dia",conf:"média",result:"ok"};
+{const s=sales.filter(s=>s.mod==="credito"&&s.date==="2026-10-25")[0];s.pdv=null;s.match={basis:"sem par",conf:"nenhuma",result:"stone_only"}}
+{const s=sales.filter(s=>s.mod==="debito"&&s.date==="2026-11-05")[1];s.pdv.valor=r2(s.gross+5);s.match={basis:"NSU + autorização + terminal",conf:"alta",result:"amount"}}
+// pagamentos
+for(const p of parcels){if(p.exp>=TODAY||p.exp===MISSING)continue;const x=rnd();if(x<.01)continue;
+  if(x<.035&&p.s.mod!=="pix"){const l=addD(p.exp,1+Math.floor(rnd()*3));if(l<TODAY){p.paid=l;p.paidNet=p.net;continue}}
+  p.paid=p.exp;p.paidNet=p.net}
+parcels.filter(p=>p.exp>"2026-11-20"&&(p.s.mod==="credito"||p.s.mod==="parcelado")).slice(0,8).forEach(p=>{p.adv=r2(p.net*.022);p.advOrig=p.exp;p.paid="2026-11-10";p.paidNet=r2(p.net-p.adv)});
+parcels.filter(p=>p.paid&&p.s.mod==="credito"&&p.paid>="2026-11-03").slice(3,5).forEach(p=>{p.chargeback=true;p.paidNet=0;p.s.stone.events.Chargebacks=1});
+parcels.forEach(p=>{if(p.paid){p.paymentId=num(9);p.file={id:"F"+p.paid.replace(/-/g,"")+"-"+num(4),ref:p.paid,gen:addD(p.paid,1)+" 05:12"};p.s.stone.events.Payments++}});
+const status=p=>p.chargeback?"chargeback":p.paid&&p.paid<p.exp?"antecipado":p.paid&&p.paid>p.exp?"atrasado_pago":p.paid?"pago":p.exp>=TODAY?"a_receber":p.exp===MISSING?"sem_arquivo":"nao_pago";
+parcels.forEach(p=>p.st=status(p));
+const ST={pago:["Pago no dia","s-ok"],antecipado:["Antecipado","s-wait"],atrasado_pago:["Pago com atraso","s-adj"],nao_pago:["Não pago","s-review"],sem_arquivo:["Sem arquivo Stone","s-adj"],a_receber:["A receber","s-bank"],chargeback:["Chargeback","s-review"]};
+const pill=(t,c)=>`<span class="pill ${c}">${t}</span>`;const spill=st=>pill(...ST[st]);
+const NOV=d=>d>="2026-11-01"&&d<="2026-11-30";
+const sum=(l,f)=>r2(l.reduce((a,p)=>a+(typeof f==="function"?f(p):p[f]||0),0));
+let modF="all";
+const modOk=p=>modF==="all"||(modF==="pix"?p.s.mod==="pix":p.s.mod!=="pix");
+
+// ---------- auditoria por venda ----------
+function checks(s){const ps=parcels.filter(p=>p.s===s);const C=[];const ok=(t,what,a,b,res,why)=>C.push({t,what,a,b,res,why});
+  if(s.pdv) ok("1. A venda existe no PDV e na Stone",`Chave usada: ${s.match.basis} (confiança ${s.match.conf})`,s.mod==="pix"?`cupom ${s.pdv.cupom}`:`NSU ${s.pdv.nsu} · aut. ${s.pdv.aut} · ${s.pdv.terminal}`,s.mod==="pix"?`e2eId …${s.stone.e2e.slice(-10)}`:`NSU ${s.stone.nsu} · aut. ${s.stone.aut} · ${s.stone.terminal}`,"ok");
+  else ok("1. A venda existe no PDV e na Stone","Nenhuma chave encontrou cupom no PDV","sem cupom",`transação ${s.stone.key}`,"bad","Venda na maquininha sem registro no PDV (ou registrada em outra unidade).");
+  ok("2. Mesma unidade","StoneCode → quiosque pelo vínculo oficial","Quiosque Centro","StoneCode 123456 → Quiosque Centro","ok");
+  if(s.pdv) ok("3. Mesmo valor bruto","Valor do cupom × valor capturado na Stone (centavos)",money(s.pdv.valor),money(s.stone.captured),s.pdv.valor===s.stone.captured?"ok":"bad",s.pdv.valor===s.stone.captured?null:`Diferença de ${money(r2(s.stone.captured-s.pdv.valor))}.`);
+  if(s.pdv) ok("4. Mesmo meio de pagamento","Canal do PDV × tipo de conta Stone",s.pdv.canal,s.mod==="pix"?"Pix":s.stone.accountType,"ok");
+  if(s.pdv) ok("5. Horário compatível","Hora do cupom × captura na Stone",s.pdv.hora,s.time,"ok");
+  ok("6. Situação compatível","Status do cupom × eventos Stone (cancelamento, chargeback)",s.pdv?s.pdv.status:"—",Object.entries(s.stone.events).filter(([,v])=>v).map(([k,v])=>`${k} ${v}`).join(" · "),s.stone.events.Chargebacks?"bad":"ok",s.stone.events.Chargebacks?"Chargeback: valor descontado do pagamento.":null);
+  if(s.mod!=="pix") ok("7. Parcelas completas","Nº de parcelas da venda × parcelas no arquivo",`${s.n}x`,`${ps.length} parcela(s)`,s.n===ps.length?"ok":"bad");
+  ok("8. Soma das parcelas","Σ bruto das parcelas × capturado − cancelado",money(sum(ps,"gross")),money(r2(s.stone.captured-s.stone.canceled)),Math.abs(sum(ps,"gross")-s.stone.captured)<.05?"ok":"bad");
+  const expRate=RATE(s.mod,s.brand,s.n),diffRate=Math.abs(s.rate-expRate)>.0001;
+  ok("9. Taxa conforme o grupo",`Taxa praticada × taxa habitual de ${s.mod==="pix"?"Pix":`${s.brand} ${MODL[s.mod].toLowerCase()}${s.n>1?` ${s.n}x`:""}`}`,pct(s.rate),`habitual ${pct(expRate)}`,diffRate?"warn":"ok",diffRate?"Taxa diferente das outras vendas do mesmo cartão e parcelas. Sem tabela contratada no sistema, não dá para afirmar cobrança a maior.":null);
+  ok("10. Líquido = bruto − taxas","Por parcela: bruto − MDR − antecipação = líquido",money(sum(ps,"gross"))+" − "+money(sum(ps,"mdr"))+(sum(ps,"adv")?" − "+money(sum(ps,"adv")):""),money(sum(ps,p=>p.paidNet??p.net)),"ok");
+  const late=ps.filter(p=>p.st==="atrasado_pago"||p.st==="nao_pago"),sem=ps.some(p=>p.st==="sem_arquivo");
+  ok("11. Pago na data prevista","PrevisionPaymentDate × PaymentDate de cada parcela",ps.map(p=>dl(p.exp)).join(", "),ps.map(p=>p.paid?dl(p.paid):"—").join(", "),late.length?"bad":sem?"warn":ps.some(p=>p.st==="a_receber")?"wait":"ok",late.length?`${late.length} parcela(s) fora do prazo ou não paga(s).`:sem?`Arquivo de ${dl(MISSING)} não recebido.`:null);
+  ok("12. Um pagamento por parcela","Eventos Payments × parcelas pagas",`${ps.filter(p=>p.paid).length} parcela(s) paga(s)`,`${s.stone.events.Payments} evento(s)`,"ok");
+  return C}
+const RES={ok:["✓","k-ok"],bad:["✕","k-bad"],warn:["!","k-adj"],wait:["◷","k-wait"]};
+function verdict(s){const c=checks(s);return c.some(x=>x.res==="bad")?["Com divergência","s-review"]:c.some(x=>x.res==="warn")?["Conferir","s-adj"]:c.some(x=>x.res==="wait")?["Em andamento","s-wait"]:["Conferida","s-ok"]}
+const fld=(k,v,fn,wide)=>`<div class="f${wide?" wide":""}"><div class="kl">${k}${fn?`<span class="fn">${fn}</span>`:""}</div><div class="v">${v??'<span class="faint">não informado</span>'}</div></div>`;
+const sec=(title,aside,inner,raw)=>`<section class="psec"><header><h3>${title}</h3>${aside?`<span>${aside}</span>`:""}</header>${raw?inner:`<div class="in">${inner}</div>`}</section>`;
+const saleName=s=>s.mod==="pix"?"Pix":`${s.brand} · ${MODL[s.mod]}${s.n>1?` ${s.n}x`:""}`;
+const PANEL=()=>document.getElementById("panel");
+function panelHead(kick,title,sub,hl){return `<header class="ph"><div class="kick">${kick}</div><h2>${title}</h2><div class="sub">${sub}</div>${hl?`<div class="hl">${hl}</div>`:""}<button class="x" data-close aria-label="Fechar">×</button></header>`}
+function saleHeader(s,kick){const v=verdict(s),ps=parcels.filter(p=>p.s===s);
+  return panelHead(`${kick} · ${s.pdv?`cupom ${s.pdv.cupom}`:"sem cupom no PDV"}`,saleName(s),`${dow(s.date)} ${dlf(s.date)} às ${s.time} · Quiosque Centro · StoneCode 123456`,
+   `<div><small>Bruto</small><strong class="mono">${money(s.gross)}</strong></div><div><small>Taxa</small><strong class="mono">${pct(s.rate)}</strong></div><div><small>Líquido</small><strong class="mono">${money(sum(ps,p=>p.paidNet??p.net))}</strong></div><div style="margin-left:auto">${pill(...v)}</div>`)}
+function openSale(id){const s=sales.find(x=>x.id===id),ps=parcels.filter(p=>p.s===s),C=checks(s);
+  const nOk=C.filter(c=>c.res==="ok").length;
+  const pdv=s.pdv?`<div class="fields">${fld("Cupom",`<span class="mono">${s.pdv.cupom}</span>`)}${fld("Data e hora",`<span class="mono">${dlf(s.date)} ${s.pdv.hora}</span>`)}${fld("Unidade","Quiosque Centro")}${fld("Meio",s.pdv.canal)}${fld("Valor",`<span class="mono">${money(s.pdv.valor)}</span>`)}${fld("Status",s.pdv.status)}${s.mod!=="pix"?fld("NSU",`<span class="mono">${s.pdv.nsu}</span>`)+fld("Autorização",`<span class="mono">${s.pdv.aut}</span>`)+fld("Terminal",s.pdv.terminal):""}${fld("Pedido",s.pdv.pedido)}</div>`:'<p class="k-bad small" style="margin:0">Nenhum cupom encontrado no PDV para esta venda.</p>';
+  const stone=s.mod==="pix"?`<div class="fields">${fld("ID Pix","<span class='mono'>"+s.stone.e2e+"</span>","e2eId",true)}${fld("ID do evento",`<span class="mono">${s.stone.eventId}</span>`,"eventId")}${fld("Data e hora",`<span class="mono">${dlf(s.date)} ${s.time}</span>`)}${fld("Bruto",`<span class="mono">${money(s.gross)}</span>`,"grossCents")}${fld("Devolução","—","refundId")}</div>`:
+   `<div class="fields">${fld("Transação",`<span class="mono">${s.stone.key}</span>`,"AcquirerTransactionKey",true)}${fld("Captura (local)",`<span class="mono">${dlf(s.date)} ${s.time}</span>`,"CaptureLocalDateTime")}${fld("Autorização (UTC)",`<span class="mono">${s.stone.authUtc.slice(0,10).split("-").reverse().join("/")} ${s.stone.authUtc.slice(11,19)}</span>`,"AuthorizationDateTime")}${fld("Bandeira",`${s.brand} · ${s.stone.brandId}`,"BrandId")}${fld("Tipo de conta",s.stone.accountType,"AccountType")}${fld("Parcelas",s.n,"NumberOfInstallments")}${fld("Tipo de taxa",s.stone.feeType,"FeeType")}${fld("Capturado",`<span class="mono">${money(s.stone.captured)}</span>`,"CapturedAmount")}${fld("Cancelado",`<span class="mono">${money(s.stone.canceled)}</span>`,"CanceledAmount")}${fld("NSU",`<span class="mono">${s.stone.nsu}</span>`)}${fld("Autorização",`<span class="mono">${s.stone.aut}</span>`)}${fld("Terminal",s.stone.terminal)}${fld("Eventos",Object.entries(s.stone.events).map(([k,v])=>`${k} ${v}`).join(" · "),"Events",true)}</div>`;
+  const R=[["Situação",null,p=>spill(p.st)],["Bruto","GrossAmount",p=>money(p.gross)],["Taxa","MdrAmount",p=>`${money(p.mdr)} <span class="faint">(${pct(p.mdr/p.gross)})</span>`],["Antecipação","AdvanceRateAmount",p=>p.adv?money(p.adv):"—"],["Líquido","NetAmount",p=>`<b>${money(p.paidNet??p.net)}</b>`],["Previsto","PrevisionPaymentDate",p=>dlf(p.exp)],["Pago","PaymentDate",p=>p.paid?dlf(p.paid):"—"],["Data original","AdvancedReceivableOriginalPaymentDate",p=>p.advOrig?dlf(p.advOrig):"—"],["ID do pagamento","PaymentId",p=>p.paymentId??"—"],["Suspenso por chargeback","SuspendedByChargeback",p=>p.chargeback?'<span class="k-bad">sim</span>':"não"],["Arquivo Stone","FileId · ReferenceDate",p=>p.file?`${p.file.id}<div class="faint small">ref. ${dl(p.file.ref)} · gerado ${dl(p.file.gen.slice(0,10))} ${p.file.gen.slice(11)}</div>`:p.st==="sem_arquivo"?'<span class="k-adj">não recebido</span>':"—"]];
+  const ptab=`<div class="tw"><table class="ptab"><thead><tr><th>Campo</th>${ps.map(p=>`<th>${s.n>1?`Parcela ${p.j}/${s.n}`:"Pagamento"}</th>`).join("")}</tr></thead><tbody>${R.map(([k,fn,f])=>`<tr><td>${k}${fn?`<span class="fn">${fn}</span>`:""}</td>${ps.map(p=>`<td class="${k==="Situação"?"":"mono"}">${f(p)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  PANEL().innerHTML=saleHeader(s,"Auditoria da venda")+`<div class="pb">
+   <div class="two">${sec("PDV · cupom",s.pdv?"Coala PDV":"",pdv)}${sec("Stone · venda",s.mod==="pix"?"Pix":"arquivo de conciliação",stone)}</div>
+   ${sec(`Stone · ${s.n>1?"parcelas":"pagamento na conta Stone"}`,`${ps.filter(p=>p.paid).length} de ${ps.length} paga(s)`,ptab,true)}
+   <section class="psec"><header><h3>Cruzamentos · ${nOk} de ${C.length} ok</h3><button class="btn" data-cross="${s.id}" style="height:30px;font-size:12.5px">Detalhar cruzamento →</button></header><div class="in"><div class="cl">${C.map(c=>`<div><span class="ico ${RES[c.res][1]}">${RES[c.res][0]}</span><span>${c.t}</span></div>`).join("")}</div></div></section>
+   <p class="small faint" style="margin:0">O pagamento na conta Stone é comprovado pelo arquivo de conciliação da Stone. O extrato da própria conta Stone ainda não está no sistema.</p></div>`;
+  document.getElementById("sheet").classList.add("open")}
+function openCross(id){const s=sales.find(x=>x.id===id),C=checks(s);
+  PANEL().innerHTML=saleHeader(s,"Detalhe do cruzamento")+`<div class="pb"><div><button class="btn" data-sale="${s.id}">← Voltar aos dados da venda</button></div>
+   ${sec("O que foi comparado",`${C.filter(c=>c.res==="ok").length} de ${C.length} ok`,`<div class="checks">${C.map(c=>`<div class="ck ${c.res}"><span class="ico ${RES[c.res][1]}">${RES[c.res][0]}</span><div><b>${c.t}</b><div class="small muted">${c.what}</div><div class="cmp2"><span><i>PDV / esperado</i>${c.a}</span><span><i>Stone</i>${c.b}</span></div>${c.why?`<div class="small ${RES[c.res][1]}" style="font-weight:600">${c.why}</div>`:""}</div></div>`).join("")}</div>`,true)}</div>`}
+function pRow(p){const v=verdict(p.s);return `<button class="lift" data-sale="${p.s.id}"><span><b>${p.s.mod==="pix"?"Pix":`${p.s.brand} ${MODL[p.s.mod].toLowerCase()}${p.s.n>1?` ${p.j}/${p.s.n}`:""}`}</b> <span class="small faint">venda <span class="mono">${dl(p.s.date)} ${p.s.time.slice(0,5)}</span></span><div class="small muted">previsto ${dl(p.exp)}${p.paid?` · pago ${dl(p.paid)}`:""} · taxa ${pct(p.s.rate)}</div></span>
+  <span style="text-align:right"><span class="amt">${money(p.paidNet??p.net)}</span><div class="pp">${spill(p.st)}${v[0]!=="Conferida"&&v[0]!=="Em andamento"?pill(...v):""}</div></span></button>`}
+function openList(title,list){PANEL().innerHTML=panelHead("Parcelas do grupo",title,`${list.length} parcelas · clique para ver a auditoria da venda`)+`<div class="pb"><div class="rows">${list.map(pRow).join("")||'<p class="faint" style="padding:14px 18px;margin:0">Nada aqui.</p>'}</div></div>`;document.getElementById("sheet").classList.add("open")}
+document.addEventListener("click",e=>{if(e.target.closest("[data-close]"))return document.getElementById("sheet").classList.remove("open");const x=e.target.closest("[data-cross]");if(x)return openCross(x.dataset.cross);const s=e.target.closest("[data-sale]");if(s){openSale(s.dataset.sale);PANEL().querySelector(".pb").scrollTop=0}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")document.getElementById("sheet").classList.remove("open")});
+
+// ---------- tela ----------
+let brandF=null,open3=new Set(),openG=new Set(),openW=new Set(["w"+(Math.ceil((13+6)/7))]);
+function render(){const P=parcels.filter(modOk);const pDue=P.filter(p=>NOV(p.exp)||(p.paid&&NOV(p.paid)));
+  const inStone=p=>p.paid&&p.paid<TODAY;
+  const divSales=new Set(pDue.filter(p=>verdict(p.s)[0]==="Com divergência").map(p=>p.s.id)).size;
+  const dias=[];for(let d="2026-11-01";d<TODAY;d=addD(d,1))dias.push(d);
+  const dayData=d=>{const due=P.filter(p=>p.exp===d),paid=P.filter(p=>p.paid===d);const pv=sum(due,"net"),pg=sum(paid,"paidNet"),df=r2(pg-pv);
+    const R=[];const g=(f,t,sg,src)=>{const x=src.filter(f);if(x.length)R.push({t,sg,v:sum(x,sg==="+"?"paidNet":"net")})};
+    g(p=>p.st==="antecipado","antecipação","+",paid);g(p=>p.st==="atrasado_pago","atrasados de outros dias","+",paid);g(p=>p.st==="atrasado_pago","pagos depois","−",due);g(p=>p.st==="nao_pago","não pagos","−",due);g(p=>p.st==="chargeback","chargeback","−",due);
+    return {d,due,paid,pv,pg,df,R,miss:d===MISSING,n:new Set([...due,...paid]).size}};
+  const whyTxt=R=>R.map(r=>`${r.sg}${money(r.v)} ${r.t}`).join(" · ");
+  const dayRow=x=>{const op=open3.has(x.d);const att=x.miss||Math.abs(x.df)>.01;
+    return `<tr class="click day ${op?"open":att?"att":""}" data-d3="${x.d}"><td style="padding-left:42px"><span class="chev">${op?"▾":"▸"}</span><b>${dow(x.d)} ${dl(x.d)}</b></td><td class="r mono">${x.n}</td><td class="r mono">${money(x.pv)}</td><td class="r mono">${x.miss?"?":money(x.pg)}</td><td class="r mono ${att&&!x.miss?"diff":"faint"}">${x.miss?"?":Math.abs(x.df)>.01?money(x.df):"—"}</td><td class="small">${x.miss?'<span class="pill s-adj">Arquivo Stone não recebido</span>':x.R.length?whyTxt(x.R):'<span class="pill s-ok">Bateu</span>'}</td></tr>
+    ${op?`<tr><td colspan="6" class="sub" style="padding-left:66px"><div class="rows">${[...new Set([...x.due,...x.paid])].map(pRow).join("")}</div></td></tr>`:""}`};
+  // semanas de segunda a domingo dentro do mês
+  const weeks=[];dias.forEach(d=>{const w=new Date(d+"T12:00:00Z").getUTCDay();if(!weeks.length||w===1)weeks.push([]);weeks[weeks.length-1].push(d)});
+  const rows3=weeks.map((ws,i)=>({i:i+1,ws,xs:ws.map(dayData)})).reverse().map(W=>{
+    const key="w"+W.i,op=openW.has(key);const pv=sum(W.xs,"pv"),pg=sum(W.xs.filter(x=>!x.miss),"pg"),df=r2(pg-sum(W.xs.filter(x=>!x.miss),"pv"));
+    const agg={};W.xs.forEach(x=>x.R.forEach(r=>{const k=r.sg+r.t;agg[k]=agg[k]||{t:r.t,sg:r.sg,v:0};agg[k].v=r2(agg[k].v+r.v)}));
+    const R=Object.values(agg);const bad=W.xs.filter(x=>Math.abs(x.df)>.01&&!x.miss).length,miss=W.xs.filter(x=>x.miss).length,ok=W.xs.filter(x=>!x.miss&&Math.abs(x.df)<=.01).length;
+    const dot=x=>{const st=x.miss?"miss":!x.n?"none":Math.abs(x.df)>.01?"bad":"ok";const tip=x.miss?"arquivo Stone não recebido":!x.n?"sem parcelas":Math.abs(x.df)>.01?"diferença "+money(x.df):"bateu";return `<i class="wd ${st}" title="${dow(x.d)} ${dl(x.d)} · ${tip}">${x.d.slice(8,10).replace(/^0/,"")}</i>`};
+    const MES=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];const d0=+W.ws[0].slice(8,10),d1=+W.ws.at(-1).slice(8,10),mes=MES[+W.ws[0].slice(5,7)-1];
+    const att=Math.abs(df)>.01||miss;
+    const head=`<tr class="wk ${op?"open":""}" data-w="${key}">
+      <td><span class="chev">${op?"▾":"▸"}</span><b class="wname">Semana ${W.i}</b><span class="wdates">${d0===d1?`${d0} de ${mes}`:`${d0} a ${d1} de ${mes}`}</span></td>
+      <td class="r mono">${sum(W.xs,"n")}</td><td class="r mono">${money(pv)}</td><td class="r mono">${money(pg)}</td>
+      <td class="r mono ${Math.abs(df)>.01?"diff":"faint"}">${Math.abs(df)>.01?money(df):"—"}</td>
+      <td class="small muted">${att?[bad?`${bad} dia${bad>1?"s":""} com diferença`:"",miss?`${miss} sem arquivo`:""].filter(Boolean).join(" · "):"tudo bateu"}</td></tr>`;
+    return head+(op?[...W.xs].reverse().map(dayRow).join(""):"")}).join("");
+  const groups=[];const G=(key,label,f,sub)=>{const x=pDue.filter(f);if(!x.length)return;const ss=[...new Set(x.map(p=>p.s))];const rates=ss.map(s=>s.rate);const mn=Math.min(...rates),mx=Math.max(...rates);
+    const due=x.filter(p=>p.exp<TODAY&&NOV(p.exp)&&p.st!=="sem_arquivo"),okc=due.filter(p=>p.st==="pago"||p.st==="antecipado").length;const pr=x.filter(p=>["nao_pago","atrasado_pago","chargeback","sem_arquivo"].includes(p.st));
+    groups.push({key,label,sub,x,ss,mn,mx,gross:sum(x,"gross"),mdr:sum(x,"mdr"),net:sum(x,"net"),paid:sum(x.filter(inStone),"paidNet"),rec:sum(x.filter(p=>p.st==="a_receber"),"net"),okp:due.length?okc/due.length:null,pr})};
+  const brandOpts=[...(modF!=="card"?["Pix"]:[]),...(modF!=="pix"?Object.keys(BRANDS):[])].map(b=>{const x=pDue.filter(p=>b==="Pix"?p.s.mod==="pix":p.s.brand===b);return {b,n:new Set(x.map(p=>p.s.id)).size,pend:x.filter(p=>["nao_pago","atrasado_pago","chargeback","sem_arquivo"].includes(p.st)).length}}).filter(o=>o.n);
+  if(brandF&&!brandOpts.some(o=>o.b===brandF))brandF=null;
+  if(brandF==="Pix")G("pix","Pix",p=>p.s.mod==="pix","na hora (D0)");
+  if(brandF&&brandF!=="Pix")for(const b of [brandF]){G(`${b}|debito`,`${b} · Débito`,p=>p.s.brand===b&&p.s.mod==="debito","D+1");G(`${b}|credito`,`${b} · Crédito à vista`,p=>p.s.brand===b&&p.s.mod==="credito","D+30");
+    const par=pDue.filter(p=>p.s.brand===b&&p.s.mod==="parcelado");if(par.length){G(`${b}|parc`,`${b} · Crédito parcelado`,p=>p.s.brand===b&&p.s.mod==="parcelado","30 dias por parcela");
+      if(openG.has(`${b}|parc`))[...new Set(par.map(p=>p.s.n))].sort((a,b)=>a-b).forEach(n=>G(`${b}|parc|${n}`,`${n}x`,p=>p.s.brand===b&&p.s.mod==="parcelado"&&p.s.n===n,`${n} parcelas`))}}
+  const rows8=groups.map(g=>{const child=g.key.split("|").length===3;const parent=g.key.endsWith("|parc");const varies=g.mx-g.mn>.0001&&!parent;
+    return `<tr class="click ${child?"child":""} ${parent&&openG.has(g.key)?"open":""}" data-g="${g.key}"><td>${parent?`<span class="chev">${openG.has(g.key)?"▾":"▸"}</span>`:""}<b>${g.label}</b><div class="small muted">${g.sub} · ${g.ss.length} vendas</div></td><td class="r mono">${money(g.gross)}</td>
+    <td class="r"><span class="mono" style="font-weight:600">${pct(g.mdr/g.gross)}</span>${parent?'<div class="small faint">varia por nº de parcelas</div>':varies?`<div style="margin-top:4px"><span class="pill s-adj">! ${pct(g.mn)} a ${pct(g.mx)}</span></div>`:""}</td><td class="r mono">${money(g.mdr)}</td><td class="r mono k-ok">${money(g.paid)}</td><td class="r mono">${money(g.rec)}</td>
+    <td class="r mono">${g.okp==null?"—":Math.round(g.okp*100)+"%"}</td><td>${g.pr.length?`<span class="pill s-review">${g.pr.length} pendente${g.pr.length>1?"s":""}</span>`:'<span class="faint">—</span>'}</td></tr>`}).join("");
+  document.getElementById("hero").innerHTML=`<section class="hero"><span class="kick">Financeiro · Conciliação</span>
+   <div class="hrow"><h1>Conciliação de recebimentos</h1><span class="sub">A Stone pagou na conta Stone o que vendemos no Pix e no cartão, com a taxa e no prazo certos?</span><span class="spacer"></span><button class="btn-dark">← Financeiro</button></div>
+   <div class="hrow"><span class="hchip info"><span class="v">${money(sum(pDue.filter(p=>NOV(p.exp)),"net"))}</span><span class="l">previsto em novembro</span></span><span class="hchip ok"><span class="v">${money(sum(pDue.filter(inStone),"paidNet"))}</span><span class="l">caiu na conta Stone</span></span><span class="hchip"><span class="v">${money(sum(pDue.filter(p=>NOV(p.s.date)),"mdr"))}</span><span class="l">taxas Stone no mês</span></span><span class="hchip danger"><span class="v">${divSales}</span><span class="l">vendas com divergência</span></span></div></section>`;
+  document.getElementById("views").innerHTML=`
+  <div class="hrow"><div class="seg" role="group" aria-label="Meio de pagamento">${[["all","Pix + cartão"],["pix","Pix"],["card","Cartão"]].map(([k,t])=>`<button data-m="${k}" aria-pressed="${modF===k}">${t}</button>`).join("")}</div><span class="spacer"></span><span class="jump"><a href="#s1">Semana a semana</a><a href="#s2">Por cartão e parcelas</a></span></div>
+  <section id="s1" class="card"><div class="chead"><div><span class="kick">Etapa 04 · previsto × pago</span><h2>Semana a semana · previsto × caiu na conta Stone</h2><div class="small muted">Clique na semana para ver os dias; no dia, as parcelas; na parcela, a auditoria da venda.</div></div></div>
+  <div class="tw"><table class="tb"><thead><tr><th>Semana / dia do pagamento</th><th class="r">Parcelas</th><th class="r">Previsto pela Stone</th><th class="r">Caiu na conta Stone</th><th class="r">Diferença</th><th>Explicação</th></tr></thead><tbody>${rows3}</tbody></table></div></section>
+  <section id="s2" class="card"><div class="chead"><div><span class="kick">Taxa por cartão</span><h2>Por cartão e parcelas</h2><div class="small muted">Cada bandeira e modalidade tem sua taxa; no parcelado, a taxa muda com o número de parcelas.</div></div></div>
+  <div class="bpills" role="group" aria-label="Filtrar por bandeira">${brandOpts.map(o=>`<button data-b="${o.b}" aria-pressed="${brandF===o.b}">${o.b}<span class="n">${o.n}</span>${o.pend?`<span class="dot" title="${o.pend} pendência(s)"></span>`:""}</button>`).join("")}</div>
+  ${!brandF?`<div class="empty">Escolha uma bandeira acima para ver as taxas por modalidade e número de parcelas.</div>`:`<div class="tw"><table class="tb"><thead><tr><th>Cartão</th><th class="r">Vendido (bruto)</th><th class="r">Taxa praticada</th><th class="r">Taxa (R$)</th><th class="r">Caiu na Stone</th><th class="r">A receber</th><th class="r">No prazo</th><th>Pendências</th></tr></thead><tbody>${rows8}</tbody></table></div>`}
+  <div class="foot">Taxa contratada: ainda não há tabela oficial por bandeira, modalidade e parcelas no sistema; a coluna mostra a taxa praticada (MDR ÷ bruto).</div></section>`;
+  document.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{modF=b.dataset.m;render()});
+  document.querySelectorAll("[data-b]").forEach(b=>b.onclick=()=>{brandF=brandF===b.dataset.b?null:b.dataset.b;render()});
+  document.querySelectorAll("[data-w]").forEach(r=>r.onclick=()=>{const k=r.dataset.w;openW.has(k)?openW.delete(k):openW.add(k);render()});
+  document.querySelectorAll("[data-d3]").forEach(r=>r.onclick=()=>{const d=r.dataset.d3;open3.has(d)?open3.delete(d):open3.add(d);render()});
+  document.querySelectorAll("[data-g]").forEach(r=>r.onclick=()=>{const key=r.dataset.g;if(key.endsWith("|parc")){openG.has(key)?openG.delete(key):openG.add(key);render();return}
+    const g=groups.find(x=>x.key===key);openList(g.label+(key.split("|").length===3?" · "+key.split("|")[0]+" parcelado":"")+" · novembro",g.x)});
+}
+render();
+</script>
+</body>
+</html>

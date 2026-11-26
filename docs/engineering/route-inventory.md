@@ -69,7 +69,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/documents/templates/[id]` | [page.tsx](../../src/app/dashboard/documents/templates/[id]/page.tsx) | Ler a própria página |
 | `dashboard/documents/templates` | [page.tsx](../../src/app/dashboard/documents/templates/page.tsx) | Redireciona para `/dashboard/documents/generator/models` |
 
-## dp (26)
+## dp (27)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
@@ -83,6 +83,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/dp/ferias/[userId]` | [page.tsx](../../src/app/dashboard/dp/ferias/[userId]/page.tsx) | [dp-ferias-profile.tsx](../../src/components/dp/dp-ferias-profile.tsx) |
 | `dashboard/dp/ferias` | [page.tsx](../../src/app/dashboard/dp/ferias/page.tsx) | [dp-ferias-manager.tsx](../../src/components/dp/dp-ferias-manager.tsx) |
 | `dashboard/dp` | [page.tsx](../../src/app/dashboard/dp/page.tsx) | [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts), [use-dp-schedules-shifts.ts](../../src/hooks/use-dp-schedules-shifts.ts) |
+| `dashboard/dp/prestadores` | [page.tsx](../../src/app/dashboard/dp/prestadores/page.tsx) | [admin-panel.tsx](../../src/features/service-portal/admin-panel.tsx), [page-hero.tsx](../../src/components/patterns/page-hero.tsx) |
 | `dashboard/dp/requests` | [page.tsx](../../src/app/dashboard/dp/requests/page.tsx) | [hr-requests-page.tsx](../../src/features/hr/requests/hr-requests-page.tsx) |
 | `dashboard/dp/schedules/[id]` | [page.tsx](../../src/app/dashboard/dp/schedules/[id]/page.tsx) | [dp-context.tsx](../../src/components/dp-context.tsx), [dp-schedule-editor.tsx](../../src/components/dp/dp-schedule-editor.tsx) |
 | `dashboard/dp/schedules/month/[period]` | [page.tsx](../../src/app/dashboard/dp/schedules/month/[period]/page.tsx) | [dp-schedule-month-view.tsx](../../src/components/dp/dp-schedule-month-view.tsx), [dp-schedule-periods.ts](../../src/lib/dp-schedule-periods.ts) |
@@ -106,7 +107,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | --- | --- | --- |
 | `dashboard/expiry` | [page.tsx](../../src/app/dashboard/expiry/page.tsx) | [expiry-control.tsx](../../src/components/expiry-control.tsx) |
 
-## financial (32)
+## financial (34)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
@@ -120,7 +121,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/financial/cash-closures/sessions/[sessionId]` | [page.tsx](../../src/app/dashboard/financial/cash-closures/sessions/[sessionId]/page.tsx) | [cash-counting-session-page.tsx](../../src/features/financial/cash-counting-sessions/components/cash-counting-session-page.tsx) |
 | `dashboard/financial/cash-closures/sessions/new` | [page.tsx](../../src/app/dashboard/financial/cash-closures/sessions/new/page.tsx) | [cash-counting-session-new-page.tsx](../../src/features/financial/cash-counting-sessions/components/cash-counting-session-new-page.tsx) |
 | `dashboard/financial/cash-deposits` | [page.tsx](../../src/app/dashboard/financial/cash-deposits/page.tsx) | [cash-deposits-page.tsx](../../src/features/financial/cash-deposits/cash-deposits-page.tsx) |
-| `dashboard/financial/cash-flow/agent` | [page.tsx](../../src/app/dashboard/financial/cash-flow/agent/page.tsx) | [stone-anticipations-page.tsx](../../src/features/financial/pages/stone-anticipations-page.tsx), [receivables-page.tsx](../../src/features/financial/receivables/receivables-page.tsx) |
+| `dashboard/financial/cash-flow/agent` | [page.tsx](../../src/app/dashboard/financial/cash-flow/agent/page.tsx) | Redireciona para `/dashboard/financial/cash-flow` |
 | `dashboard/financial/cash-flow` | [page.tsx](../../src/app/dashboard/financial/cash-flow/page.tsx) | [cash-flow-page.tsx](../../src/features/financial/pages/cash-flow-page.tsx) |
 | `dashboard/financial/cash-flow/receivables` | [page.tsx](../../src/app/dashboard/financial/cash-flow/receivables/page.tsx) | [receivables-page.tsx](../../src/features/financial/receivables/receivables-page.tsx) |
 | `dashboard/financial/dre` | [page.tsx](../../src/app/dashboard/financial/dre/page.tsx) | [dre-page.tsx](../../src/features/financial/pages/dre-page.tsx) |
@@ -134,6 +135,8 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/financial/expenses/pending-audit` | [page.tsx](../../src/app/dashboard/financial/expenses/pending-audit/page.tsx) | [constants.ts](../../src/features/financial/lib/constants.ts) |
 | `dashboard/financial/financial-flow` | [page.tsx](../../src/app/dashboard/financial/financial-flow/page.tsx) | Redireciona para `/dashboard/financial/cash-flow` |
 | `dashboard/financial/inbox` | [page.tsx](../../src/app/dashboard/financial/inbox/page.tsx) | Redireciona para `/dashboard/financial/expenses/inbox` |
+| `dashboard/financial/month-closing/expenses` | [page.tsx](../../src/app/dashboard/financial/month-closing/expenses/page.tsx) | [expenses-flow-page.tsx](../../src/features/financial/month-closing/expenses-flow-page.tsx) |
+| `dashboard/financial/month-closing` | [page.tsx](../../src/app/dashboard/financial/month-closing/page.tsx) | [month-closing-page.tsx](../../src/features/financial/month-closing/month-closing-page.tsx) |
 | `dashboard/financial` | [page.tsx](../../src/app/dashboard/financial/page.tsx) | [financial-dashboard-page.tsx](../../src/features/financial/pages/financial-dashboard-page.tsx) |
 | `dashboard/financial/payment-requests` | [page.tsx](../../src/app/dashboard/financial/payment-requests/page.tsx) | Redireciona para `/dashboard/financial/expenses/authorizations` |
 | `dashboard/financial/reconciliation/bank-statements` | [page.tsx](../../src/app/dashboard/financial/reconciliation/bank-statements/page.tsx) | [bank-statements-page.tsx](../../src/features/financial/pages/bank-statements-page.tsx) |
@@ -154,11 +157,12 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/forms/models/new` | [page.tsx](../../src/app/dashboard/forms/models/new/page.tsx) | [form-model-page-shell.tsx](../../src/components/forms/form-model-page-shell.tsx) |
 | `dashboard/forms` | [page.tsx](../../src/app/dashboard/forms/page.tsx) | [forms-dashboard-shell.tsx](../../src/components/forms/forms-dashboard-shell.tsx) |
 
-## goals (5)
+## goals (6)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
 | `dashboard/goals/analysis` | [page.tsx](../../src/app/dashboard/goals/analysis/page.tsx) | [goals-analysis-dashboard.tsx](../../src/components/goals-analysis-dashboard.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
+| `dashboard/goals/guide` | [page.tsx](../../src/app/dashboard/goals/guide/page.tsx) | [GuiaMetas.tsx](../../src/components/goals/guide/GuiaMetas.tsx), [page-header.tsx](../../src/components/layout/page-header.tsx) |
 | `dashboard/goals/history` | [page.tsx](../../src/app/dashboard/goals/history/page.tsx) | Redireciona para `/dashboard/goals/analysis?tab=closures` |
 | `dashboard/goals` | [page.tsx](../../src/app/dashboard/goals/page.tsx) | Redireciona para `/dashboard/goals/tracking` |
 | `dashboard/goals/registration` | [page.tsx](../../src/app/dashboard/goals/registration/page.tsx) | [goals-registration-dashboard.tsx](../../src/components/goals-registration-dashboard.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
@@ -363,4 +367,4 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/users/inactive` | [page.tsx](../../src/app/dashboard/users/inactive/page.tsx) | [inactive-users-screen.tsx](../../src/components/inactive-users-screen.tsx) |
 | `dashboard/users` | [page.tsx](../../src/app/dashboard/users/page.tsx) | Redireciona para `/dashboard/dp/collaborators` |
 
-Total: **181 páginas** no checkout usado para a geração.
+Total: **185 páginas** no checkout usado para a geração.

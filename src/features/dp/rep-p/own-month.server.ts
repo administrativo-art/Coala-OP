@@ -11,7 +11,7 @@ import { readOfficialPersonMonth, readOfficialScheduleShifts, type OfficialShift
 
 import { journeyReferenceMinutes, type BankJourney } from '@/features/dp/time-bank/core';
 import { AUTOMATIC_ABSENCES } from '@/features/dp/time-adjustments/automatic-absence.server';
-import { automaticAbsenceSuperseded } from '@/features/dp/time-adjustments/automatic-absence-core';
+import { adjustmentRestoresAutomaticAbsence, automaticAbsenceSuperseded } from '@/features/dp/time-adjustments/automatic-absence-core';
 
 import { repPOwnMonthSchema } from './schemas';
 import { isBrazilTimeZone } from './time-zones';
@@ -23,6 +23,9 @@ export type RepPOwnScheduledShift = {
   startTime: string | null;
   endTime: string | null;
   overnight: boolean;
+  manualOrder?: number;
+  manualMode?: 'fixed' | 'flexible';
+  manualWorkMinutes?: number;
   unitId: string | null;
   unitName: string | null;
   assignmentKind?: 'regular' | 'external_coverage';
@@ -169,8 +172,8 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
 
   const result: RepPOwnScheduledShift[] = ownShifts.map((doc) => {
     const definition = definitionById.get(text(doc.get('shiftDefinitionId')) ?? '');
-    const breakStart = text(definition?.get('breakStart'));
-    const breakEnd = text(definition?.get('breakEnd'));
+    const breakStart = text(doc.get('manualBreak.start')) ?? text(definition?.get('breakStart'));
+    const breakEnd = text(doc.get('manualBreak.end')) ?? text(definition?.get('breakEnd'));
     const declaredBreak = text(definition?.get('breakType'));
     const breakType = (['none', 'fixed', 'flexible', 'staggered'] as const).find((value) => value === declaredBreak)
       ?? (breakStart && breakEnd ? 'fixed' : 'none');
@@ -180,7 +183,13 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       ? rawSegments.filter((segment) => typeof segment?.start === 'string' && typeof segment?.end === 'string')
         .map((segment) => ({ start: String(segment.start), end: String(segment.end) }))
       : null;
+    const manualOrder = minutes(doc.get('manualOrder'));
+    const manualMode = doc.get('manualDay.mode');
+    const manualWorkMinutes = minutes(doc.get('manualDay.expectedWorkMinutes'));
     return {
+      ...(manualOrder != null && (manualMode === 'fixed' || manualMode === 'flexible')
+        ? { manualOrder, manualMode, ...(manualMode === 'flexible' && manualWorkMinutes != null ? { manualWorkMinutes } : {}) }
+        : {}),
       date: String(doc.get('date')),
       type: doc.get('type') === 'day_off' ? 'day_off' : 'work',
       startTime: text(doc.get('startTime')),
@@ -224,7 +233,8 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
     ]);
     const periods = approvedAbsences.docs.filter((doc) => doc.get('status') === 'approved')
       .map((doc) => ({ startDate: String(doc.get('startDate')), endDate: String(doc.get('endDate')) }));
-    const adjustmentDates = new Set(approvedAdjustments.docs.filter((doc) => doc.get('status') === 'approved').map((doc) => String(doc.get('workDate'))));
+    const adjustmentDates = new Set(approvedAdjustments.docs.filter((doc) => adjustmentRestoresAutomaticAbsence(doc.data()))
+      .map((doc) => String(doc.get('workDate'))));
     effectiveAutomaticDates = effectiveAutomaticDates.filter((date) => !automaticAbsenceSuperseded(date, adjustmentDates, periods));
   }
   return { month: competence, shifts: result, holidays,

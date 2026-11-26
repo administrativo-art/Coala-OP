@@ -40,6 +40,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { canReceivePurchase } from '@/lib/purchasing-permissions';
 import { uploadOperationalFile } from '@/lib/operational-upload-client';
 import { calculateStockQuantityFromPurchase } from '@/lib/purchasing-units';
+import { purchasePackIssue, purchasePackPreview, purchaseProductForPack } from '@/lib/purchase-packaging';
 import {
   getPurchaseItemTreatmentLabel,
   getTreatmentEntryType,
@@ -165,6 +166,9 @@ interface ItemDraft {
   unit: string;
   purchaseUnitType: PurchaseReceiptItem['purchaseUnitType'];
   purchaseUnitLabel: string;
+  isMultipack: boolean;
+  unitsPerPackage: number;
+  stockRegistrationMode: PurchaseReceiptItem['stockRegistrationMode'];
   quantityOrdered: number;
   quantityPreviouslyReceived: number;
   quantityRemaining: number;
@@ -478,6 +482,9 @@ export function ReceiptWorkspace({ receipt }: Props) {
               unit: item.unit || item.purchaseUnitLabel || base?.unit || '',
               purchaseUnitType: item.purchaseUnitType ?? 'content',
               purchaseUnitLabel: item.purchaseUnitLabel || item.unit || base?.unit || '',
+              isMultipack: Boolean(item.isMultipack),
+              unitsPerPackage: Number(item.unitsPerPackage ?? 0),
+              stockRegistrationMode: item.stockRegistrationMode ?? null,
               quantityOrdered: item.quantityOrdered,
               quantityPreviouslyReceived,
               quantityRemaining,
@@ -641,9 +648,14 @@ export function ReceiptWorkspace({ receipt }: Props) {
       const base = baseProducts.find((bp) => bp.id === d.baseItemId);
       const product = products.find((p) => p.id === d.productId);
       if (!base || !product) return false;
+      if (d.isMultipack) {
+        if (d.stockRegistrationMode !== 'individual' && d.stockRegistrationMode !== 'package') return false;
+        if (purchasePackIssue(product, d.unitsPerPackage, d.stockRegistrationMode)) return false;
+      }
+      const purchaseProduct = purchaseProductForPack(product, d.isMultipack, d.unitsPerPackage, d.stockRegistrationMode);
       return calculateStockQuantityFromPurchase(
         d.quantityReceived,
-        product,
+        purchaseProduct,
         product,
         base,
         d.purchaseUnitType,
@@ -1584,6 +1596,20 @@ export function ReceiptWorkspace({ receipt }: Props) {
                                 </div>
                               )}
                             </div>
+
+                            {draft.isMultipack && (draft.stockRegistrationMode === 'individual' || draft.stockRegistrationMode === 'package') && (
+                              <div className="mt-3 rounded-md border bg-background p-3 text-xs">
+                                {(() => {
+                                  const preview = purchasePackPreview(draft.quantityReceived, draft.unitPriceConfirmed, 0, draft.unitsPerPackage, draft.stockRegistrationMode);
+                                  const issue = selectedStockProduct ? purchasePackIssue(selectedStockProduct, draft.unitsPerPackage, draft.stockRegistrationMode) : 'Selecione o cadastro que receberá o estoque.';
+                                  return <>
+                                    <p>{draft.quantityReceived} embalagem(ns) × {draft.unitsPerPackage} unidade(s) por embalagem.</p>
+                                    <p className="font-medium">Entrada prevista: {preview.stockQuantity} {draft.stockRegistrationMode === 'individual' ? 'unidades individuais' : 'embalagens fechadas'} · {preview.stockUnitCost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 4, maximumFractionDigits: 4 })} por unidade de estoque.</p>
+                                    {issue && <p role="alert" className="mt-1 text-amber-800">{issue}</p>}
+                                  </>;
+                                })()}
+                              </div>
+                            )}
 
                             {isAssetEntry && (
                               <div className="mt-3 rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground">

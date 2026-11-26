@@ -17,10 +17,10 @@ test('mantém a linha de produção limitada, paginada e sem polling da lista co
       'utf8',
     ),
   ]);
-  const getHandler = routeSource.slice(
-    routeSource.indexOf('export async function GET'),
-    routeSource.indexOf('export async function POST'),
-  );
+  const getStart = routeSource.indexOf('export const GET = secureRoute(');
+  const postStart = routeSource.indexOf('export const POST = secureRoute(');
+  assert.ok(getStart >= 0 && postStart > getStart, 'GET e POST devem sair por secureRoute, nessa ordem');
+  const getHandler = routeSource.slice(getStart, postStart);
 
   assert.match(getHandler, /ONBOARDING_OVERVIEW_LIMITS/);
   assert.match(getHandler, /ONBOARDING_PAGE_LIMIT \+ 1/);

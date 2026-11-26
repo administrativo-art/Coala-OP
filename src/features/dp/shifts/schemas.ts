@@ -11,18 +11,41 @@ export const bulkWorkShiftRouteSchema = z.object({
   scheduleId: z.string().trim().min(1).max(180),
 });
 
+const dayBreakMinutes = z.number().int().min(0).max(480);
+export const manualShiftDaySchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('fixed'), expectedBreakMinutes: dayBreakMinutes }).strict(),
+  z.object({ mode: z.literal('flexible'), expectedWorkMinutes: z.number().int().min(1).max(1439),
+    expectedBreakMinutes: dayBreakMinutes }).strict(),
+]);
+
 export const saveWorkShiftSchema = z.object({
   userId: z.string().trim().min(1).max(180),
   userName: z.string().trim().min(1).max(240).optional(),
   unitId: z.string().trim().min(1).max(180),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   shiftDefinitionId: z.string().trim().min(1).max(180).optional(),
-  startTime: timeSchema,
-  endTime: timeSchema,
+  manualDay: manualShiftDaySchema.optional(),
+  manualOrder: z.number().int().min(0).max(31).optional(),
+  travelFromPreviousMinutes: z.number().int().min(0).max(1439).optional(),
+  manualBreak: z.object({ start: timeSchema, end: timeSchema }).strict().optional(),
+  startTime: z.union([timeSchema, z.literal('')]),
+  endTime: z.union([timeSchema, z.literal('')]),
   type: z.literal('work').optional(),
   exceptionReason: z.string().trim().min(3).max(500).optional(),
 }).strict().refine(
-  (shift) => shift.endTime !== shift.startTime,
+  (shift) => shift.travelFromPreviousMinutes === undefined || Boolean(shift.manualDay),
+  { path: ['travelFromPreviousMinutes'], message: 'O deslocamento exige uma jornada manual.' },
+).refine(
+  (shift) => !shift.manualDay || (!shift.shiftDefinitionId && (shift.endTime > shift.startTime || (shift.manualOrder != null && shift.manualDay.mode === 'flexible' && !shift.startTime && !shift.endTime))
+    && (shift.manualDay.mode === 'fixed' || shift.manualDay.expectedWorkMinutes + shift.manualDay.expectedBreakMinutes <= 1440)),
+  { path: ['manualDay'], message: 'Revise a carga, o intervalo e os horários do turno manual.' },
+).refine(
+  (shift) => !shift.manualBreak || (Boolean(shift.manualDay) && shift.startTime < shift.manualBreak.start
+    && shift.manualBreak.start < shift.manualBreak.end && shift.manualBreak.end < shift.endTime),
+  { path: ['manualBreak'], message: 'O intervalo precisa começar e terminar dentro do período manual.' },
+).refine(
+  (shift) => (Boolean(shift.startTime && shift.endTime) && shift.endTime !== shift.startTime)
+    || (shift.manualOrder != null && shift.manualDay?.mode === 'flexible' && !shift.startTime && !shift.endTime),
   { message: 'O início e o fim do turno não podem ser iguais.' },
 );
 
@@ -110,3 +133,49 @@ export const bulkWorkShiftSchema = z.discriminatedUnion('action', [
 });
 
 export type BulkWorkShiftInput = z.infer<typeof bulkWorkShiftSchema>;
+
+export const manualJourneyDraftSchema = z.object({
+  userId: z.string().trim().min(1).max(180),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  manualDay: manualShiftDaySchema.optional(),
+  removals: z.array(workShiftRouteSchema.extend({
+    expectedDraftVersion: z.number().int().nonnegative(),
+    expectedDraftGenerationId: z.string().min(1).max(180).regex(/^[^/]+$/),
+    expectedOperationalVersion: z.number().int().nonnegative(),
+  }).strict()).max(32).optional(),
+  segments: z.array(workShiftRouteSchema.extend({
+    expectedDraftVersion: z.number().int().nonnegative(),
+    expectedDraftGenerationId: z.string().min(1).max(180).regex(/^[^/]+$/),
+    expectedOperationalVersion: z.number().int().nonnegative(),
+    existing: z.boolean(),
+    manualDay: manualShiftDaySchema.optional(),
+    unitId: z.string().trim().min(1).max(180),
+    startTime: z.union([timeSchema, z.literal('')]),
+    endTime: z.union([timeSchema, z.literal('')]),
+    manualBreak: z.object({ start: timeSchema, end: timeSchema }).strict().optional(),
+  }).strict()).min(1).max(32),
+}).strict().superRefine((day, ctx) => {
+  if (day.segments.some((segment) => segment.manualDay) && day.segments.some((segment) => !segment.manualDay)) {
+    ctx.addIssue({ code: 'custom', path: ['segments'], message: 'Informe o regime de todos os trechos.' });
+  }
+  const keys = new Set<string>();
+  for (const [index, removal] of (day.removals ?? []).entries()) {
+    const key = JSON.stringify([removal.scheduleId, removal.shiftId]);
+    if (keys.has(key) || removal.scheduleId.includes('/') || removal.shiftId.includes('/')) {
+      ctx.addIssue({ code: 'custom', path: ['removals', index], message: 'Confira o trecho a retirar.' });
+    }
+    keys.add(key);
+  }
+  for (const [index, segment] of day.segments.entries()) {
+    const key = JSON.stringify([segment.scheduleId, segment.shiftId]);
+    const { unitId, startTime, endTime, manualBreak } = segment;
+    if (keys.has(key) || segment.scheduleId.includes('/') || segment.shiftId.includes('/') || !(segment.manualDay ?? day.manualDay) || !saveWorkShiftSchema.safeParse({
+      unitId, startTime, endTime, manualBreak, userId: day.userId, date: day.date, manualDay: segment.manualDay ?? day.manualDay, manualOrder: segment.manualDay ? index : undefined,
+    }).success) {
+      ctx.addIssue({ code: 'custom', path: ['segments', index], message: 'Confira os dados e os horários do trecho.' });
+    }
+    keys.add(key);
+  }
+});
+
+export type ManualJourneyDraftInput = z.infer<typeof manualJourneyDraftSchema>;

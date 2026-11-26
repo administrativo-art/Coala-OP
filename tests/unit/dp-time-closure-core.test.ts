@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { registeredRosterReason } from '../../src/features/dp/time-adjustments/closure-roster';
 
 import { absenceLookback, buildDeclaration, competenceEnded, competenceRange, diffDigests, includeClosureRoster, itemDigests, overlapsCompetence, pendingOf, sha256 } from '../../src/features/dp/time-adjustments/closure-core';
 
@@ -74,4 +75,33 @@ test('mês só fecha encerrado há um dia no fuso mais a oeste (turno que cruza 
   // 2/10 às 06h UTC: 1º/10 já terminou um dia em Rio Branco.
   assert.equal(competenceEnded('2026-09', '2026-10-02T06:00:00.000Z'), true);
   assert.equal(competenceEnded('2026-10', '2026-10-17T12:00:00.000Z'), false);
+});
+
+test('cadastro legado usa as datas inclusivas do mês e o tipo do desligamento', () => {
+  const start = '2026-10-01', end = '2026-10-31';
+  const reason = (user: Record<string, unknown>) => registeredRosterReason(user, start, end);
+  assert.equal(reason({ admissionDate: '2026-11-01' }), null);
+  assert.equal(reason({ admissionDate: { toDate: () => new Date(end + 'T12:00:00Z') } }), 'registered');
+  assert.equal(reason({ admissionDate: '2026-09-01', isActive: false, terminationDate: start }), 'registered');
+  assert.equal(reason({ isActive: false, terminationDate: '2026-09-30' }), null);
+  assert.equal(reason({ isActive: false, terminationDate: start, terminationRelationshipType: 'pj' }), null);
+  assert.equal(reason({ isActive: false }), null);
+  assert.equal(reason({}), 'legacy');
+  assert.equal(reason({ employmentRelationshipType: 'partner' }), null);
+});
+
+test('motivo da inclusão permanece na lista congelada, inclusive para ocorrências sem vínculo', () => {
+  const people = includeClosureRoster(buildDeclaration([adjustment('a', 'u1', 'approved')], []),
+    [{ uid: 'u2', name: 'Ana', rosterReason: 'historical' }]);
+  assert.deepEqual(people.map((p) => p.rosterReason), ['historical', 'occurrence']);
+});
+
+test('histórico contratual efetivado vale mesmo sem referência publicada', () => {
+  const user = { admissionDate: '2026-09-01', employmentRelationshipType: 'pj', contractualDataPeriods: [
+    { changeId: 'start', validFrom: '2026-09-01', validTo: '2026-10-31', fields: { employmentRelationshipType: 'clt' } },
+    { changeId: 'switch', validFrom: '2026-11-01', fields: { employmentRelationshipType: 'pj' } },
+  ] };
+  assert.equal(registeredRosterReason(user, '2026-10-01', '2026-10-31'), 'historical');
+  assert.equal(registeredRosterReason(user, '2026-11-01', '2026-11-30'), null);
+  assert.equal(registeredRosterReason({ ...user, scheduledContractChange: { id: 'switch' } }, '2026-11-01', '2026-11-30'), 'historical');
 });

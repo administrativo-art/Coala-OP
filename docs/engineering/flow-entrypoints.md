@@ -2,7 +2,7 @@
 
 Índice gerado de `flow-matrix.csv` e das importações locais alcançáveis a partir das páginas ativas. Ajuda a escolher onde investigar; uma string `/api/` encontrada no código **não prova** que a chamada ocorre nem que seja a única entrada do fluxo. Chamadas montadas dinamicamente, jobs, webhooks e importações além de cinco níveis podem não aparecer. Coleções e permissões abaixo são apenas literais encontrados nos arquivos percorridos; podem pertencer a outro ramo, faltar chamadas indiretas e não comprovam autorização efetiva. Confirme cada candidato na interface, na rota, no serviço e nos testes antes de marcar um grupo como traçado.
 
-Grupos com página ativa: **58**. Atualize com `python3 scripts/generate-flow-entrypoints.py` e confira com `--check`.
+Grupos com página ativa: **59**. Atualize com `python3 scripts/generate-flow-entrypoints.py` e confira com `--check`.
 
 ## `assets`
 
@@ -56,7 +56,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/cash-closures/[kioskId]/[year]/[month]/[day]/page.tsx`](../../src/app/dashboard/financial/cash-closures/%5BkioskId%5D/%5Byear%5D/%5Bmonth%5D/%5Bday%5D/page.tsx), [`src/app/dashboard/financial/cash-closures/[kioskId]/[year]/[month]/page.tsx`](../../src/app/dashboard/financial/cash-closures/%5BkioskId%5D/%5Byear%5D/%5Bmonth%5D/page.tsx), [`src/app/dashboard/financial/cash-closures/[kioskId]/page.tsx`](../../src/app/dashboard/financial/cash-closures/%5BkioskId%5D/page.tsx), [`src/app/dashboard/financial/cash-closures/page.tsx`](../../src/app/dashboard/financial/cash-closures/page.tsx), [`src/app/dashboard/financial/cash-closures/sessions/[sessionId]/page.tsx`](../../src/app/dashboard/financial/cash-closures/sessions/%5BsessionId%5D/page.tsx), [`src/app/dashboard/financial/cash-closures/sessions/new/page.tsx`](../../src/app/dashboard/financial/cash-closures/sessions/new/page.tsx).
 
-Arquivos locais percorridos: 64.
+Arquivos locais percorridos: 74.
 
 Chamadas candidatas encontradas:
 
@@ -114,63 +114,28 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 ## `cash-flow`
 
-Páginas: [`src/app/dashboard/financial/budget-comparison/page.tsx`](../../src/app/dashboard/financial/budget-comparison/page.tsx), [`src/app/dashboard/financial/cash-flow/agent/page.tsx`](../../src/app/dashboard/financial/cash-flow/agent/page.tsx), [`src/app/dashboard/financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx).
+Páginas: [`src/app/dashboard/financial/budget-comparison/page.tsx`](../../src/app/dashboard/financial/budget-comparison/page.tsx), [`src/app/dashboard/financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx).
 
-Arquivos locais percorridos: 102.
+Arquivos locais percorridos: 72.
 
 Chamadas candidatas encontradas:
 
-- `/api/financial/agent` — interface [`src/features/financial/agent/anticipation-workspace.tsx`](../../src/features/financial/agent/anticipation-workspace.tsx); rota candidata [`src/app/api/financial/agent/route.ts`](../../src/app/api/financial/agent/route.ts)
-- `/api/financial/analysis-routines` — interface [`src/features/financial/agent/management-page.tsx`](../../src/features/financial/agent/management-page.tsx); rota candidata [`src/app/api/financial/analysis-routines/route.ts`](../../src/app/api/financial/analysis-routines/route.ts)
 - `/api/financial/budgets` — interface [`src/features/financial/pages/budget-comparison-page.tsx`](../../src/features/financial/pages/budget-comparison-page.tsx); rota candidata [`src/app/api/financial/budgets/route.ts`](../../src/app/api/financial/budgets/route.ts)
 - `/api/financial/budgets/` — interface [`src/features/financial/components/settings/budget-coverage-editor.tsx`](../../src/features/financial/components/settings/budget-coverage-editor.tsx); rota candidata [`src/app/api/financial/budgets/[id]/route.ts`](../../src/app/api/financial/budgets/%5Bid%5D/route.ts)
-- `/api/financial/budgets/cash-projections` — interface [`src/features/financial/pages/cash-flow-page.tsx`](../../src/features/financial/pages/cash-flow-page.tsx); rota candidata [`src/app/api/financial/budgets/cash-projections/route.ts`](../../src/app/api/financial/budgets/cash-projections/route.ts)
 - `/api/financial/budgets/centers` — interface [`src/features/financial/pages/budget-comparison-page.tsx`](../../src/features/financial/pages/budget-comparison-page.tsx); rota candidata [`src/app/api/financial/budgets/centers/route.ts`](../../src/app/api/financial/budgets/centers/route.ts)
 - `/api/financial/budgets/person-references` — interface [`src/features/financial/components/settings/budget-api.ts`](../../src/features/financial/components/settings/budget-api.ts); rota candidata [`src/app/api/financial/budgets/person-references/route.ts`](../../src/app/api/financial/budgets/person-references/route.ts)
+- `/api/financial/cash-flow-study` — interface [`src/features/financial/cash-flow-study/cash-flow-study-view.tsx`](../../src/features/financial/cash-flow-study/cash-flow-study-view.tsx); rota candidata [`src/app/api/financial/cash-flow-study/route.ts`](../../src/app/api/financial/cash-flow-study/route.ts)
 - `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
-- `/api/financial/management-analysis` — interface [`src/features/financial/agent/management-page.tsx`](../../src/features/financial/agent/management-page.tsx); rota candidata [`src/app/api/financial/management-analysis/route.ts`](../../src/app/api/financial/management-analysis/route.ts)
-- `/api/financial/stone-future-receivables` — interface [`src/features/financial/receivables/receivables-page.tsx`](../../src/features/financial/receivables/receivables-page.tsx); rota candidata [`src/app/api/financial/stone-future-receivables/route.ts`](../../src/app/api/financial/stone-future-receivables/route.ts)
-- `/api/financial/stone-mappings` — interface [`src/features/financial/agent/anticipation-workspace.tsx`](../../src/features/financial/agent/anticipation-workspace.tsx); rota candidata [`src/app/api/financial/stone-mappings/route.ts`](../../src/app/api/financial/stone-mappings/route.ts)
-- `/api/financial/stone-portfolio` — interface [`src/features/financial/receivables/portfolio-panel.tsx`](../../src/features/financial/receivables/portfolio-panel.tsx); rota candidata [`src/app/api/financial/stone-portfolio/route.ts`](../../src/app/api/financial/stone-portfolio/route.ts)
-- `/api/financial/stone-wallet-position` — interface [`src/features/financial/receivables/wallet-position-panel.tsx`](../../src/features/financial/receivables/wallet-position-panel.tsx); rota candidata [`src/app/api/financial/stone-wallet-position/route.ts`](../../src/app/api/financial/stone-wallet-position/route.ts)
-
-Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
-
-- `baseProducts` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
-- `kiosks` — [`src/features/financial/agent/management.server.ts`](../../src/features/financial/agent/management.server.ts)
-- `productSimulationItems` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
-- `productSimulations` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
-- `profiles` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `salesReports` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
-- `users` — [`src/features/financial/budgets/references.server.ts`](../../src/features/financial/budgets/references.server.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
-- `audits.edit` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `audits.import` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `audits.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `cardStatements.reconcile` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `cardStatements.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `cashClosures.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `cashDeposits.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `cashFlow.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `expenses.create` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `expenses.edit` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `expenses.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `financial.cashClosures.approve` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
-- `financial.cashClosures.reopen` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
 - `financial.cashFlow.create` — [`src/features/financial/pages/cash-flow-page.tsx`](../../src/features/financial/pages/cash-flow-page.tsx)
 - `financial.cashFlow.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
-- `financial.dre` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
 - `financial.expenses.view` — [`src/features/financial/pages/budget-comparison-page.tsx`](../../src/features/financial/pages/budget-comparison-page.tsx)
 - `financial.financialFlow` — [`src/features/financial/pages/cash-flow-page.tsx`](../../src/features/financial/pages/cash-flow-page.tsx)
-- `financial.personnelCosts.view` — [`src/features/financial/budgets/personnel-access.ts`](../../src/features/financial/budgets/personnel-access.ts)
+- `financial.personnelCosts.view` — [`src/features/financial/pages/budget-comparison-page.tsx`](../../src/features/financial/pages/budget-comparison-page.tsx)
 - `financial.settings.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
 - `financial.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
-- `paymentRequests.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `personnelCosts.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `settings.manageExpenseDescriptions` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `settings.manageImportAliases` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
 
 ## `catalog`
 
@@ -381,7 +346,6 @@ Chamadas candidatas encontradas:
 - `/api/hr/employee-documents/status` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/employee-documents/status/route.ts`](../../src/app/api/hr/employee-documents/status/route.ts)
 - `/api/hr/employee-documents/summary` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/employee-documents/summary/route.ts`](../../src/app/api/hr/employee-documents/summary/route.ts)
 - `/api/hr/employee-documents/visibility` — interface [`src/features/hr/documents/employee-document-visibility-dialog.tsx`](../../src/features/hr/documents/employee-document-visibility-dialog.tsx); rota candidata [`src/app/api/hr/employee-documents/visibility/route.ts`](../../src/app/api/hr/employee-documents/visibility/route.ts)
-- `/api/hr/onboarding/` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/onboarding/[id]/route.ts`](../../src/app/api/hr/onboarding/%5Bid%5D/route.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
@@ -400,7 +364,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/documents/archive/page.tsx`](../../src/app/dashboard/documents/archive/page.tsx), [`src/app/dashboard/documents/editor/[id]/page.tsx`](../../src/app/dashboard/documents/editor/%5Bid%5D/page.tsx), [`src/app/dashboard/documents/editor/documents/page.tsx`](../../src/app/dashboard/documents/editor/documents/page.tsx), [`src/app/dashboard/documents/editor/page.tsx`](../../src/app/dashboard/documents/editor/page.tsx), [`src/app/dashboard/documents/editor/templates/[tid]/page.tsx`](../../src/app/dashboard/documents/editor/templates/%5Btid%5D/page.tsx), [`src/app/dashboard/documents/editor/templates/page.tsx`](../../src/app/dashboard/documents/editor/templates/page.tsx), [`src/app/dashboard/documents/generated/manage/page.tsx`](../../src/app/dashboard/documents/generated/manage/page.tsx), [`src/app/dashboard/documents/generator/page.tsx`](../../src/app/dashboard/documents/generator/page.tsx).
 
-Arquivos locais percorridos: 60.
+Arquivos locais percorridos: 62.
 
 Chamadas candidatas encontradas:
 
@@ -421,9 +385,12 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dp.collaborators.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 - `dp.settings.manageTime` — [`src/features/documents/central/context-archive-access.ts`](../../src/features/documents/central/context-archive-access.ts)
 - `financial.inbox.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
-- `financial.paymentRequests.view` — [`src/features/documents/central/context-archive-access.ts`](../../src/features/documents/central/context-archive-access.ts)
+- `financial.paymentRequests.authorize` — [`src/app/dashboard/documents/generated/workspace.tsx`](../../src/app/dashboard/documents/generated/workspace.tsx)
+- `financial.paymentRequests.create` — [`src/app/dashboard/documents/generated/workspace.tsx`](../../src/app/dashboard/documents/generated/workspace.tsx)
+- `financial.paymentRequests.submit` — [`src/app/dashboard/documents/generated/workspace.tsx`](../../src/app/dashboard/documents/generated/workspace.tsx)
+- `financial.paymentRequests.view` — [`src/app/dashboard/documents/generated/workspace.tsx`](../../src/app/dashboard/documents/generated/workspace.tsx)
 - `financial.paymentRequests.viewProof` — [`src/features/documents/central/context-archive-access.ts`](../../src/features/documents/central/context-archive-access.ts)
-- `financial.view` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
+- `financial.view` — [`src/app/dashboard/documents/generated/workspace.tsx`](../../src/app/dashboard/documents/generated/workspace.tsx)
 - `settings.manageUsers` — [`src/features/documents/central/archive-explorer.tsx`](../../src/features/documents/central/archive-explorer.tsx)
 - `stock.uniforms.view` — [`src/features/documents/central/context-archive-access.ts`](../../src/features/documents/central/context-archive-access.ts)
 
@@ -459,11 +426,12 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/dp/page.tsx`](../../src/app/dashboard/dp/page.tsx).
 
-Arquivos locais percorridos: 16.
+Arquivos locais percorridos: 17.
 
 Chamadas candidatas encontradas:
 
 - `/api/dp/schedules/` — interface [`src/features/dp/schedules/client.ts`](../../src/features/dp/schedules/client.ts); rota candidata [`src/app/api/dp/schedules/[scheduleId]/route.ts`](../../src/app/api/dp/schedules/%5BscheduleId%5D/route.ts)
+- `/api/dp/schedules/manual-journey` — interface [`src/features/dp/schedules/client.ts`](../../src/features/dp/schedules/client.ts); rota candidata [`src/app/api/dp/schedules/manual-journey/route.ts`](../../src/app/api/dp/schedules/manual-journey/route.ts)
 - `/api/hr/terminations` — interface [`src/features/hr/termination/active-terminations-card.tsx`](../../src/features/hr/termination/active-terminations-card.tsx); rota candidata [`src/app/api/hr/terminations/route.ts`](../../src/app/api/hr/terminations/route.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
@@ -474,7 +442,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/dp/schedules/[id]/page.tsx`](../../src/app/dashboard/dp/schedules/%5Bid%5D/page.tsx), [`src/app/dashboard/dp/schedules/month/[period]/page.tsx`](../../src/app/dashboard/dp/schedules/month/%5Bperiod%5D/page.tsx), [`src/app/dashboard/dp/schedules/page.tsx`](../../src/app/dashboard/dp/schedules/page.tsx).
 
-Arquivos locais percorridos: 60.
+Arquivos locais percorridos: 62.
 
 Chamadas candidatas encontradas:
 
@@ -487,6 +455,7 @@ Chamadas candidatas encontradas:
 - `/api/collaborator/absence-requests/preview` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts); rota candidata [`src/app/api/collaborator/absence-requests/preview/route.ts`](../../src/app/api/collaborator/absence-requests/preview/route.ts)
 - `/api/dp/absence-operational/` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts)
 - `/api/dp/schedules/` — interface [`src/components/dp/dp-schedule-editor.tsx`](../../src/components/dp/dp-schedule-editor.tsx); rota candidata [`src/app/api/dp/schedules/[scheduleId]/route.ts`](../../src/app/api/dp/schedules/%5BscheduleId%5D/route.ts)
+- `/api/dp/schedules/manual-journey` — interface [`src/features/dp/schedules/client.ts`](../../src/features/dp/schedules/client.ts); rota candidata [`src/app/api/dp/schedules/manual-journey/route.ts`](../../src/app/api/dp/schedules/manual-journey/route.ts)
 
 Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
 
@@ -548,7 +517,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/time-recording/page.tsx`](../../src/app/dashboard/collaborator/time-recording/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/time-recording/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/time-recording/page.tsx), [`src/app/dashboard/dp/fechamento/page.tsx`](../../src/app/dashboard/dp/fechamento/page.tsx).
 
-Arquivos locais percorridos: 66.
+Arquivos locais percorridos: 96.
 
 Chamadas candidatas encontradas:
 
@@ -561,8 +530,10 @@ Chamadas candidatas encontradas:
 - `/api/dp/time-recording/adjustments` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/adjustments/route.ts`](../../src/app/api/dp/time-recording/adjustments/route.ts)
 - `/api/dp/time-recording/adjustments/` — interface [`src/features/dp/time-adjustments/closure-focus-mode.tsx`](../../src/features/dp/time-adjustments/closure-focus-mode.tsx); rota candidata [`src/app/api/dp/time-recording/adjustments/[adjustmentId]/route.ts`](../../src/app/api/dp/time-recording/adjustments/%5BadjustmentId%5D/route.ts)
 - `/api/dp/time-recording/closing-packages` — interface [`src/features/dp/time-adjustments/closing-package-card.tsx`](../../src/features/dp/time-adjustments/closing-package-card.tsx); rota candidata [`src/app/api/dp/time-recording/closing-packages/route.ts`](../../src/app/api/dp/time-recording/closing-packages/route.ts)
-- `/api/dp/time-recording/closures` — interface [`src/features/dp/time-adjustments/closure-section.tsx`](../../src/features/dp/time-adjustments/closure-section.tsx); rota candidata [`src/app/api/dp/time-recording/closures/route.ts`](../../src/app/api/dp/time-recording/closures/route.ts)
+- `/api/dp/time-recording/closing-progress` — interface [`src/features/dp/time-adjustments/closure-section.tsx`](../../src/features/dp/time-adjustments/closure-section.tsx); rota candidata [`src/app/api/dp/time-recording/closing-progress/route.ts`](../../src/app/api/dp/time-recording/closing-progress/route.ts)
+- `/api/dp/time-recording/closures` — interface [`src/features/dp/time-adjustments/closure-alerts-panel.tsx`](../../src/features/dp/time-adjustments/closure-alerts-panel.tsx); rota candidata [`src/app/api/dp/time-recording/closures/route.ts`](../../src/app/api/dp/time-recording/closures/route.ts)
 - `/api/dp/time-recording/closures/` — interface [`src/features/dp/time-adjustments/closure-section.tsx`](../../src/features/dp/time-adjustments/closure-section.tsx); rota candidata [`src/app/api/dp/time-recording/closures/[competence]/route.ts`](../../src/app/api/dp/time-recording/closures/%5Bcompetence%5D/route.ts)
+- `/api/dp/time-recording/day-corrections` — interface [`src/features/dp/time-adjustments/day-corrections-panel.tsx`](../../src/features/dp/time-adjustments/day-corrections-panel.tsx); rota candidata [`src/app/api/dp/time-recording/day-corrections/route.ts`](../../src/app/api/dp/time-recording/day-corrections/route.ts)
 - `/api/dp/time-recording/employees/` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/employees/[employeeUid]/route.ts`](../../src/app/api/dp/time-recording/employees/%5BemployeeUid%5D/route.ts)
 - `/api/dp/time-recording/location-access` — interface [`src/features/dp/rep-p/day-detail.tsx`](../../src/features/dp/rep-p/day-detail.tsx); rota candidata [`src/app/api/dp/time-recording/location-access/route.ts`](../../src/app/api/dp/time-recording/location-access/route.ts)
 - `/api/dp/time-recording/markings` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/markings/route.ts`](../../src/app/api/dp/time-recording/markings/route.ts)
@@ -571,8 +542,11 @@ Chamadas candidatas encontradas:
 - `/api/dp/time-recording/mirrors/pdf` — interface [`src/features/dp/time-adjustments/mirror-card.tsx`](../../src/features/dp/time-adjustments/mirror-card.tsx); rota candidata [`src/app/api/dp/time-recording/mirrors/pdf/route.ts`](../../src/app/api/dp/time-recording/mirrors/pdf/route.ts)
 - `/api/dp/time-recording/month` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/month/route.ts`](../../src/app/api/dp/time-recording/month/route.ts)
 - `/api/dp/time-recording/options` — interface [`src/features/dp/rep-p/use-rep-p-marking.ts`](../../src/features/dp/rep-p/use-rep-p-marking.ts); rota candidata [`src/app/api/dp/time-recording/options/route.ts`](../../src/app/api/dp/time-recording/options/route.ts)
+- `/api/dp/time-recording/payroll-finance` — interface [`src/features/dp/time-adjustments/payroll-finance-panel.tsx`](../../src/features/dp/time-adjustments/payroll-finance-panel.tsx); rota candidata [`src/app/api/dp/time-recording/payroll-finance/route.ts`](../../src/app/api/dp/time-recording/payroll-finance/route.ts)
+- `/api/dp/time-recording/payslip-reconciliation` — interface [`src/features/dp/time-adjustments/payroll-finance-panel.tsx`](../../src/features/dp/time-adjustments/payroll-finance-panel.tsx); rota candidata [`src/app/api/dp/time-recording/payslip-reconciliation/route.ts`](../../src/app/api/dp/time-recording/payslip-reconciliation/route.ts)
 - `/api/dp/time-recording/receipts/` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/receipts/[receiptId]/route.ts`](../../src/app/api/dp/time-recording/receipts/%5BreceiptId%5D/route.ts)
 - `/api/dp/time-recording/time-bank` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/time-bank/route.ts`](../../src/app/api/dp/time-recording/time-bank/route.ts)
+- `/api/financial/inbox/` — interface [`src/features/dp/time-adjustments/payroll-finance-panel.tsx`](../../src/features/dp/time-adjustments/payroll-finance-panel.tsx); rota candidata [`src/app/api/financial/inbox/[id]/route.ts`](../../src/app/api/financial/inbox/%5Bid%5D/route.ts)
 
 Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
 
@@ -582,25 +556,32 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
+- `app.timeRecording.mark` — [`src/features/dp/time-adjustments/service.server.ts`](../../src/features/dp/time-adjustments/service.server.ts)
 - `dashboard.collaborator` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
 - `dashboard.view` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
 - `dp.collaborators.edit` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
 - `dp.collaborators.ownProfileOnly` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
+- `dp.collaborators.view` — [`src/features/dp/employment-reference/service.server.ts`](../../src/features/dp/employment-reference/service.server.ts)
 - `dp.requests.review` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
+- `dp.timeClosure` — [`src/features/dp/time-adjustments/closure.server.ts`](../../src/features/dp/time-adjustments/closure.server.ts)
 - `dp.timeClosure.close` — [`src/app/dashboard/dp/fechamento/page.tsx`](../../src/app/dashboard/dp/fechamento/page.tsx)
 - `dp.timeClosure.reopen` — [`src/app/dashboard/dp/fechamento/page.tsx`](../../src/app/dashboard/dp/fechamento/page.tsx)
 - `dp.timeRecording.view` — [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx)
+- `financial.expenses.edit` — [`src/features/dp/time-adjustments/payroll-finance.server.ts`](../../src/features/dp/time-adjustments/payroll-finance.server.ts)
+- `financial.inbox.view` — [`src/features/dp/time-adjustments/payroll-finance.server.ts`](../../src/features/dp/time-adjustments/payroll-finance.server.ts)
+- `settings.manageUsers` — [`src/features/dp/employment-reference/service.server.ts`](../../src/features/dp/employment-reference/service.server.ts)
 
 ## `dre`
 
 Páginas: [`src/app/dashboard/financial/dre/page.tsx`](../../src/app/dashboard/financial/dre/page.tsx).
 
-Arquivos locais percorridos: 42.
+Arquivos locais percorridos: 57.
 
 Chamadas candidatas encontradas:
 
 - `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
 - `/api/financial/dre/cmv-closure` — interface [`src/features/financial/components/dre/cmv-closing-panel.tsx`](../../src/features/financial/components/dre/cmv-closing-panel.tsx); rota candidata [`src/app/api/financial/dre/cmv-closure/route.ts`](../../src/app/api/financial/dre/cmv-closure/route.ts)
+- `/api/financial/dre/export` — interface [`src/features/financial/components/dre/dre-export-menu.tsx`](../../src/features/financial/components/dre/dre-export-menu.tsx); rota candidata [`src/app/api/financial/dre/export/route.ts`](../../src/app/api/financial/dre/export/route.ts)
 - `/api/financial/dre/source-data` — interface [`src/features/financial/pages/dre-page.tsx`](../../src/features/financial/pages/dre-page.tsx); rota candidata [`src/app/api/financial/dre/source-data/route.ts`](../../src/app/api/financial/dre/source-data/route.ts)
 - `/api/financial/dre/stock-cmv` — interface [`src/features/financial/pages/dre-page.tsx`](../../src/features/financial/pages/dre-page.tsx); rota candidata [`src/app/api/financial/dre/stock-cmv/route.ts`](../../src/app/api/financial/dre/stock-cmv/route.ts)
 
@@ -647,7 +628,6 @@ Chamadas candidatas encontradas:
 - `/api/hr/employee-documents/status` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/employee-documents/status/route.ts`](../../src/app/api/hr/employee-documents/status/route.ts)
 - `/api/hr/employee-documents/summary` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/employee-documents/summary/route.ts`](../../src/app/api/hr/employee-documents/summary/route.ts)
 - `/api/hr/employee-documents/visibility` — interface [`src/features/hr/documents/employee-document-visibility-dialog.tsx`](../../src/features/hr/documents/employee-document-visibility-dialog.tsx); rota candidata [`src/app/api/hr/employee-documents/visibility/route.ts`](../../src/app/api/hr/employee-documents/visibility/route.ts)
-- `/api/hr/onboarding/` — interface [`src/features/documents/central/collaborator-archive.tsx`](../../src/features/documents/central/collaborator-archive.tsx); rota candidata [`src/app/api/hr/onboarding/[id]/route.ts`](../../src/app/api/hr/onboarding/%5Bid%5D/route.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
@@ -668,7 +648,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/expenses/new/page.tsx`](../../src/app/dashboard/financial/expenses/new/page.tsx), [`src/app/dashboard/financial/expenses/page.tsx`](../../src/app/dashboard/financial/expenses/page.tsx), [`src/app/dashboard/financial/reconciliation/bank-statements/page.tsx`](../../src/app/dashboard/financial/reconciliation/bank-statements/page.tsx).
 
-Arquivos locais percorridos: 114.
+Arquivos locais percorridos: 119.
 
 Chamadas candidatas encontradas:
 
@@ -710,17 +690,19 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.expenses.create` — [`src/features/financial/components/expenses/expense-form.tsx`](../../src/features/financial/components/expenses/expense-form.tsx)
 - `financial.expenses.delete` — [`src/features/financial/pages/expenses-page.tsx`](../../src/features/financial/pages/expenses-page.tsx)
 - `financial.expenses.edit` — [`src/features/financial/components/expenses/expense-form.tsx`](../../src/features/financial/components/expenses/expense-form.tsx)
-- `financial.expenses.pay` — [`src/features/financial/pages/expenses-page.tsx`](../../src/features/financial/pages/expenses-page.tsx)
-- `financial.expenses.view` — [`src/features/financial/pages/expenses-page.tsx`](../../src/features/financial/pages/expenses-page.tsx)
+- `financial.expenses.pay` — [`src/features/financial/components/pay-expense-dialog.tsx`](../../src/features/financial/components/pay-expense-dialog.tsx)
+- `financial.expenses.view` — [`src/features/financial/components/pay-expense-dialog.tsx`](../../src/features/financial/components/pay-expense-dialog.tsx)
 - `financial.inbox.view` — [`src/features/financial/pages/expenses-page.tsx`](../../src/features/financial/pages/expenses-page.tsx)
 - `financial.paymentRequests.create` — [`src/features/financial/components/pay-expense-dialog.tsx`](../../src/features/financial/components/pay-expense-dialog.tsx)
-- `financial.paymentRequests.view` — [`src/features/financial/pages/expenses-page.tsx`](../../src/features/financial/pages/expenses-page.tsx)
+- `financial.paymentRequests.view` — [`src/features/financial/components/pay-expense-dialog.tsx`](../../src/features/financial/components/pay-expense-dialog.tsx)
 - `financial.personnelCosts.edit` — [`src/features/financial/components/expenses/expense-form.tsx`](../../src/features/financial/components/expenses/expense-form.tsx)
 - `financial.personnelCosts.view` — [`src/features/financial/components/expenses/expense-form.tsx`](../../src/features/financial/components/expenses/expense-form.tsx)
 - `financial.reconciliation.classifyAdjustments` — [`src/features/financial/components/expenses/expense-financial-summary.tsx`](../../src/features/financial/components/expenses/expense-financial-summary.tsx)
 - `financial.settings.manageExpenseDescriptions` — [`src/features/financial/components/expenses/expense-form.tsx`](../../src/features/financial/components/expenses/expense-form.tsx)
 - `financial.settings.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
 - `financial.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
+- `registration.entities.edit` — [`src/features/financial/components/pay-expense-dialog.tsx`](../../src/features/financial/components/pay-expense-dialog.tsx)
+- `registration.view` — [`src/features/financial/components/pay-expense-dialog.tsx`](../../src/features/financial/components/pay-expense-dialog.tsx)
 
 ## `financial-assets`
 
@@ -840,15 +822,16 @@ Chamadas candidatas encontradas:
 
 ## `goals`
 
-Páginas: [`src/app/dashboard/goals/analysis/page.tsx`](../../src/app/dashboard/goals/analysis/page.tsx), [`src/app/dashboard/goals/registration/page.tsx`](../../src/app/dashboard/goals/registration/page.tsx), [`src/app/dashboard/goals/tracking/page.tsx`](../../src/app/dashboard/goals/tracking/page.tsx).
+Páginas: [`src/app/dashboard/goals/analysis/page.tsx`](../../src/app/dashboard/goals/analysis/page.tsx), [`src/app/dashboard/goals/guide/page.tsx`](../../src/app/dashboard/goals/guide/page.tsx), [`src/app/dashboard/goals/registration/page.tsx`](../../src/app/dashboard/goals/registration/page.tsx), [`src/app/dashboard/goals/tracking/page.tsx`](../../src/app/dashboard/goals/tracking/page.tsx).
 
-Arquivos locais percorridos: 60.
+Arquivos locais percorridos: 65.
 
 Chamadas candidatas encontradas:
 
 - `/api/ai/analyze-goals` — interface [`src/components/goals-tracking-dashboard.tsx`](../../src/components/goals-tracking-dashboard.tsx); rota candidata [`src/app/api/ai/analyze-goals/route.ts`](../../src/app/api/ai/analyze-goals/route.ts)
 - `/api/catalogo` — interface [`src/components/product-simulation-category-provider.tsx`](../../src/components/product-simulation-category-provider.tsx); rota candidata [`src/app/api/catalogo/route.ts`](../../src/app/api/catalogo/route.ts)
 - `/api/dp/schedules/` — interface [`src/features/dp/schedules/client.ts`](../../src/features/dp/schedules/client.ts); rota candidata [`src/app/api/dp/schedules/[scheduleId]/route.ts`](../../src/app/api/dp/schedules/%5BscheduleId%5D/route.ts)
+- `/api/dp/schedules/manual-journey` — interface [`src/features/dp/schedules/client.ts`](../../src/features/dp/schedules/client.ts); rota candidata [`src/app/api/dp/schedules/manual-journey/route.ts`](../../src/app/api/dp/schedules/manual-journey/route.ts)
 - `/api/registry/base-products` — interface [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)
 - `/api/registry/base-products/` — interface [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)
 
@@ -869,6 +852,8 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
+- `dashboard.collaborator` — [`src/app/dashboard/goals/guide/page.tsx`](../../src/app/dashboard/goals/guide/page.tsx)
+- `dashboard.view` — [`src/app/dashboard/goals/guide/page.tsx`](../../src/app/dashboard/goals/guide/page.tsx)
 - `goals.manage` — [`src/app/dashboard/goals/registration/page.tsx`](../../src/app/dashboard/goals/registration/page.tsx)
 - `goals.view` — [`src/app/dashboard/goals/analysis/page.tsx`](../../src/app/dashboard/goals/analysis/page.tsx)
 - `settings.manageUsers` — [`src/components/goals-history-view.tsx`](../../src/components/goals-history-view.tsx)
@@ -946,6 +931,21 @@ Páginas: [`src/app/dashboard/conversions/page.tsx`](../../src/app/dashboard/con
 Arquivos locais percorridos: 7.
 
 Nenhuma string de API encontrada no percurso estático; investigar chamadas indiretas, ações de servidor e SDKs.
+
+## `month-closing`
+
+Páginas: [`src/app/dashboard/financial/month-closing/expenses/page.tsx`](../../src/app/dashboard/financial/month-closing/expenses/page.tsx), [`src/app/dashboard/financial/month-closing/page.tsx`](../../src/app/dashboard/financial/month-closing/page.tsx).
+
+Arquivos locais percorridos: 22.
+
+Chamadas candidatas encontradas:
+
+- `/api/financial/month-closing` — interface [`src/features/financial/month-closing/use-month-closing.ts`](../../src/features/financial/month-closing/use-month-closing.ts); rota candidata [`src/app/api/financial/month-closing/route.ts`](../../src/app/api/financial/month-closing/route.ts)
+
+Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
+
+- `financial.monthClosings.view` — [`src/features/financial/month-closing/use-month-closing.ts`](../../src/features/financial/month-closing/use-month-closing.ts)
+- `financial.view` — [`src/features/financial/month-closing/use-month-closing.ts`](../../src/features/financial/month-closing/use-month-closing.ts)
 
 ## `operations`
 
@@ -1035,13 +1035,18 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/expenses/authorizations/page.tsx`](../../src/app/dashboard/financial/expenses/authorizations/page.tsx).
 
-Arquivos locais percorridos: 26.
+Arquivos locais percorridos: 35.
 
 Chamadas candidatas encontradas:
 
 - `/api/financial/inbox/` — interface [`src/features/financial/payment-requests/payment-requests-page.tsx`](../../src/features/financial/payment-requests/payment-requests-page.tsx); rota candidata [`src/app/api/financial/inbox/[id]/route.ts`](../../src/app/api/financial/inbox/%5Bid%5D/route.ts)
 - `/api/financial/payment-requests` — interface [`src/features/financial/payment-requests/payment-requests-page.tsx`](../../src/features/financial/payment-requests/payment-requests-page.tsx); rota candidata [`src/app/api/financial/payment-requests/route.ts`](../../src/app/api/financial/payment-requests/route.ts)
 - `/api/financial/payment-requests/` — interface [`src/features/financial/payment-requests/payment-requests-page.tsx`](../../src/features/financial/payment-requests/payment-requests-page.tsx); rota candidata [`src/app/api/financial/payment-requests/route.ts`](../../src/app/api/financial/payment-requests/route.ts)
+
+Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
+
+- `entities` — [`src/features/financial/payment-requests/purchase-supplier-pix.server.ts`](../../src/features/financial/payment-requests/purchase-supplier-pix.server.ts)
+- `purchase_orders` — [`src/features/financial/payment-requests/purchase-supplier-pix.server.ts`](../../src/features/financial/payment-requests/purchase-supplier-pix.server.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
@@ -1068,14 +1073,16 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 ## `people-access`
 
-Páginas: [`src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/edit/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx), [`src/app/dashboard/dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`src/app/dashboard/users/inactive/page.tsx`](../../src/app/dashboard/users/inactive/page.tsx).
+Páginas: [`src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/edit/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx), [`src/app/dashboard/dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`src/app/dashboard/dp/prestadores/page.tsx`](../../src/app/dashboard/dp/prestadores/page.tsx), [`src/app/dashboard/users/inactive/page.tsx`](../../src/app/dashboard/users/inactive/page.tsx).
 
-Arquivos locais percorridos: 90.
+Arquivos locais percorridos: 110.
 
 Chamadas candidatas encontradas:
 
 - `/api/audit/log` — interface [`src/features/audit/client.ts`](../../src/features/audit/client.ts); rota candidata [`src/app/api/audit/log/route.ts`](../../src/app/api/audit/log/route.ts)
 - `/api/audit/logs` — interface [`src/features/audit/client.ts`](../../src/features/audit/client.ts); rota candidata [`src/app/api/audit/logs/route.ts`](../../src/app/api/audit/logs/route.ts)
+- `/api/dp/service-providers` — interface [`src/features/service-portal/admin-panel.tsx`](../../src/features/service-portal/admin-panel.tsx); rota candidata [`src/app/api/dp/service-providers/route.ts`](../../src/app/api/dp/service-providers/route.ts)
+- `/api/dp/service-providers/closures` — interface [`src/features/service-portal/closure-release-panel.tsx`](../../src/features/service-portal/closure-release-panel.tsx); rota candidata [`src/app/api/dp/service-providers/closures/route.ts`](../../src/app/api/dp/service-providers/closures/route.ts)
 - `/api/hr/bootstrap` — interface [`src/features/hr/lib/client.ts`](../../src/features/hr/lib/client.ts); rota candidata [`src/app/api/hr/bootstrap/route.ts`](../../src/app/api/hr/bootstrap/route.ts)
 - `/api/hr/collaborators/` — interface [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
 - `/api/hr/departments` — interface [`src/features/hr/lib/client.ts`](../../src/features/hr/lib/client.ts); rota candidata [`src/app/api/hr/departments/route.ts`](../../src/app/api/hr/departments/route.ts)
@@ -1138,7 +1145,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dp.collaborators.syncProfile` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.collaborators.terminate` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
 - `dp.collaborators.view` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
-- `dp.requests.review` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `dp.requests.review` — [`src/app/dashboard/dp/prestadores/page.tsx`](../../src/app/dashboard/dp/prestadores/page.tsx)
 - `dp.requests.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.responsibilities.manage` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.responsibilities.receiveUnassignedAlerts` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
@@ -1156,6 +1163,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dp.settings.manageShifts` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.settings.manageTime` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.settings.manageUnits` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `dp.timeClosure` — [`src/features/dp/rep-p/employee-time-access.server.ts`](../../src/features/dp/rep-p/employee-time-access.server.ts)
 - `dp.timeClosure.close` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
 - `dp.timeClosure.reopen` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
 - `dp.timeRecording.readLocation` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
@@ -1201,6 +1209,9 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.inbox.link` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.interIntegration.manage` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `financial.monthClosings.close` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `financial.monthClosings.reopen` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `financial.monthClosings.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.paymentRequests.authorize` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.paymentRequests.create` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.paymentRequests.refresh` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
@@ -1324,6 +1335,7 @@ Chamadas candidatas encontradas:
 
 - `/api/dashboard/layouts` — interface [`src/features/management-dashboard/use-layouts.ts`](../../src/features/management-dashboard/use-layouts.ts); rota candidata [`src/app/api/dashboard/layouts/route.ts`](../../src/app/api/dashboard/layouts/route.ts)
 - `/api/dp/schedules/` — interface [`src/features/dp/schedules/client.ts`](../../src/features/dp/schedules/client.ts); rota candidata [`src/app/api/dp/schedules/[scheduleId]/route.ts`](../../src/app/api/dp/schedules/%5BscheduleId%5D/route.ts)
+- `/api/dp/schedules/manual-journey` — interface [`src/features/dp/schedules/client.ts`](../../src/features/dp/schedules/client.ts); rota candidata [`src/app/api/dp/schedules/manual-journey/route.ts`](../../src/app/api/dp/schedules/manual-journey/route.ts)
 - `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
 - `/api/goals/employee-goals` — interface [`src/components/goals-provider.tsx`](../../src/components/goals-provider.tsx); rota candidata [`src/app/api/goals/employee-goals/route.ts`](../../src/app/api/goals/employee-goals/route.ts)
 - `/api/goals/periods/` — interface [`src/components/goals-provider.tsx`](../../src/components/goals-provider.tsx)
@@ -1477,10 +1489,11 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/cash-flow/receivables/page.tsx`](../../src/app/dashboard/financial/cash-flow/receivables/page.tsx).
 
-Arquivos locais percorridos: 27.
+Arquivos locais percorridos: 39.
 
 Chamadas candidatas encontradas:
 
+- `/api/financial/stone-fees` — interface [`src/features/financial/receipts-reconciliation/use-fee-pending.ts`](../../src/features/financial/receipts-reconciliation/use-fee-pending.ts); rota candidata [`src/app/api/financial/stone-fees/route.ts`](../../src/app/api/financial/stone-fees/route.ts)
 - `/api/financial/stone-future-receivables` — interface [`src/features/financial/receivables/receivables-page.tsx`](../../src/features/financial/receivables/receivables-page.tsx); rota candidata [`src/app/api/financial/stone-future-receivables/route.ts`](../../src/app/api/financial/stone-future-receivables/route.ts)
 - `/api/financial/stone-mappings` — interface [`src/features/financial/receivables/receivables-page.tsx`](../../src/features/financial/receivables/receivables-page.tsx); rota candidata [`src/app/api/financial/stone-mappings/route.ts`](../../src/app/api/financial/stone-mappings/route.ts)
 - `/api/financial/stone-portfolio` — interface [`src/features/financial/receivables/portfolio-panel.tsx`](../../src/features/financial/receivables/portfolio-panel.tsx); rota candidata [`src/app/api/financial/stone-portfolio/route.ts`](../../src/app/api/financial/stone-portfolio/route.ts)
@@ -1533,7 +1546,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/registration/base-products/page.tsx`](../../src/app/dashboard/registration/base-products/page.tsx), [`src/app/dashboard/registration/entities/page.tsx`](../../src/app/dashboard/registration/entities/page.tsx), [`src/app/dashboard/registration/items/page.tsx`](../../src/app/dashboard/registration/items/page.tsx).
 
-Arquivos locais percorridos: 73.
+Arquivos locais percorridos: 75.
 
 Chamadas candidatas encontradas:
 
@@ -1592,18 +1605,19 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/financial/sales-reconciliation/page.tsx`](../../src/app/dashboard/financial/sales-reconciliation/page.tsx).
 
-Arquivos locais percorridos: 31.
+Arquivos locais percorridos: 36.
 
 Chamadas candidatas encontradas:
 
 - `/api/financial/pdv-stone-review` — interface [`src/features/financial/sales-reconciliation/review-page.tsx`](../../src/features/financial/sales-reconciliation/review-page.tsx); rota candidata [`src/app/api/financial/pdv-stone-review/route.ts`](../../src/app/api/financial/pdv-stone-review/route.ts)
+- `/api/financial/pdv-stone-review/unlinked-resolution` — interface [`src/features/financial/sales-reconciliation/review-page.tsx`](../../src/features/financial/sales-reconciliation/review-page.tsx); rota candidata [`src/app/api/financial/pdv-stone-review/unlinked-resolution/route.ts`](../../src/app/api/financial/pdv-stone-review/unlinked-resolution/route.ts)
 - `/api/financial/stone-mappings` — interface [`src/features/financial/sales-reconciliation/review-page.tsx`](../../src/features/financial/sales-reconciliation/review-page.tsx); rota candidata [`src/app/api/financial/stone-mappings/route.ts`](../../src/app/api/financial/stone-mappings/route.ts)
 
 ## `settings`
 
 Páginas: [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`src/app/dashboard/settings/units/page.tsx`](../../src/app/dashboard/settings/units/page.tsx).
 
-Arquivos locais percorridos: 249.
+Arquivos locais percorridos: 253.
 
 Chamadas candidatas encontradas:
 
@@ -1622,6 +1636,7 @@ Chamadas candidatas encontradas:
 - `/api/documents/templates/system-asset-custody-term/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-asset-maintenance-order/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-editor-document/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
+- `/api/documents/templates/system-financial-dre-report/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-letterhead-blank/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-ptrp-time-mirror/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
 - `/api/documents/templates/system-receipt-standard/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
@@ -1819,6 +1834,9 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.inbox.link` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.inbox.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.interIntegration.manage` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `financial.monthClosings.close` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `financial.monthClosings.reopen` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `financial.monthClosings.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.paymentRequests.authorize` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.paymentRequests.create` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `financial.paymentRequests.refresh` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
@@ -2165,25 +2183,37 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/stone-anticipations/page.tsx`](../../src/app/dashboard/financial/stone-anticipations/page.tsx).
 
-Arquivos locais percorridos: 23.
+Arquivos locais percorridos: 41.
 
 Chamadas candidatas encontradas:
 
 - `/api/financial/agent` — interface [`src/features/financial/agent/anticipation-workspace.tsx`](../../src/features/financial/agent/anticipation-workspace.tsx); rota candidata [`src/app/api/financial/agent/route.ts`](../../src/app/api/financial/agent/route.ts)
 - `/api/financial/stone-mappings` — interface [`src/features/financial/agent/anticipation-workspace.tsx`](../../src/features/financial/agent/anticipation-workspace.tsx); rota candidata [`src/app/api/financial/stone-mappings/route.ts`](../../src/app/api/financial/stone-mappings/route.ts)
+- `/api/financial/stone-receipts/reconcile` — interface [`src/features/financial/receipts-reconciliation/anticipations-panel.tsx`](../../src/features/financial/receipts-reconciliation/anticipations-panel.tsx); rota candidata [`src/app/api/financial/stone-receipts/reconcile/route.ts`](../../src/app/api/financial/stone-receipts/reconcile/route.ts)
+
+Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
+
+- `kiosks` — [`src/features/financial/receivables/mapping.server.ts`](../../src/features/financial/receivables/mapping.server.ts)
 
 ## `stone-receipts`
 
 Páginas: [`src/app/dashboard/financial/stone-receipts/page.tsx`](../../src/app/dashboard/financial/stone-receipts/page.tsx).
 
-Arquivos locais percorridos: 39.
+Arquivos locais percorridos: 81.
 
 Chamadas candidatas encontradas:
 
-- `/api/financial/acquirer-fees` — interface [`src/features/financial/acquirer-fees/fees-panel.tsx`](../../src/features/financial/acquirer-fees/fees-panel.tsx); rota candidata [`src/app/api/financial/acquirer-fees/route.ts`](../../src/app/api/financial/acquirer-fees/route.ts)
-- `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
+- `/api/financial/acquirer-fees` — interface [`src/features/financial/acquirer-fees/auto-recognition-card.tsx`](../../src/features/financial/acquirer-fees/auto-recognition-card.tsx); rota candidata [`src/app/api/financial/acquirer-fees/route.ts`](../../src/app/api/financial/acquirer-fees/route.ts)
+- `/api/financial/stone-fee-expenses` — interface [`src/features/financial/receipts-reconciliation/fee-month-expense-panel.tsx`](../../src/features/financial/receipts-reconciliation/fee-month-expense-panel.tsx); rota candidata [`src/app/api/financial/stone-fee-expenses/route.ts`](../../src/app/api/financial/stone-fee-expenses/route.ts)
+- `/api/financial/stone-fees` — interface [`src/features/financial/receipts-reconciliation/fee-reference-comparison-panel.tsx`](../../src/features/financial/receipts-reconciliation/fee-reference-comparison-panel.tsx); rota candidata [`src/app/api/financial/stone-fees/route.ts`](../../src/app/api/financial/stone-fees/route.ts)
 - `/api/financial/stone-mappings` — interface [`src/features/financial/receipts-reconciliation/receipts-page.tsx`](../../src/features/financial/receipts-reconciliation/receipts-page.tsx); rota candidata [`src/app/api/financial/stone-mappings/route.ts`](../../src/app/api/financial/stone-mappings/route.ts)
-- `/api/financial/stone-receipts/reconcile` — interface [`src/features/financial/receipts-reconciliation/reconciliation-panel.tsx`](../../src/features/financial/receipts-reconciliation/reconciliation-panel.tsx); rota candidata [`src/app/api/financial/stone-receipts/reconcile/route.ts`](../../src/app/api/financial/stone-receipts/reconcile/route.ts)
+- `/api/financial/stone-portfolio` — interface [`src/features/financial/receivables/position-bar.tsx`](../../src/features/financial/receivables/position-bar.tsx); rota candidata [`src/app/api/financial/stone-portfolio/route.ts`](../../src/app/api/financial/stone-portfolio/route.ts)
+- `/api/financial/stone-portfolio-cron` — interface [`src/features/financial/receipts-reconciliation/stone-account-daily.server.ts`](../../src/features/financial/receipts-reconciliation/stone-account-daily.server.ts); rota candidata [`src/app/api/financial/stone-portfolio-cron/route.ts`](../../src/app/api/financial/stone-portfolio-cron/route.ts)
+- `/api/financial/stone-receipts/reconcile` — interface [`src/features/financial/receipts-reconciliation/stone-account-panel.tsx`](../../src/features/financial/receipts-reconciliation/stone-account-panel.tsx); rota candidata [`src/app/api/financial/stone-receipts/reconcile/route.ts`](../../src/app/api/financial/stone-receipts/reconcile/route.ts)
+
+Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
+
+- `kiosks` — [`src/features/financial/receivables/mapping.server.ts`](../../src/features/financial/receivables/mapping.server.ts)
 
 ## `system-notices`
 

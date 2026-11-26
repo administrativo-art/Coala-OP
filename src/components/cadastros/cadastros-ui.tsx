@@ -64,11 +64,11 @@ export function CadastrosTabs({
               'inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-[10px] px-[11px] text-[13px] transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent',
               isActive
                 ? 'bg-ds-surface font-extrabold text-ds-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]'
-                : 'font-semibold text-ds-muted hover:bg-ds-surface/60 hover:text-ds-ink'
+                : 'font-semibold text-ds-ink-muted hover:bg-ds-surface/60 hover:text-ds-ink'
             )}
           >
             <span>{tab.label}</span>
-            <span className={cn('text-[11px]', isActive ? 'text-ds-muted' : 'text-ds-ink-faint')}>{tab.count}</span>
+            <span className={cn('text-[11px]', isActive ? 'text-ds-ink-muted' : 'text-ds-ink-faint')}>{tab.count}</span>
           </button>
         );
       })}
@@ -256,6 +256,7 @@ export function ListRow({
   isMuted,
   onOpen,
   label,
+  interactive = true,
   children,
 }: {
   template: string;
@@ -266,10 +267,12 @@ export function ListRow({
   isMuted: boolean;
   onOpen: () => void;
   label: string;
+  interactive?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <LiftRow
+      interactive={interactive}
       selected={isOpen}
       aria-label={label}
       aria-pressed={undefined}

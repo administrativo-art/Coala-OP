@@ -1,4 +1,6 @@
 /** @jsxImportSource react-pdf-react-server */
+import { renderDreReportPdf } from "@/features/financial/dre/report-pdf";
+import { createDreReportPreview } from "@/features/financial/dre/report-preview";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import React from "react-pdf-react-server";
@@ -112,6 +114,7 @@ async function renderEditorPreview() {
 }
 
 export async function renderSystemDocumentTemplatePreview(template: SystemDocumentTemplate) {
+  if (template.renderer === "dre_report") return stampDocumentTemplateDemoPreview(await renderDreReportPdf(createDreReportPreview()));
   if (template.renderer === "editor_html") {
     return renderEditorPreview();
   }

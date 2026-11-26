@@ -4,10 +4,11 @@ import test from "node:test";
 import { buildCashClosureFromPdv } from "../../src/features/financial/cash-closures/build-cash-closure";
 import { buildCashClosureOperators, withCashClosureOperatorAggregate } from "../../src/features/financial/cash-closures/operators";
 import { mergeBuiltClosureForPersistence, normalizeCashClosureWithLines, recalculateCountedLine,
-  recalculateExpectedLine, recomputeCashClosureFromLines } from "../../src/features/financial/cash-closures/persistence";
+  recalculateExpectedLine, recalculateReportedLine, recomputeCashClosureFromLines } from "../../src/features/financial/cash-closures/persistence";
 import { summarizeCashClosureDre } from "../../src/features/financial/cash-closures/dre-contract";
 import { summarizeCashClosureDre as functionsProjection } from "../../functions/src/cash-closure-dre";
 import type { CashClosure, CashClosureCashMovement, CashClosureLine } from "../../src/features/financial/cash-closures/types";
+import { cashSupplyMovementFingerprint } from "../../src/features/financial/cash-closures/supply-classification";
 
 const date = "2026-09-30";
 const now = "2026-10-03T12:00:00.000Z";
@@ -35,6 +36,36 @@ function aggregate(closure: CashClosure, lines: CashClosureLine[], approved: str
     .map(operator => ({ ...operator, status: approved.includes(operator.operatorId) ? "approved" as const : "draft" as const }));
   return { operators, closure: withCashClosureOperatorAggregate(recomputeCashClosureFromLines(closure, lines, now), operators, now) };
 }
+
+test("DRE compara malote com esperado líquido do fundo, preservando faltas, sobras e declaração PDV", () => {
+  const supply = movement("supply", 4_000);
+  const stored = mergeBuiltClosureForPersistence({ built: build([coupon("a", 95)], [supply]), now });
+  const base = stored.lines[0];
+  const classified: CashClosureLine = { ...base, reportedCents: 13_500, reportedDifferenceCents: 0,
+    metadata: { ...base.metadata, supplyClassifications: [{ movementId: supply.id,
+      movementFingerprint: cashSupplyMovementFingerprint(supply), kind: "cash_fund",
+      classifiedAt: now, classifiedBy: "finance", classifiedByName: "Financeiro" }] } };
+  assert.equal(classified.expectedCents, 13_500);
+  for (const [counted, shortageCents, surplusCents] of [[9_500, 0, 0], [9_000, 500, 0], [10_000, 0, 500]]) {
+    const countedLine = recalculateCountedLine(classified, counted, null, "finance", now);
+    const result = aggregate(stored.closure, [countedLine]);
+    const expected = { version: 1, shortageCents, surplusCents };
+    assert.deepEqual(result.operators[0].cashDifferences, expected);
+    assert.deepEqual(result.closure.dreSelectedCashDifferences, expected);
+    const monthly = functionsProjection([result.closure]);
+    assert.equal(monthly.dreCashShortageKnownCents, shortageCents);
+    assert.equal(monthly.dreCashSurplusKnownCents, surplusCents);
+    const pending = aggregate(stored.closure, [countedLine], []);
+    assert.deepEqual(pending.closure.dreSelectedCashDifferences, { version: 1, shortageCents: 0, surplusCents: 0 });
+  }
+  const unclassified = recalculateCountedLine({ ...classified, metadata: { ...classified.metadata, supplyClassifications: [] } }, 9_500, null, "finance", now);
+  assert.deepEqual(aggregate(stored.closure, [unclassified]).closure.dreSelectedCashDifferences,
+    { version: 1, shortageCents: 4_000, surplusCents: 0 });
+  const commonSupply: CashClosureLine = { ...classified, metadata: { ...classified.metadata,
+    supplyClassifications: classified.metadata.supplyClassifications!.map(item => ({ ...item, kind: "supply" })) } };
+  assert.deepEqual(aggregate(stored.closure, [recalculateCountedLine(commonSupply, 9_500, null, "finance", now)]).closure.dreSelectedCashDifferences,
+    { version: 1, shortageCents: 4_000, surplusCents: 0 });
+});
 
 test("sale10000 withdrawal1000 expected9000 counted8000 => revenue10000 shortage1000 at closure date", () => {
   const built = build([coupon()], [movement("withdrawal", 1_000)]);
@@ -92,6 +123,40 @@ test("partial operators, reopen and noncash differences: never net shortages aga
     all.operators.map(operator => operator.operatorId === "a" ? { ...operator, status: "reopened" } : operator), now);
   assert.deepEqual(reopened.finalizedCashDifferences, { version: 1, shortageCents: 0, surplusCents: 1_000 });
   assert.equal(reopened.pdvSales?.amountCents, 25_000);
+});
+
+test("DRE selects Finance for finalized operator and PDV count for pending operator once each", () => {
+  const stored = mergeBuiltClosureForPersistence({ built: build([coupon("a"), coupon("b")]), now });
+  const lines = stored.lines.map(line => {
+    const reported = recalculateReportedLine(line, line.operatorId === "a" ? 9_900 : 10_200, null, "cashier", now);
+    return recalculateCountedLine(reported, line.operatorId === "a" ? 9_700 : 10_400, "Finance", "finance", now);
+  });
+  const partial = aggregate(stored.closure, lines, ["a"]);
+  assert.deepEqual(partial.closure.dreSelectedCashDifferences,
+    { version: 1, shortageCents: 300, surplusCents: 200 });
+  assert.equal(partial.closure.drePdvFallbackOperatorCount, 1);
+  const partialSummary = summarizeCashClosureDre([partial.closure]);
+  assert.equal(partialSummary.dreRevenueTotalCents, 20_000);
+  assert.equal(partialSummary.dreCashShortageTotalCents, 300);
+  assert.equal(partialSummary.dreCashSurplusTotalCents, 200);
+  assert.equal(partialSummary.dreCoverage.pdvFallbackOperatorCount, 1);
+  const finalized = aggregate(stored.closure, lines, ["a", "b"]);
+  const finalSummary = summarizeCashClosureDre([finalized.closure]);
+  assert.equal(finalSummary.dreCashShortageTotalCents, 300);
+  assert.equal(finalSummary.dreCashSurplusTotalCents, 400);
+  assert.equal(finalSummary.dreCoverage.pdvFallbackOperatorCount, 0);
+});
+
+test("missing PDV count for a pending operator stays unknown, not a zero", () => {
+  const stored = mergeBuiltClosureForPersistence({ built: build(), now });
+  const closure = aggregate(stored.closure, stored.lines, []).closure;
+  assert.equal(closure.dreSelectedCashDifferences?.shortageCents, null);
+  assert.equal(summarizeCashClosureDre([closure]).dreCashShortageTotalCents, null);
+  const reported = recalculateReportedLine(stored.lines[0], 10_000, null, "cashier", now);
+  const knownZero = summarizeCashClosureDre([aggregate(stored.closure, [reported], []).closure]);
+  assert.equal(knownZero.dreCashShortageTotalCents, 0);
+  assert.equal(knownZero.dreCashSurplusTotalCents, 0);
+  assert.equal(knownZero.dreCoverage.pdvFallbackOperatorCount, 1);
 });
 
 test("unfinalized or missing cash count is not a shortage or silently known finalized zero", () => {

@@ -8,12 +8,14 @@ import { errorMessageOf } from "@/components/patterns/panel-form";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
 import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
+import { PayslipReconciliationPanel } from "./payslip-reconciliation-panel";
 
 type PackageState = {
   closure: { status: "open" | "closed"; version: number } | null;
   payslip: { documentId: string; name: string } | null;
   email: boolean;
-  package: { status: "sending" | "sent" | "signed" | "refused" | "failed"; sentAt: string | null; signedAt: string | null; lastError: string | null; viewedAt?: string | null } | null;
+  reconciliation?: { status: "missing" | "match" | "divergent" | "stale" | "restricted" };
+  package: { status: "sending" | "sent" | "signed" | "refused" | "failed"; sentAt: string | null; signedAt: string | null; lastError: string | null; viewedAt?: string | null; reconciliationId?: string | null } | null;
 };
 const STATUS: Record<NonNullable<PackageState["package"]>["status"], { label: string; variant: "ok" | "warn" | "danger" | "neutral" }> = {
   sending: { label: "Enviando", variant: "neutral" },
@@ -31,6 +33,9 @@ const whenBR = (value: string) => `${value.slice(8, 10)}/${value.slice(5, 7)} à
  * e enviado à Autentique para a assinatura do trabalhador. Mostra o que falta (contracheque, e-mail) e a situação.
  */
 export function ClosingPackageCard({ firebaseUser, competence, employeeUid, onChanged }: { firebaseUser: FirebaseUser | null; competence: string; employeeUid: string; onChanged?: () => void }) {
+  return <ClosingPackageCardContent key={`${competence}/${employeeUid}`} {...{ firebaseUser, competence, employeeUid, onChanged }} />;
+}
+function ClosingPackageCardContent({ firebaseUser, competence, employeeUid, onChanged }: { firebaseUser: FirebaseUser | null; competence: string; employeeUid: string; onChanged?: () => void }) {
   const [state, setState] = useState<PackageState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -65,7 +70,7 @@ export function ClosingPackageCard({ firebaseUser, competence, employeeUid, onCh
   if (state.closure?.status !== "closed") return null;
   const status = state.package ? STATUS[state.package.status] : null;
   const overdue = state.package?.status === "refused" || (state.package?.status === "sent" && Boolean(state.package.sentAt) && Date.now() - Date.parse(state.package.sentAt!) > DEADLINE_MS);
-  const canSend = (!state.package || state.package.status === "failed" || overdue) && state.payslip && state.email;
+  const canSend = (!state.package || state.package.status === "failed" || overdue) && state.payslip && state.email && state.reconciliation?.status === "match";
   return (
     <div className="space-y-2 rounded-ds-card border border-ds-border bg-ds-surface p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -75,6 +80,8 @@ export function ClosingPackageCard({ firebaseUser, competence, employeeUid, onCh
       <ul className="space-y-1 text-xs text-ds-ink-muted">
         <li>Espelho: gerado na versão {state.closure.version} do fechamento e assinado pela empresa com o e-CNPJ.</li>
         <li>Contracheque: {state.payslip ? state.payslip.name : <strong className="text-ds-danger">ainda não está nos documentos da pessoa</strong>}.</li>
+        {state.reconciliation?.status === "match" ? <li className="text-ds-ok">Eventos de tempo do retorno conferidos.</li> : <li className="text-ds-danger">{state.reconciliation?.status === "divergent" ? "Há divergências no retorno. Corrija e registre nova conferência antes de enviar." : state.reconciliation?.status === "stale" ? "O documento ou a entrega mudou. Registre nova conferência antes de enviar." : state.reconciliation?.status === "restricted" ? "A conferência exige revisão e fechamento do RH com acesso a todas as unidades." : "Confira o retorno do contador antes de enviar para assinatura."}</li>}
+        {state.package && !state.package.reconciliationId ? <li>Pacote enviado antes da implantação da conferência de eventos.</li> : null}
         {!state.email ? <li><strong className="text-ds-danger">A pessoa não tem e-mail cadastrado.</strong></li> : null}
         {state.package?.sentAt ? <li>Enviado em {whenBR(state.package.sentAt)}{state.package.viewedAt ? ` · aberto pela pessoa em ${whenBR(state.package.viewedAt)}` : " · ainda não aberto pela pessoa"}.</li> : null}
         {state.package?.status === "refused" ? <li><strong className="text-ds-danger">A pessoa recusou a assinatura. Trate a divergência e, se preciso, reabra o mês.</strong></li> : null}
@@ -88,6 +95,7 @@ export function ClosingPackageCard({ firebaseUser, competence, employeeUid, onCh
       </div>
       {confirming ? <InlineConfirm message="Enviar o espelho e o contracheque num único documento para a pessoa assinar na Autentique? O envio fica registrado e não é desfeito."
         confirmLabel="Enviar" loadingLabel="Enviando…" loading={busy} onConfirm={() => void send()} onCancel={() => setConfirming(false)} /> : null}
+      {state.reconciliation?.status !== "restricted" ? <PayslipReconciliationPanel firebaseUser={firebaseUser} competence={competence} employeeUid={employeeUid} onChanged={() => { void load(); onChanged?.(); }} /> : null}
     </div>
   );
 }

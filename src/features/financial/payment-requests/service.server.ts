@@ -1,8 +1,12 @@
+import { assertExpenseAllowsNewPayment } from "../lib/source-settlement";
 import { randomUUID } from "node:crypto";
-import { dbAdmin } from "@/lib/firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
+import { authAdmin, dbAdmin } from "@/lib/firebase-admin";
+import { canAccessUnit } from "@/lib/unit-access";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
-import { createBeneficiarySnapshot, resolvePaymentBeneficiary } from "../beneficiaries/resolver.server";
+import { normalizeBrazilianDocument } from "../beneficiaries/normalization";
+import { createBeneficiarySnapshot, resolvePaymentBeneficiary, resolveValidatedEntityPixBeneficiary } from "../beneficiaries/resolver.server";
 import type { PaymentBeneficiaryReference } from "../beneficiaries/types";
 import { createAndStoreConfirmedPaymentProof } from "@/lib/integrations/inter/proof.server";
 import { safeInterPaymentError } from "@/lib/integrations/inter/payment-error";
@@ -12,7 +16,7 @@ import { listInterStatementEntries } from "@/lib/integrations/inter/statements.s
 import { maskPaymentBarcode, normalizePaymentBarcode } from "@/features/financial/inbox/parser";
 import { paymentBarcodeHash } from "@/features/financial/inbox/document-identity";
 import { assertExpenseBoletoTarget, expenseBoletoAttachmentId, expenseBoletoSchema } from "./expense-boleto";
-import { governmentCollectionBarcode, inboxBarcodePaymentPreparationSchema } from "./inbox-barcode";
+import { governmentCollectionBarcode, inboxBarcodePaymentPreparationSchema, validatedCollectionBarcode } from "./inbox-barcode";
 import {
   compareFgtsPixReceiver,
   InboxPixPaymentPreparationError,
@@ -22,7 +26,11 @@ import {
   planInboxPixCopyPastePreparation,
 } from "./inbox-pix-copy-paste";
 import { assertSalaryPaymentTarget } from "./salary-payment";
+import { assertArchivedBoletoUnused, assertExpenseSupplierPixTarget, assertSupplierPixBankClosed, assertSupplierPixBeneficiary, hasConflictingSupplierPixHistory, supplierPixDestinationUnchanged, SUPPLIER_PIX_HISTORY_LIMIT } from "./expense-supplier-pix.server";
+import { assertPurchasePixIndication, assertPurchasePixSource, loadPurchasePixSource } from "./purchase-supplier-pix.server";
 import { assertExpenseComplementPaymentTarget } from "./expense-complement";
+import { assertConsultancyActualPaymentTarget } from "./consultancy-provision-payment";
+import { assertValidatedConsultancyContract } from "./consultancy-contract.server";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { addPaymentEvent, findPaymentRequestBySource, getPaymentRequest, paymentRequestRef, revalidatePaidPaymentBeneficiary, transitionPaymentRequest } from "./repository.server";
 import {
@@ -37,7 +45,7 @@ import {
 } from "./barcode-amounts";
 import { comparePaymentReceiverToSnapshot, findExactPixReceiverDocument } from "./reconciliation";
 import type { BankPaymentRequest, BankPaymentRequestStatus, LegacyBankPaymentSourceType, PaymentActor, PaymentLegalEntitySnapshot, PixBankPaymentRequest } from "./types";
-import { canCreateCorrectedPaymentRequest, canRetryDefinitivelyRejectedPayment, hasFreshClearBankPreflight, paymentSubmissionAttemptCount } from "./submission-retry";
+import { canCreateCorrectedPaymentRequest, canRetryDefinitivelyRejectedPayment, hasFreshClearBankPreflight, omitRejectedBeneficiaryDocument, paymentSubmissionAttemptCount } from "./submission-retry";
 import { assertFinancialInboxPaymentTarget, overdueBarcodeSettlementRevisionSchema, planOverdueBarcodeSettlementRevision, type OverdueBarcodeSettlementRevisionInput } from "./overdue-settlement";
 import {
   FINANCIAL_SERVICE_APPROVAL_MAX_AMOUNT_CENTS,
@@ -66,6 +74,30 @@ const financialServiceApprover: PaymentActor = {
   name: "Aprovador financeiro do backend",
 };
 
+function assertGeneratedReceiptPaymentTarget(
+  request: Pick<PixBankPaymentRequest, "sourceId" | "expenseId" | "beneficiaryReference" | "amount">,
+  expense: FirebaseFirestore.DocumentData | undefined,
+  requestId?: string,
+) {
+  const reference = expense?.beneficiaryReference;
+  const amountCents = Math.round(Number(request.amount) * 100);
+  const totalCents = Math.round(Number(expense?.totalValue) * 100);
+  const netCents = expense?.netPayableValue == null ? totalCents : Math.round(Number(expense.netPayableValue) * 100);
+  if (!request.expenseId || !expense || expense.workspaceId !== WORKSPACE_ID
+    || expense.generatedReceiptId !== request.sourceId
+    || (expense.originModule && expense.originModule !== "generated_receipt")
+    || expense.status !== "pending" || expense.paidAt || expense.paymentState === "paid"
+    || reference?.sourceType !== request.beneficiaryReference.sourceType
+    || reference?.sourceId !== request.beneficiaryReference.sourceId
+    || !Number.isSafeInteger(amountCents) || amountCents <= 0
+    || !Number.isSafeInteger(totalCents) || !Number.isSafeInteger(netCents)
+    || amountCents !== totalCents || amountCents !== netCents
+    || (requestId && expense.paymentRequestId !== requestId)) {
+    throw new Error("O recibo, a despesa, o favorecido ou o valor líquido não correspondem à solicitação bancária.");
+  }
+}
+
+// Optional callback is an in-process seam for deterministic emulator races, not an HTTP field.
 export async function createPaymentRequest(input: {
   sourceType: LegacyBankPaymentSourceType;
   sourceId: string;
@@ -75,32 +107,54 @@ export async function createPaymentRequest(input: {
   amount: number;
   description: string;
   scheduledFor?: string | null;
-}, actor: PaymentActor): Promise<PixBankPaymentRequest> {
+}, actor: PaymentActor, onExistingFound?: () => Promise<void>): Promise<PixBankPaymentRequest> {
+  if (input.sourceType === "purchase_order") {
+    throw new Error("Pedidos de compra exigem despesa financeira vinculada antes do Pix.");
+  }
+  if (input.sourceType === "generated_receipt") {
+    const expense = input.expenseId ? await financialDbAdmin.collection("expenses").doc(input.expenseId).get() : null;
+    assertGeneratedReceiptPaymentTarget(input, expense?.data());
+  }
+  if (input.expenseId) { const target = await financialDbAdmin.collection("expenses").doc(input.expenseId).get(); if (target.exists) assertExpenseAllowsNewPayment(target.data()!); }
   const existing = await findPaymentRequestBySource(input.sourceType, input.sourceId, WORKSPACE_ID);
   if (existing) {
-    if (existing.paymentRail === "barcode" || existing.paymentRail === "pix_copy_paste") {
-      throw new Error("A origem da solicitação bancária existente é incompatível.");
-    }
-    if (Math.abs(existing.amount - Number(input.amount.toFixed(2))) > 0.01
-      || existing.expenseId !== input.expenseId
-      || existing.beneficiaryReference?.sourceType !== input.beneficiaryReference.sourceType
-      || existing.beneficiaryReference?.sourceId !== input.beneficiaryReference.sourceId
-      || (existing.scheduledFor ?? null) !== (input.scheduledFor ?? null)) {
-      throw new Error("A solicitação bancária existente diverge dos dados aprovados. Faça a conferência antes de continuar.");
-    }
-    if (existing.expenseId) {
-      const expenseRef = financialDbAdmin.collection("expenses").doc(existing.expenseId);
-      const expense = await expenseRef.get();
-      if (!expense.exists) throw new Error("A despesa vinculada à solicitação não foi encontrada.");
-      const linkedRequestId = String(expense.get("paymentRequestId") || "").trim();
-      if (linkedRequestId && linkedRequestId !== existing.id) {
-        throw new Error("A despesa já possui outra solicitação bancária.");
+    await onExistingFound?.();
+    return financialDbAdmin.runTransaction(async (transaction) => {
+      const requestRef = paymentRequestRef(existing.id);
+      const expenseRef = input.expenseId ? financialDbAdmin.collection("expenses").doc(input.expenseId) : null;
+      const [currentSnapshot, expense] = await Promise.all([
+        transaction.get(requestRef), expenseRef ? transaction.get(expenseRef) : Promise.resolve(null),
+      ]);
+      if (!currentSnapshot.exists) throw new Error("A solicitação bancária existente não foi encontrada.");
+      const current = { id: currentSnapshot.id, ...currentSnapshot.data() } as BankPaymentRequest;
+      if (current.paymentRail && String(current.paymentRail) !== "pix") {
+        throw new Error("A origem da solicitação bancária existente é incompatível.");
       }
-      if (!linkedRequestId) {
-        await expenseRef.set({ paymentRequestId: existing.id, updatedAt: new Date().toISOString() }, { merge: true });
+      if (current.sourceType !== input.sourceType || current.sourceId !== input.sourceId
+        || current.workspaceId !== WORKSPACE_ID
+        || Math.abs(current.amount - Number(input.amount.toFixed(2))) > 0.01
+        || current.expenseId !== input.expenseId
+        || current.beneficiaryReference?.sourceType !== input.beneficiaryReference.sourceType
+        || current.beneficiaryReference?.sourceId !== input.beneficiaryReference.sourceId
+        || (current.scheduledFor ?? null) !== (input.scheduledFor ?? null)) {
+        throw new Error("A solicitação bancária existente diverge dos dados aprovados. Faça a conferência antes de continuar.");
       }
-    }
-    return existing;
+      if (expenseRef) {
+        if (!expense?.exists) throw new Error("A despesa vinculada à solicitação não foi encontrada.");
+        assertExpenseAllowsNewPayment(expense.data()!);
+        if (current.sourceType === "generated_receipt") assertGeneratedReceiptPaymentTarget(input, expense.data());
+        const linkedRequestId = String(expense.get("paymentRequestId") || "").trim();
+        if (linkedRequestId && linkedRequestId !== current.id) throw new Error("A despesa já possui outra solicitação bancária.");
+        if (!linkedRequestId) {
+          const installments = current.sourceType === "consultancy_provision" && Array.isArray(expense.get("installments"))
+            ? (expense.get("installments") as Record<string, unknown>[]).map((item) => ({ ...item, paymentRequestId: current.id }))
+            : null;
+          transaction.set(expenseRef, { paymentRequestId: current.id,
+            ...(installments ? { installments } : {}), updatedAt: new Date().toISOString() }, { merge: true });
+        }
+      }
+      return current as PixBankPaymentRequest;
+    });
   }
   if (input.sourceType === "salary") {
     const expenseId = input.expenseId ?? "";
@@ -143,6 +197,14 @@ export async function createPaymentRequest(input: {
       scheduledFor: input.scheduledFor,
     });
   }
+  let consultancyEmployee: { id: string; name?: unknown; status?: unknown } | null = null;
+  if (input.sourceType === "consultancy_provision") {
+    if (input.beneficiaryReference.sourceType !== "employee") throw new Error("A consultoria exige favorecido identificado no RH.");
+    const employee = await hrDbAdmin.collection("employees").doc(input.beneficiaryReference.sourceId).get();
+    consultancyEmployee = employee.exists ? { id: employee.id, ...employee.data() } : null;
+    const actual = input.expenseId ? await financialDbAdmin.collection("expenses").doc(input.expenseId).get() : null;
+    assertConsultancyActualPaymentTarget(input, actual?.exists ? { id: actual.id, ...actual.data() } : null, consultancyEmployee, WORKSPACE_ID);
+  }
   const beneficiary = await resolvePaymentBeneficiary(input.beneficiaryReference);
   if (!beneficiary.validated) throw new Error("O favorecido ainda não foi validado.");
   const now = new Date().toISOString();
@@ -170,11 +232,26 @@ export async function createPaymentRequest(input: {
       const expenseRef = financialDbAdmin.collection("expenses").doc(input.expenseId);
       const expense = await transaction.get(expenseRef);
       if (!expense.exists) throw new Error("A despesa vinculada à solicitação não foi encontrada.");
+      assertExpenseAllowsNewPayment(expense.data()!);
+      if (input.sourceType === "generated_receipt") assertGeneratedReceiptPaymentTarget(input, expense.data());
+      if (input.sourceType === "consultancy_provision") {
+        const [payments, otherRequests] = await Promise.all([
+          transaction.get(financialDbAdmin.collection("payments").where("expenseId", "==", input.expenseId).limit(2)),
+          transaction.get(financialDbAdmin.collection("bankPaymentRequests").where("expenseId", "==", input.expenseId).limit(2)),
+        ]);
+        if (payments.docs.some((item) => item.get("reversed") !== true) || !otherRequests.empty) {
+          throw new Error("A obrigação real já possui pagamento ou solicitação bancária.");
+        }
+        assertConsultancyActualPaymentTarget(input, { id: expense.id, ...expense.data() }, consultancyEmployee, WORKSPACE_ID);
+      }
       const linkedRequestId = String(expense.get("paymentRequestId") || "").trim();
       if (linkedRequestId && linkedRequestId !== ref.id) {
         throw new Error("A despesa já possui outra solicitação bancária.");
       }
-      transaction.set(expenseRef, { paymentRequestId: ref.id, updatedAt: now }, { merge: true });
+      const consultancyInstallments = input.sourceType === "consultancy_provision" && Array.isArray(expense.get("installments"))
+        ? (expense.get("installments") as Record<string, unknown>[]).map((item) => ({ ...item, paymentRequestId: ref.id }))
+        : null;
+      transaction.set(expenseRef, { paymentRequestId: ref.id, ...(consultancyInstallments ? { installments: consultancyInstallments } : {}), updatedAt: now }, { merge: true });
     }
     transaction.create(ref, Object.fromEntries(Object.entries(request).filter(([key]) => key !== "id")));
     transaction.create(eventRef, {
@@ -260,6 +337,7 @@ async function commitInboxPaymentPreparation(params: {
     if (!currentExpenseSnapshot.exists || currentExpenseSnapshot.get("workspaceId") !== params.workspaceId) {
       throw fail("A despesa vinculada não pertence ao mesmo ambiente da cobrança.");
     }
+    assertExpenseAllowsNewPayment(currentExpenseSnapshot.data()!);
     params.assertCurrent?.(currentMessageSnapshot, currentExpenseSnapshot);
     if (currentRequestSnapshot.exists) {
       const linkedRequestId = String(currentMessageSnapshot.get("paymentRequestId") || "").trim();
@@ -336,6 +414,12 @@ export async function createInboxBarcodePaymentRequest(input: {
   }
   const amountCents = Number(message.classification?.amountCents);
   if (!Number.isInteger(amountCents) || amountCents <= 0) throw new Error("Confirme o valor antes de preparar o pagamento.");
+  if (code.startsWith("8") && [44, 48].includes(code.length)) {
+    const collection = validatedCollectionBarcode(code);
+    if (!collection || (collection.amountCents != null && collection.amountCents !== amountCents)) {
+      throw new Error("A linha de arrecadação é inválida ou diverge do valor confirmado da cobrança.");
+    }
+  }
   const governmentCollection = governmentCollectionBarcode(code);
   if (governmentCollection?.amountCents != null && governmentCollection.amountCents !== amountCents) {
     throw new Error("O valor da guia de arrecadação diverge do valor confirmado da cobrança.");
@@ -1009,9 +1093,62 @@ export async function cancelAndReplaceExpenseBoletoPaymentRequest(
   });
 }
 
+type SupplierPixActorScope = { user: FirebaseFirestore.DocumentData; isDefaultAdmin: boolean };
+
+async function supplierPixActorScope(actor: PaymentActor | "system"): Promise<SupplierPixActorScope> {
+  if (actor === "system") throw new Error("O Pix de fornecedor exige operador autenticado.");
+  const user = await dbAdmin.collection("users").doc(actor.uid).get();
+  if (!user.exists || user.get("isActive") === false) throw new Error("Operador do Pix indisponível.");
+  const profileId = String(user.get("profileId") ?? "").trim();
+  const profile = profileId ? await dbAdmin.collection("profiles").doc(profileId).get() : null;
+  const claims = profileId ? null : (await authAdmin.getUser(actor.uid)).customClaims;
+  const isDefaultAdmin = profileId ? profile?.get("isDefaultAdmin") === true
+    : claims?.profileId ? false : claims?.isDefaultAdmin === true;
+  return { user: user.data()!, isDefaultAdmin };
+}
+
+function assertSupplierPixActorScope(request: BankPaymentRequest, expense: FirebaseFirestore.DocumentData | undefined, scope: SupplierPixActorScope) {
+  if (request.sourceType !== "expense_supplier_pix" || request.workspaceId !== WORKSPACE_ID
+    || !expense || expense.workspaceId !== WORKSPACE_ID || request.sourceId !== request.expenseId
+    || expense.paymentRequestId !== request.id
+    || expense.status !== "pending" || expense.paidAt || expense.paymentState === "paid"
+    || !canAccessUnit(scope.user, String(expense.unitId ?? ""), { isDefaultAdmin: scope.isDefaultAdmin })) {
+    throw new Error("Operador sem acesso à unidade ou vínculo da despesa Pix.");
+  }
+}
+
 export async function authorizePaymentRequest(id: string, actor: PaymentActor) {
+  const pending = await getPaymentRequest(id);
+  const purchaseSource = pending.sourceType === "expense_supplier_pix" && pending.purchasePixSource
+    ? await loadPurchasePixSource(pending.purchasePixSource.purchaseOrderId) : null;
+  const supplierPixBeneficiary = pending.sourceType === "expense_supplier_pix"
+    ? await resolveValidatedEntityPixBeneficiary(pending.beneficiaryReference.sourceId) : null;
+  if (pending.sourceType === "expense_supplier_pix" && supplierPixBeneficiary
+    && !supplierPixDestinationUnchanged(pending.beneficiarySnapshot, supplierPixBeneficiary)) {
+    throw new Error("O favorecido Pix mudou após o preparo.");
+  }
+  if (pending.expenseId) { const target = await financialDbAdmin.collection("expenses").doc(pending.expenseId).get(); if (target.exists) assertExpenseAllowsNewPayment(target.data()!); }
+  const supplierPixScope = pending.sourceType === "expense_supplier_pix" ? await supplierPixActorScope(actor) : null;
   const now = new Date().toISOString();
-  const request = await transitionPaymentRequest(id, ["awaiting_financial_authorization"], "ready_to_submit", { authorizedAt: now, authorizedBy: actor.uid });
+  const request = await transitionPaymentRequest(id, ["awaiting_financial_authorization"], "ready_to_submit", { authorizedAt: now, authorizedBy: actor.uid },
+    async (transaction, current) => {
+      if (current.sourceType !== "expense_supplier_pix") return;
+      if (!supplierPixScope) throw new Error("Escopo do Pix de fornecedor indisponível.");
+      const expense = await transaction.get(financialDbAdmin.collection("expenses").doc(current.sourceId));
+      assertSupplierPixActorScope(current, expense.data(), supplierPixScope);
+      assertExpenseAllowsNewPayment(expense.data()!);
+      if (current.purchasePixSource) {
+        if (!purchaseSource) throw new Error("A compra mudou após o preparo.");
+        assertPurchasePixSource(current.sourceId, expense.data(), current.purchasePixSource, purchaseSource);
+      }
+      if (current.purchasePixIndication) {
+        if (!purchaseSource) throw new Error("A indicação do favorecido mudou.");
+        assertPurchasePixIndication(current.sourceId, expense.data(), current.purchasePixIndication, purchaseSource);
+      }
+      assertExpenseSupplierPixTarget(expense.data(), WORKSPACE_ID, current.beneficiaryReference.sourceId,
+        supplierPixBeneficiary ? assertSupplierPixBeneficiary(supplierPixBeneficiary) : "",
+        Math.round(current.amount * 100), current.supplierPixConfirmation, current.purchasePixIndication);
+    });
   await addPaymentEvent(id, "FINANCIAL_AUTHORIZATION_GRANTED", actor);
   if (request.sourceType === "aso" || request.sourceType === "termination" || request.sourceType === "vacation") {
     const notificationId = request.sourceType === "aso"
@@ -1088,6 +1225,12 @@ export async function reviseAndAuthorizeOverdueBarcodePaymentRequest(
       today: todayInBelem(),
     });
     transaction.set(ref, patch, { merge: true });
+    const projection = planFinancialInboxPaymentProjection({
+      message: message as FinancialInboxMessage,
+      request: { ...current, ...patch } as BankPaymentRequest,
+      observedAt: now,
+    });
+    transaction.set(messageRef, projection.patch, { merge: true });
     transaction.set(expenseRef, { paymentRequestId: id, updatedAt: now }, { merge: true });
     transaction.create(ref.collection("events").doc(), {
       type: "OVERDUE_BARCODE_SETTLEMENT_REAUTHORIZED",
@@ -1095,6 +1238,7 @@ export async function reviseAndAuthorizeOverdueBarcodePaymentRequest(
       actorId: actor.uid,
       actorEmail: actor.email ?? null,
       sourceAttachmentId: input.sourceAttachmentId,
+      evidenceSource: input.evidenceSource,
       principalAmountCents: input.principalAmountCents,
       settlementAmountCents: input.settlementAmountCents,
       lateChargeAmountCents: input.lateChargeAmountCents,
@@ -1203,14 +1347,90 @@ async function commitBankSubmissionResult(params: {
   });
 }
 
-export async function submitPaymentRequest(id: string, actor: PaymentActor | "system") {
+// Optional callback runs only in process after reservation; it cannot bypass server checks.
+export async function submitPaymentRequest(
+  id: string,
+  actor: PaymentActor | "system",
+  onReserved?: () => Promise<void>,
+  sendGeneratedReceiptPix: typeof submitInterPix = submitInterPix,
+  options: { receiptVerified?: true } = {},
+) {
   const requestRef = paymentRequestRef(id);
+  const preflightRequest = await getPaymentRequest(id);
+  const purchaseSource = preflightRequest.sourceType === "expense_supplier_pix" && preflightRequest.purchasePixSource
+    ? await loadPurchasePixSource(preflightRequest.purchasePixSource.purchaseOrderId) : null;
+  let supplierPixDocument: string | null = null;
+  const supplierPixScope = preflightRequest.sourceType === "expense_supplier_pix" ? await supplierPixActorScope(actor) : null;
+  if (preflightRequest.expenseId) { const target = await financialDbAdmin.collection("expenses").doc(preflightRequest.expenseId).get(); if (target.exists) assertExpenseAllowsNewPayment(target.data()!); }
+  if (preflightRequest.sourceType === "consultancy_provision") {
+    if (preflightRequest.beneficiaryReference?.sourceType !== "employee" || !preflightRequest.scheduledFor) throw new Error("A consultoria perdeu favorecido ou data programada.");
+    const forecast = await financialDbAdmin.collection("expenses").doc(preflightRequest.sourceId).get();
+    await assertValidatedConsultancyContract(String(forecast.get("consultancyContractDocumentId") ?? ""), preflightRequest.beneficiaryReference.sourceId, preflightRequest.scheduledFor);
+  }
+  if (preflightRequest.sourceType === "expense_supplier_pix" && preflightRequest.supersedesPaymentRequestId) {
+    const previous = await getPaymentRequest(preflightRequest.supersedesPaymentRequestId);
+    if (previous.sourceType !== "expense_supplier_pix" || previous.supersededByPaymentRequestId !== id) {
+      throw new Error("O vínculo com a solicitação anterior mudou.");
+    }
+    await assertSupplierPixBankClosed(previous);
+  }
+  if (preflightRequest.sourceType === "expense_supplier_pix") {
+    const beneficiary = await resolveValidatedEntityPixBeneficiary(preflightRequest.beneficiaryReference.sourceId);
+    supplierPixDocument = assertSupplierPixBeneficiary(beneficiary);
+    if (!supplierPixDestinationUnchanged(preflightRequest.beneficiarySnapshot, beneficiary)) {
+      throw new Error("A chave Pix ou a identidade fiscal mudou após o preparo. Confirme novamente o favorecido.");
+    }
+  }
   const submissionStartedAt = new Date().toISOString();
   const submissionEventId = randomUUID();
-  const pending = await financialDbAdmin.runTransaction(async (transaction) => {
+  const reserved = await financialDbAdmin.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(requestRef);
     if (!snapshot.exists) throw new Error("Solicitação de pagamento não encontrada.");
     const current = { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
+    if (current.sourceType === "document_receipt" && (!options.receiptVerified || process.env.INTER_DOCUMENT_RECEIPT_BANK_APPROVAL_CONFIRMED !== "true")) {
+      throw new Error("A aprovação Pix no aplicativo Inter não foi confirmada para esta origem.");
+    }
+    const target = current.expenseId ? await transaction.get(financialDbAdmin.collection("expenses").doc(current.expenseId)) : null;
+    if (target?.exists) assertExpenseAllowsNewPayment(target.data()!);
+    if (current.sourceType === "generated_receipt") {
+      if (current.workspaceId !== WORKSPACE_ID) throw new Error("A solicitação do recibo pertence a outro ambiente financeiro.");
+      if (current.paymentRail && String(current.paymentRail) !== "pix") {
+        throw new Error("O recibo exige pedido Pix válido.");
+      }
+      assertGeneratedReceiptPaymentTarget(current, target?.data(), current.id);
+    }
+    if (current.sourceType === "expense_supplier_pix") {
+      if (!supplierPixScope) throw new Error("Escopo do Pix de fornecedor indisponível.");
+      if (actor === "system" || current.expenseId !== current.sourceId
+        || current.beneficiaryReference.sourceType !== "entity") {
+        throw new Error("O Pix do fornecedor exige envio manual vinculado à despesa.");
+      }
+      const expenseId = current.sourceId;
+      const [expense, payment, relatedRequests] = await Promise.all([
+        transaction.get(financialDbAdmin.collection("expenses").doc(expenseId)),
+        transaction.get(financialDbAdmin.collection("payments").where("expenseId", "==", expenseId).limit(1)),
+        transaction.get(financialDbAdmin.collection("bankPaymentRequests").where("expenseId", "==", expenseId).limit(SUPPLIER_PIX_HISTORY_LIMIT)),
+      ]);
+      assertSupplierPixActorScope(current, expense.data(), supplierPixScope);
+      if (current.purchasePixSource) {
+        if (!purchaseSource) throw new Error("A compra mudou após o preparo.");
+        assertPurchasePixSource(expenseId, expense.data(), current.purchasePixSource, purchaseSource);
+      }
+      if (current.purchasePixIndication) {
+        if (!purchaseSource) throw new Error("A indicação do favorecido mudou.");
+        assertPurchasePixIndication(expenseId, expense.data(), current.purchasePixIndication, purchaseSource);
+      }
+      const document = supplierPixDocument ?? "";
+      const description = assertExpenseSupplierPixTarget(
+        expense.data(), WORKSPACE_ID, current.beneficiaryReference.sourceId,
+        normalizeBrazilianDocument(document), Math.round(current.amount * 100), current.supplierPixConfirmation, current.purchasePixIndication,
+      );
+      if (current.workspaceId !== WORKSPACE_ID || expense.get("paymentRequestId") !== current.id
+        || current.description !== description || !payment.empty
+        || hasConflictingSupplierPixHistory(relatedRequests.docs, current.id, current.supersedesPaymentRequestId ?? undefined)) {
+        throw new Error("O vínculo, os dados da despesa ou os pagamentos mudaram após o preparo.");
+      }
+    }
     if (current.bankInstructionOrigin === "inter_dda") {
       throw new Error("Agendamento importado do Inter não pode ser reenviado.");
     }
@@ -1218,6 +1438,7 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
       throw new Error(`A solicitação está em ${current.status} e não pode ser enviada ao banco.`);
     }
     const retryingDefinitiveRejection = canRetryDefinitivelyRejectedPayment(current);
+    const omitBeneficiaryDocumentOnRetry = omitRejectedBeneficiaryDocument(current);
     if (current.status === "failed" && !retryingDefinitiveRejection) {
       throw new Error("Envio anterior exige conferência manual antes de outra tentativa.");
     }
@@ -1372,11 +1593,38 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
       if (current.barcodeSnapshot.scheduledFor < todayInBelem() || current.barcodeSnapshot.scheduledFor > input.dueDate) throw new Error("Confira a data programada antes do envio.");
       if (input.barcode !== current.barcodeSnapshot.code || input.beneficiaryDocument !== current.barcodeSnapshot.beneficiaryDocument || input.amountCents !== Math.round(current.amount * 100)) throw new Error("O boleto mudou após a preparação.");
     }
+    if (current.sourceType === "consultancy_provision") {
+      if (!current.expenseId || current.beneficiaryReference?.sourceType !== "employee" || !current.beneficiarySnapshot) {
+        throw new Error("A solicitação da consultoria perdeu a origem ou o favorecido.");
+      }
+      const [actual, forecast, payments, requests] = await Promise.all([
+        transaction.get(financialDbAdmin.collection("expenses").doc(current.expenseId)),
+        transaction.get(financialDbAdmin.collection("expenses").doc(current.sourceId)),
+        transaction.get(financialDbAdmin.collection("payments").where("expenseId", "==", current.expenseId).limit(2)),
+        transaction.get(financialDbAdmin.collection("bankPaymentRequests").where("expenseId", "==", current.expenseId).limit(3)),
+      ]);
+      if (!actual.exists || !forecast.exists || forecast.get("status") !== "reconciled" || forecast.get("replacedByExpenseId") !== current.expenseId
+        || forecast.get("consultancyEmployeeId") !== current.beneficiaryReference.sourceId
+        || forecast.get("consultancyContractDocumentId") !== actual.get("consultancyContractDocumentId")
+        || payments.docs.some((item) => item.get("reversed") !== true)
+        || requests.size > 2 || requests.docs.some((item) => item.id !== current.id)) {
+        throw new Error("A provisão, a obrigação real ou os pagamentos mudaram; envio bloqueado.");
+      }
+      assertConsultancyActualPaymentTarget({
+        sourceId: current.sourceId, expenseId: current.expenseId,
+        beneficiaryReference: current.beneficiaryReference, amount: current.amount,
+        description: current.description, scheduledFor: current.scheduledFor,
+      }, { id: actual.id, ...actual.data() }, {
+        id: current.beneficiaryReference.sourceId, name: current.beneficiarySnapshot.name, status: "active",
+      }, WORKSPACE_ID, current.id);
+      if (current.scheduledFor && current.scheduledFor < todayInBelem()) throw new Error("A data programada passou; envie somente após revisar o vencimento.");
+    }
     const patch = {
       status: "submitting" as const,
       lastError: null,
       submissionStartedAt,
       submissionAttemptCount: paymentSubmissionAttemptCount(current) + 1,
+      ...(current.sourceType === "generated_receipt" ? { submissionReservationId: submissionEventId } : {}),
       ...(current.sourceType === "financial_inbox" ? {
         duplicateCheck: {
           checkedAt: submissionStartedAt,
@@ -1397,10 +1645,22 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
       at: submissionStartedAt,
       actorId: actor === "system" ? "system" : actor.uid,
       actorEmail: actor === "system" ? null : actor.email ?? null,
+      ...(omitBeneficiaryDocumentOnRetry ? { beneficiaryDocumentOmittedAfterInterRejection: true } : {}),
     });
-    return { ...current, ...patch } as BankPaymentRequest;
+    return {
+      pending: { ...current, ...patch, omitBeneficiaryDocumentOnRetry } as BankPaymentRequest & { omitBeneficiaryDocumentOnRetry: boolean },
+      prior: {
+        status: current.status,
+        lastError: current.lastError,
+        submissionStartedAt: current.submissionStartedAt,
+        submissionAttemptCount: current.submissionAttemptCount,
+      },
+    };
   });
+  const { pending, prior } = reserved;
+  let bankCallStarted = false;
   try {
+    if (pending.sourceType === "generated_receipt") await onReserved?.();
     if (pending.paymentRail === "barcode") {
       if (!pending.barcodeSnapshot) throw new Error("Os dados da linha digitável não estão disponíveis.");
       const bankCandidates = (await findInterBarcodePaymentsByCode(pending.barcodeSnapshot.code))
@@ -1432,7 +1692,7 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
           amount: pending.requestedSettlementAmount ?? pending.amount,
           dueDate: pending.barcodeSnapshot.dueDate,
           scheduledFor: pending.barcodeSnapshot.scheduledFor,
-          beneficiaryDocument: pending.barcodeSnapshot.beneficiaryDocument,
+          beneficiaryDocument: pending.omitBeneficiaryDocumentOnRetry ? null : pending.barcodeSnapshot.beneficiaryDocument,
         });
       const interRequestId = String(result.codigoTransacao ?? "");
       if (!interRequestId) throw new Error("O Banco Inter não retornou o código da transação.");
@@ -1580,9 +1840,40 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
     if (!pending.beneficiaryReference || !pending.beneficiarySnapshot) {
       throw new Error("Os dados do favorecido não estão disponíveis.");
     }
-    const beneficiary = await resolvePaymentBeneficiary(pending.beneficiaryReference);
+    const beneficiary = pending.sourceType === "expense_supplier_pix"
+      ? await resolveValidatedEntityPixBeneficiary(pending.beneficiaryReference.sourceId)
+      : await resolvePaymentBeneficiary(pending.beneficiaryReference);
     if (beneficiary.sourceUpdatedAt !== pending.beneficiarySnapshot.sourceUpdatedAt) {
       throw new Error("Os dados do favorecido mudaram após a criação. Crie uma nova solicitação para revalidar o pagamento.");
+    }
+    if (pending.sourceType === "expense_supplier_pix") {
+      const document = assertSupplierPixBeneficiary(beneficiary);
+      if (!supplierPixDestinationUnchanged(pending.beneficiarySnapshot, beneficiary)) {
+        throw new Error("A chave Pix ou a identidade fiscal mudou após o preparo. Confirme novamente o favorecido.");
+      }
+      const expense = await financialDbAdmin.collection("expenses").doc(pending.sourceId).get();
+      if (pending.purchasePixSource) {
+        const latestPurchase = await loadPurchasePixSource(pending.purchasePixSource.purchaseOrderId);
+        assertPurchasePixSource(pending.sourceId, expense.data(), pending.purchasePixSource, latestPurchase);
+      }
+      if (pending.purchasePixIndication) {
+        const latestPurchase = await loadPurchasePixSource(pending.purchasePixIndication.purchaseOrderId);
+        assertPurchasePixIndication(pending.sourceId, expense.data(), pending.purchasePixIndication, latestPurchase);
+      }
+      const description = assertExpenseSupplierPixTarget(
+        expense.data(), WORKSPACE_ID, pending.beneficiaryReference.sourceId,
+        document, Math.round(pending.amount * 100), pending.supplierPixConfirmation, pending.purchasePixIndication,
+      );
+      if (expense.get("paymentRequestId") !== pending.id || pending.description !== description) {
+        throw new Error("A despesa mudou após a autorização.");
+      }
+      await assertArchivedBoletoUnused(expense.data(), pending.supplierPixConfirmation?.replacedBoletoHash);
+    }
+    if (pending.sourceType === "generated_receipt") {
+      const expense = pending.expenseId
+        ? await financialDbAdmin.collection("expenses").doc(pending.expenseId).get() : null;
+      if (pending.workspaceId !== WORKSPACE_ID) throw new Error("A solicitação do recibo pertence a outro ambiente financeiro.");
+      assertGeneratedReceiptPaymentTarget(pending, expense?.data(), pending.id);
     }
     if (!pending.beneficiarySnapshot.documentHash) {
       const refreshedSnapshot = createBeneficiarySnapshot(beneficiary, pending.beneficiarySnapshot.resolvedAt);
@@ -1594,7 +1885,8 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
         await paymentRequestRef(id).set({ beneficiarySnapshot: pending.beneficiarySnapshot }, { merge: true });
       }
     }
-    const result = await submitInterPix({
+    if (pending.sourceType === "generated_receipt") bankCallStarted = true;
+    const result = await (pending.sourceType === "generated_receipt" ? sendGeneratedReceiptPix : submitInterPix)({
       idempotencyKey: pending.idempotencyKey,
       amount: pending.amount,
       description: pending.description,
@@ -1644,6 +1936,36 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
     });
     return request;
   } catch (error) {
+    if (pending.sourceType === "generated_receipt" && !bankCallStarted) {
+      const at = new Date().toISOString();
+      await financialDbAdmin.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(requestRef);
+        if (!snapshot.exists || snapshot.get("status") !== "submitting"
+          || snapshot.get("submissionReservationId") !== submissionEventId
+          || snapshot.get("submissionStartedAt") !== submissionStartedAt
+          || snapshot.get("updatedAt") !== submissionStartedAt
+          || snapshot.get("submissionAttemptCount") !== paymentSubmissionAttemptCount(prior) + 1
+          || snapshot.get("interRequestId")) {
+          throw new Error("A reserva do recibo mudou; confira o estado antes de tentar novamente.");
+        }
+        transaction.set(requestRef, {
+          status: prior.status,
+          lastError: prior.lastError ?? FieldValue.delete(),
+          submissionStartedAt: prior.submissionStartedAt ?? FieldValue.delete(),
+          submissionAttemptCount: prior.submissionAttemptCount ?? FieldValue.delete(),
+          submissionReservationId: FieldValue.delete(),
+          updatedAt: at,
+        }, { merge: true });
+        transaction.create(requestRef.collection("events").doc(), {
+          type: "LOCAL_RECEIPT_VALIDATION_BLOCKED_BEFORE_INTER",
+          at,
+          actorId: actor === "system" ? "system" : actor.uid,
+          actorEmail: actor === "system" ? null : actor.email ?? null,
+          reservationId: submissionEventId,
+        });
+      });
+      throw error;
+    }
     const lastError = safeInterPaymentError(error);
     const failedAt = new Date().toISOString();
     await financialDbAdmin.runTransaction(async (transaction) => {
@@ -1750,6 +2072,7 @@ async function completeSource(request: BankPaymentRequest) {
     await financialDbAdmin.runTransaction(async (transaction) => {
       const expense = await transaction.get(expenseRef);
       if (!expense.exists) throw new Error("A despesa vinculada à solicitação não foi encontrada.");
+      assertExpenseAllowsNewPayment(expense.data()!);
       transaction.set(paymentRef, {
         workspaceId: request.workspaceId ?? WORKSPACE_ID,
         expenseId: request.expenseId, installmentNumber: request.installmentNumber ?? null, paymentRequestId: request.id, paidAt: request.paidAt,
@@ -1759,19 +2082,30 @@ async function completeSource(request: BankPaymentRequest) {
       const expenseData = expense.data()!;
       const installments = Array.isArray(expenseData.installments) ? expenseData.installments : [];
       const isInstallmentBoleto = request.sourceType === "expense_boleto" && installments.length > 1 && request.installmentNumber != null;
-      if (isInstallmentBoleto) {
-        const nextInstallments = installments.map((item: Record<string, unknown>, index: number) => Number(item.number ?? index + 1) === request.installmentNumber
+      const supplierPixNote = request.sourceType === "expense_supplier_pix" && request.proofStoragePath && request.interRequestId
+        ? `Pix Banco Inter confirmado em ${String(request.paidAt).slice(0, 10)}${request.supplierPixConfirmation ? ` (competência ${request.supplierPixConfirmation.competenceMonth})` : ""}. Referência ${request.interRequestId}. Comprovante anexado.`
+        : null;
+      const notes = typeof expenseData.notes === "string" ? expenseData.notes : "";
+      const supplierPixProof = supplierPixNote ? {
+        paymentProofStoragePath: request.proofStoragePath,
+        notes: notes.includes(supplierPixNote) ? notes : [notes, supplierPixNote].filter(Boolean).join("\n"),
+      } : {};
+      const isSingleInstallmentPix = installments.length === 1
+        && (request.sourceType === "consultancy_provision" || request.sourceType === "expense_supplier_pix");
+      if (isInstallmentBoleto || isSingleInstallmentPix) {
+        const nextInstallments = installments.map((item: Record<string, unknown>, index: number) => isSingleInstallmentPix || Number(item.number ?? index + 1) === request.installmentNumber
           ? { ...item, status: "paid", paidAt: request.paidAt, paymentRequestId: request.id, paymentProofStoragePath: request.proofStoragePath ?? null }
           : item);
         const allPaid = nextInstallments.every((item: Record<string, unknown>) => item.status === "paid" || Boolean(item.paidAt));
         transaction.set(expenseRef, {
           installments: nextInstallments,
+          ...supplierPixProof,
           status: allPaid ? "paid" : expenseData.status,
           ...(allPaid ? { paidAt: request.paidAt } : {}),
           updatedAt: now,
         }, { merge: true });
       } else {
-        transaction.set(expenseRef, { status: "paid", paidAt: request.paidAt, paymentRequestId: request.id, paymentProofStoragePath: request.proofStoragePath, updatedAt: now }, { merge: true });
+        transaction.set(expenseRef, { status: "paid", paidAt: request.paidAt, paymentRequestId: request.id, paymentProofStoragePath: request.proofStoragePath, ...supplierPixProof, updatedAt: now }, { merge: true });
       }
       transaction.set(financialDbAdmin.collection("transactions").doc(`inter_${request.id}`), {
         type: "expense", expenseId: request.expenseId, installmentNumber: request.installmentNumber ?? null, paymentRequestId: request.id,
@@ -1782,6 +2116,9 @@ async function completeSource(request: BankPaymentRequest) {
   }
   if (request.sourceType === "generated_receipt") {
     await financialDbAdmin.collection("generatedReceipts").doc(request.sourceId).set({ status: "paid", paidAt: request.paidAt, paymentRequestId: request.id, paymentProofStoragePath: request.proofStoragePath, updatedAt: new Date().toISOString() }, { merge: true });
+  }
+  if (request.sourceType === "document_receipt") {
+    await dbAdmin.collection("generatedDocuments").doc(request.sourceId).set({ receiptPaymentStatus: "paid", receiptPaymentRequestId: request.id, receiptPaidAt: request.paidAt }, { merge: true });
   }
 }
 

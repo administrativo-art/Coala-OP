@@ -33,6 +33,7 @@ import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { DOCUMENT_VARIABLES } from "@/features/hr/integration/document-variables";
 import { confirmedSubjectKeys, confirmedSubjectKeysForDocument } from "@/features/privacy/person-lookup.server";
+import { receiptPaymentSnapshot } from "./receipt-payment";
 
 export type GenerateDocumentFromTemplateParams = {
   templateId: string;
@@ -472,6 +473,7 @@ export async function generateDocumentFromTemplate(
   });
   batch.set(generatedReference.collection("audit").doc("resolvedValues"), {
     ...audit,
+    ...(params.templateId === "system-receipt-standard" ? { receiptPaymentSnapshot: receiptPaymentSnapshot(formValues) } : {}),
     retentionPolicyId: retention.retentionPolicyId,
     retentionUntil: retention.retentionUntil,
     legalHold: false,

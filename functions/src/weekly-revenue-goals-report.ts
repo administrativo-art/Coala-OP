@@ -361,7 +361,7 @@ export function renderHtml(report: Report) {
   const tone = { good: ["✓", C.ok], bad: ["!", C.bad], idea: ["→", C.info] } as const;
   const weekChange = delta(network.week.perDay, network.previous.perDay);
   const coverage = report.quality.weekHave < report.quality.weekExpected
-    ? `<tr><td style="padding:16px 28px 0"><div style="background:${C.warnBg};border:1px solid #f5d9a3;border-radius:10px;padding:10px 12px;font-size:12.5px;color:${C.warn}"><strong>Semana com ${report.quality.weekHave} de ${report.quality.weekExpected} dias de dados.</strong> Os totais somam só os dias com relatório e as comparações usam a média por dia aberto. <a href="#qualidade" style="color:${C.warn}">Ver detalhes</a></div></td></tr>`
+    ? `<tr><td style="padding:16px 28px 0"><div style="background:${C.warnBg};border:1px solid #f5d9a3;border-radius:10px;padding:10px 12px;font-size:12.5px;color:${C.warn}"><strong>Semana com ${report.quality.weekHave} de ${report.quality.weekExpected} relatórios diários das unidades.</strong> Os totais somam só os dias com relatório e as comparações usam a média por dia aberto. <a href="#qualidade" style="color:${C.warn}">Ver detalhes</a></div></td></tr>`
     : "";
   const goal = network.goal;
   const summaryRows: Array<[string, string, string]> = [
@@ -385,8 +385,8 @@ ${coverage}
 
   html += section("resumo", "Resumo da rede", `Soma das ${units.length} unidades. A meta é mensal de faturamento; metas de ticket e produto ficam em cada unidade.`);
   html += `<tr><td style="padding:12px 28px 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-<td width="50%" valign="top" style="padding-right:6px"><div style="background:${C.badBg};border-radius:12px;padding:14px 16px"><div style="font-size:11.5px;font-weight:800;color:${C.bad};text-transform:uppercase;letter-spacing:.08em">Semana · ${network.week.have}/${network.week.expected} dias</div><div style="font-size:26px;font-weight:800;margin-top:4px">${brl(network.week.cents)}</div><div style="font-size:12.5px;margin-top:2px">${arrow(weekChange)} <span style="color:${C.muted}">por dia vs. semana anterior</span></div><div style="font-size:12.5px">${arrow(delta(network.week.perDay, network.historyPerDay))} <span style="color:${C.muted}">por dia vs. média de ${network.historyWeeks} semanas</span></div></div></td>
-<td width="50%" valign="top" style="padding-left:6px"><div style="background:${C.warm};border-radius:12px;padding:14px 16px"><div style="font-size:11.5px;font-weight:800;color:${C.muted};text-transform:uppercase;letter-spacing:.08em">Mês até ${cut} · ${network.monthToDate.have}/${network.monthToDate.expected} dias</div><div style="font-size:26px;font-weight:800;margin-top:4px">${brl(network.monthToDate.cents)}</div><div style="font-size:12.5px;margin-top:2px">${arrow(delta(network.monthToDate.perDay, network.monthPriorPerDay))} <span style="color:${C.muted}">por dia vs. mesmos dias de ${network.monthPriorCount} meses</span></div>${goal ? `<div style="font-size:12.5px;color:${C.muted}">Projeção de fechamento: ${brl(goal.projection)}</div>` : ""}</div></td></tr></table></td></tr>`;
+<td width="50%" valign="top" style="padding-right:6px"><div style="background:${C.badBg};border-radius:12px;padding:14px 16px"><div style="font-size:11.5px;font-weight:800;color:${C.bad};text-transform:uppercase;letter-spacing:.08em">Semana · ${dateRange(input.weekStart, input.weekEnd).length} dias</div><div style="font-size:11px;color:${C.bad};margin-top:2px">${network.week.have}/${network.week.expected} relatórios das unidades</div><div style="font-size:26px;font-weight:800;margin-top:4px">${brl(network.week.cents)}</div><div style="font-size:12.5px;margin-top:2px">${arrow(weekChange)} <span style="color:${C.muted}">por dia vs. semana anterior</span></div><div style="font-size:12.5px">${arrow(delta(network.week.perDay, network.historyPerDay))} <span style="color:${C.muted}">por dia vs. média de ${network.historyWeeks} semanas</span></div></div></td>
+<td width="50%" valign="top" style="padding-left:6px"><div style="background:${C.warm};border-radius:12px;padding:14px 16px"><div style="font-size:11.5px;font-weight:800;color:${C.muted};text-transform:uppercase;letter-spacing:.08em">Mês até ${cut} · ${dateRange(input.monthStart, input.monthEnd).length} dias</div><div style="font-size:11px;color:${C.muted};margin-top:2px">${network.monthToDate.have}/${network.monthToDate.expected} relatórios das unidades</div><div style="font-size:26px;font-weight:800;margin-top:4px">${brl(network.monthToDate.cents)}</div><div style="font-size:12.5px;margin-top:2px">${arrow(delta(network.monthToDate.perDay, network.monthPriorPerDay))} <span style="color:${C.muted}">por dia vs. mesmos dias de ${network.monthPriorCount} meses</span></div>${goal ? `<div style="font-size:12.5px;color:${C.muted}">Projeção de fechamento: ${brl(goal.projection)}</div>` : ""}</div></td></tr></table></td></tr>`;
   html += `<tr><td style="padding:12px 28px 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px">${header(["Indicador", "Semana", `Mês até ${cut}`])}${summaryRows.map(row => `<tr>${cell(row[0])}${cellRight(row[1])}${cellRight(row[2])}</tr>`).join("")}</table></td></tr>`;
   if (goal) {
     html += `<tr><td style="padding:14px 28px 0"><div style="font-size:12px;font-weight:700;color:${C.muted};margin-bottom:6px">Meta mensal da rede · ${statusPill(report, goal.realized / goal.expected * 100)}</div>${progressBar(goal.realized / goal.target * 100, goal.expected / goal.target * 100)}${goalLegend(goal, input.monthEnd)}<div style="font-size:11.5px;color:${C.muted};margin-top:2px">Projeção de fechamento: ${brl(goal.projection)} · a marca preta na barra é o esperado até ${cut}</div></td></tr>`;
@@ -435,8 +435,8 @@ ${coverage}
 
   const q = report.quality;
   const qualityRows: Array<[string, string, string]> = [
-    ["Dias da semana com relatório", `${q.weekHave} de ${q.weekExpected}`, q.weekHave < q.weekExpected ? C.warn : C.ok],
-    ["Dias do mês com relatório", `${q.monthHave} de ${q.monthExpected}`, q.monthHave < q.monthExpected ? C.warn : C.ok],
+    ["Relatórios diários das unidades na semana", `${q.weekHave} de ${q.weekExpected}`, q.weekHave < q.weekExpected ? C.warn : C.ok],
+    ["Relatórios diários das unidades no mês", `${q.monthHave} de ${q.monthExpected}`, q.monthHave < q.monthExpected ? C.warn : C.ok],
     ["Dias sem relatório", report.missingDays.join(", ") || "nenhum", report.missingDays.length ? C.warn : C.ok],
     ["Dias do histórico de 6 meses em formato legado", `${q.historyLegacy} de ${q.historyHave}`, q.historyLegacy ? C.warn : C.ok],
     ["Unidades sem 6 meses completos", units.filter(unit => unit.partialHistory).map(unit => unit.name).join(", ") || "nenhuma", C.muted],
@@ -461,9 +461,9 @@ export function renderText(report: Report) {
   const { input, network, units } = report;
   const cut = shortDate(input.monthEnd);
   const lines = [renderSubject(report), `Semana de ${shortDate(input.weekStart)} a ${shortDate(input.weekEnd)} · mês de ${shortDate(input.monthStart)} a ${cut}`, ""];
-  if (report.quality.weekHave < report.quality.weekExpected) lines.push(`Atenção: semana com ${report.quality.weekHave} de ${report.quality.weekExpected} dias de dados. Comparações por dia aberto.`, "");
+  if (report.quality.weekHave < report.quality.weekExpected) lines.push(`Atenção: semana com ${report.quality.weekHave} de ${report.quality.weekExpected} relatórios diários das unidades. Comparações por dia aberto.`, "");
   lines.push("EM 30 SEGUNDOS", ...readingLines(report).map(line => `- ${line.title} ${line.text}`), "");
-  lines.push("RESUMO DA REDE", `Semana: ${brl(network.week.cents)} · ${num(network.week.coupons)} pedidos · ticket ${network.week.ticket ? brl(network.week.ticket, 2) : "—"}`, `Mês até ${cut}: ${brl(network.monthToDate.cents)}`);
+  lines.push("RESUMO DA REDE", `Semana (${dateRange(input.weekStart, input.weekEnd).length} dias; ${network.week.have}/${network.week.expected} relatórios das unidades): ${brl(network.week.cents)} · ${num(network.week.coupons)} pedidos · ticket ${network.week.ticket ? brl(network.week.ticket, 2) : "—"}`, `Mês até ${cut} (${dateRange(input.monthStart, input.monthEnd).length} dias; ${network.monthToDate.have}/${network.monthToDate.expected} relatórios das unidades): ${brl(network.monthToDate.cents)}`);
   if (network.goal) lines.push(`Meta Alvo: ${brl(network.goal.target)} · realizado ${brl(network.goal.realized)} · esperado ${brl(network.goal.expected)} · projeção ${brl(network.goal.projection)}`, [network.goal.up ? `Meta UP ${brl(network.goal.up)}` : "", network.goal.top ? `Meta TOP ${brl(network.goal.top)}` : ""].filter(Boolean).join(" · "));
   lines.push(`Abrir metas: ${input.links.goals}`, "");
   for (const unit of units) {
@@ -471,6 +471,6 @@ export function renderText(report: Report) {
     if (unit.goal) lines.push(`Meta: ${statusOf(report, unit.goal.pace)} · realizado ${brl(unit.goal.realized)} de ${brl(unit.goal.target)} (esperado ${brl(unit.goal.expected)}) · projeção ${brl(unit.goal.projection)}`);
     lines.push("10 produtos:", ...unit.top.map((product, index) => `  ${index + 1}. ${product.name}: ${num(product.qty)} un · ${brl(product.cents)}`), "");
   }
-  lines.push("QUALIDADE DOS DADOS", `Dias da semana com relatório: ${report.quality.weekHave} de ${report.quality.weekExpected}`, `Dias sem relatório: ${report.missingDays.join(", ") || "nenhum"}`, "", ...footerLines(report));
+  lines.push("QUALIDADE DOS DADOS", `Relatórios diários das unidades na semana: ${report.quality.weekHave} de ${report.quality.weekExpected}`, `Relatórios diários das unidades no mês: ${report.quality.monthHave} de ${report.quality.monthExpected}`, `Dias sem relatório: ${report.missingDays.join(", ") || "nenhum"}`, "", ...footerLines(report));
   return lines.join("\n");
 }

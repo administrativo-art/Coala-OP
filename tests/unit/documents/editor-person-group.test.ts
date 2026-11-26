@@ -100,7 +100,7 @@ test('coletor: collection group com limite e leitura exata, sem varredura', () =
   assert.match(src, /db\.collectionGroup\(source\.collection\)/);
   assert.match(src, /PERSON_SOURCE_READ_BUDGET = 100/);
   assert.match(src, /\.limit\(batchSize\)/);
-  assert.match(src, /group \? 2 : 1|\|\| group \? 2 : 1/);
+  assert.match(src, /const costPerRow = [\s\S]*?\|\| group(?: \|\| [^\n]+)? \? 2 : 1/);
 });
 
 test('continuação a partir de posição intrusa ou aninhada segue válida, mas o intruso nunca é exposto', async () => {

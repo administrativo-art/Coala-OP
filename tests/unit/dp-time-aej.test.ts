@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { aejShiftOf, aejText, generateAej, type AejInput } from '../../src/features/dp/time-adjustments/aej';
+import { aejContractSchedules, aejShiftOf, aejText, generateAej, type AejInput } from '../../src/features/dp/time-adjustments/aej';
 
 const shift = { date: '2026-08-12', startTime: '08:00', endTime: '16:00', overnight: false, netMinutes: 420, breaks: [{ start: '12:00', end: '13:00' }] };
 const input = (): AejInput => ({
@@ -111,4 +111,23 @@ test('registro 07: DSR e movimentos do banco depois das marcações, contados no
   assert.equal(lines[13], '99|1|1|1|1|5|0|3|1');
   data.employees[0].absences = [{ date: '2026-08-12', kind: '3', movement: '1' }];
   assert.throws(() => generateAej(data), /AEJ_BANK_MOVEMENT_INVALID/);
+});
+
+
+test('consolida dois trechos fixos no AEJ e identifica a carga híbrida sem exportar registro parcial', () => {
+  const fixed = { date: shift.date, type: 'work' as const, startTime: '13:00', endTime: '17:00',
+    overnight: false, breakType: 'none' as const, breakDurationMinutes: null, breakStart: null, breakEnd: null,
+    breakSegments: null, manualOrder: 1, manualMode: 'fixed' as const };
+  const morning = { ...fixed, manualOrder: 0, startTime: '08:00', endTime: '12:00' };
+  const fixedDay = aejContractSchedules([fixed, morning]);
+  assert.deepEqual(fixedDay.unresolved, []);
+  const data = input();
+  data.employees[0].shifts = fixedDay.schedules;
+  assert.match(generateAej(data).bytes.toString('latin1'), /04\|HC001\|480\|0800\|1200\|1300\|1700/);
+  for (const [startTime, endTime] of [[null, null], ['08:00', '12:00']]) {
+    const flexible = { ...morning, manualMode: 'flexible' as const, startTime, endTime, manualWorkMinutes: 240 };
+    assert.deepEqual(aejContractSchedules([fixed, flexible]), {
+      schedules: [], unresolved: [{ date: shift.date, plannedMinutes: 480 }],
+    });
+  }
 });

@@ -23,6 +23,10 @@ const closuresOverviewSource = readFileSync(
   path.join(process.cwd(), "src/features/financial/cash-closures/components/cash-closures-overview-page.tsx"),
   "utf8",
 );
+const sessionsTabSource = readFileSync(
+  path.join(process.cwd(), "src/features/financial/cash-closures/components/cash-closures-sessions-tab.tsx"),
+  "utf8",
+);
 const depositsPageSource = readFileSync(
   path.join(process.cwd(), "src/features/financial/cash-deposits/cash-deposits-page.tsx"),
   "utf8",
@@ -173,7 +177,8 @@ test("nova sessão escolhe somente unidades", () => {
 test("sessão e composição física exigem permissões e responsabilidade explícitas", () => {
   assert.doesNotMatch(sessionPageSource, /ID da sessão:/);
   assert.match(sessionPageSource, /Responsável: \{session\.openedByName\}/);
-  assert.match(closuresOverviewSource, /Responsável: <span className="ml-1 truncate">\{session\.openedByName\}/);
+  assert.match(sessionsTabSource, /Responsável: \{session\.openedByName\}/);
+  assert.match(closuresOverviewSource, /sessions\/new/);
   assert.match(countingDialogSource, /Responsável pela sessão:/);
   assert.match(countingDialogSource, /session\.openedByName/);
   assert.match(sessionPageSource, /cashClosures\.approve && canManageSession/);

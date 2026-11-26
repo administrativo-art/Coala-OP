@@ -378,7 +378,7 @@ service cloud.firestore {
     match /expenses/{expenseId} {
       allow read: if canViewExpenses() || canViewDashboard() || canViewFinancialFlow() || canViewDre()
         || canViewAudits() || canViewCardStatements() || canViewPersonnelCosts();
-      allow create: if !request.resource.data.keys().hasAny(['budgetMigration', 'sourceSettlement', 'sourceSettlementReversal']) && (isCardStatementImportCreate(request.resource.data)
+      allow create: if !request.resource.data.keys().hasAny(['budgetMigration', 'sourceSettlement', 'sourceSettlementReversal', 'purchasePixIndication']) && (isCardStatementImportCreate(request.resource.data)
         || (canCreateExpenses()
           && hasValidExpenseAccount(request.resource.data)
           && (request.resource.data.get('hasPersonAllocations', false) != true || canEditPersonnelCosts())
@@ -386,11 +386,12 @@ service cloud.firestore {
       // Conversion is an administrative server transaction. Preserve its tombstone/history.
       allow update: if !resource.data.keys().hasAny(['budgetMigration'])
         && !request.resource.data.keys().hasAny(['budgetMigration'])
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['purchasePixIndication'])
         && preservesSourceSettlement()
         && (isCardStatementAuditUpdate() || (canEditExpenses()
           && (!expenseAccountChanged() || hasValidExpenseAccount(request.resource.data))
           && (!expenseIndividualizationChanged() || (canEditPersonnelCosts() && hasValidExpenseIndividualization(request.resource.data)))));
-      allow delete: if canDeleteExpenses() && !resource.data.keys().hasAny(['budgetMigration', 'sourceSettlement', 'sourceSettlementReversal']);
+      allow delete: if canDeleteExpenses() && !resource.data.keys().hasAny(['budgetMigration', 'sourceSettlement', 'sourceSettlementReversal', 'purchasePixIndication']);
     }
 
     match /payments/{paymentId} {
@@ -468,6 +469,10 @@ service cloud.firestore {
 
     // E-mails financeiros e anexos são expostos somente pelas APIs autenticadas
     // para evitar acesso direto a documentos de cobrança pelo cliente.
+    match /payrollFinancialReviews/{document=**} { allow read, write: if false; }
+    match /payrollFinancialReviewState/{document=**} { allow read, write: if false; }
+    match /payrollFinancialReviewClaims/{document=**} { allow read, write: if false; }
+
     match /financialInboxMessages/{messageId} {
       allow read, write: if false;
       match /events/{eventId} {

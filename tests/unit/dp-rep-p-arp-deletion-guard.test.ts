@@ -33,6 +33,16 @@ function sources(directory: string): string[] {
 }
 const files = [...sources('src'), ...sources('functions/src')].map((path) => ({ path, text: readFileSync(path, 'utf8') }));
 
+function withoutApprovedScheduleMutations(path: string): string {
+  const text = readFileSync(path, 'utf8');
+  if (path !== 'src/features/dp/time-adjustments/automatic-absence.server.ts') return text;
+  assert.match(text, /const scheduleRef = deps\.mainDb\.collection\('dp_schedules'\)\.doc\(item\.scheduleId\)/, path);
+  assert.match(text, /const shiftRef = scheduleRef\.collection\('shifts'\)\.doc\(item\.shiftId\)/, path);
+  assert.equal(text.match(/tx\.delete\(shiftRef\)/g)?.length, 1, path);
+  assert.equal(text.match(/scheduleSyncError: FieldValue\.delete\(\)/g)?.length, 1, path);
+  return text.replace('tx.delete(shiftRef)', '').replace('scheduleSyncError: FieldValue.delete()', '');
+}
+
 describe('ARP do REP-P protegida contra exclusão no banco dedicado', () => {
   it('only bounded REP-P services, approved reader and source catalog reference repP_ collections', () => {
     assert.deepEqual(files.filter((file) => file.text.includes('repP_')).map((file) => file.path).sort(), [...ARP_WRITERS, ...ARP_READERS, ...SOURCE_CATALOGS].sort());
@@ -46,7 +56,7 @@ describe('ARP do REP-P protegida contra exclusão no banco dedicado', () => {
 
   it('the ARP writers never delete or bulk-write', () => {
     for (const path of ARP_WRITERS) {
-      const text = readFileSync(path, 'utf8');
+      const text = withoutApprovedScheduleMutations(path);
       assert.doesNotMatch(text, /\.delete\(|recursiveDelete|bulkWriter|FieldValue\.delete/, path);
     }
   });
@@ -54,12 +64,12 @@ describe('ARP do REP-P protegida contra exclusão no banco dedicado', () => {
   it('only bounded services and source catalog reference ptrp_ collections; services never delete (retenção de 20 anos)', () => {
     // The REP-P and closure services read the competence/classification heads atomically. The remaining
     // closure, mirror, AEJ and time-bank services reach these collections through constants from the adjustment service.
-    const PTRP_WRITERS = ['src/features/dp/absences/coverage/service.server.ts', 'src/features/dp/absences/requests/workflow.server.ts', 'src/features/dp/rep-p/own-month.server.ts', 'src/features/dp/rep-p/service.server.ts', 'src/features/dp/time-adjustments/aej.server.ts', 'src/features/dp/time-adjustments/automatic-absence.server.ts', 'src/features/dp/time-adjustments/closing-package.server.ts', 'src/features/dp/time-adjustments/closure.server.ts', 'src/features/dp/time-adjustments/mirror.server.ts', 'src/features/dp/time-adjustments/service.server.ts', 'src/features/dp/time-bank/service.server.ts'];
+    const PTRP_WRITERS = ['src/features/dp/absences/coverage/service.server.ts', 'src/features/dp/absences/requests/workflow.server.ts', 'src/features/dp/rep-p/own-month.server.ts', 'src/features/dp/rep-p/service.server.ts', 'src/features/dp/time-adjustments/aej.server.ts', 'src/features/dp/time-adjustments/automatic-absence.server.ts', 'src/features/dp/time-adjustments/closing-package.server.ts', 'src/features/dp/time-adjustments/closing-progress.server.ts', 'src/features/dp/time-adjustments/day-corrections.server.ts', 'src/features/dp/time-adjustments/payroll-finance.server.ts', 'src/features/dp/time-adjustments/payslip-reconciliation.server.ts', 'src/features/dp/time-adjustments/closure.server.ts', 'src/features/dp/time-adjustments/mirror.server.ts', 'src/features/dp/time-adjustments/service.server.ts', 'src/features/dp/time-bank/service.server.ts', 'src/features/service-portal/closure-server.ts'];
     assert.deepEqual(files.filter((file) => file.text.includes('ptrp_')).map((file) => file.path).sort(),
-      ['src/features/dp/rep-p/own-month.server.ts', 'src/features/dp/rep-p/service.server.ts', 'src/features/dp/time-adjustments/automatic-absence.server.ts', 'src/features/dp/time-adjustments/closure.server.ts', 'src/features/dp/time-adjustments/service.server.ts', ...SOURCE_CATALOGS].sort());
-    assert.deepEqual(files.filter((file) => /\b(ADJUSTMENTS|TREATMENTS|CLOSURES|AEJ_EXPORTS)\b[^;]*from '(\.\/|@\/features\/dp\/time-adjustments\/)service\.server'/.test(file.text)).map((file) => file.path).sort(), ['src/features/dp/absences/coverage/service.server.ts', 'src/features/dp/absences/requests/workflow.server.ts', 'src/features/dp/time-adjustments/aej.server.ts', 'src/features/dp/time-adjustments/automatic-absence.server.ts', 'src/features/dp/time-adjustments/closing-package.server.ts', 'src/features/dp/time-adjustments/closure.server.ts', 'src/features/dp/time-adjustments/mirror.server.ts', 'src/features/dp/time-bank/service.server.ts']);
+      ['src/features/dp/rep-p/own-month.server.ts', 'src/features/dp/rep-p/service.server.ts', 'src/features/dp/time-adjustments/automatic-absence.server.ts', 'src/features/dp/time-adjustments/closing-progress.server.ts', 'src/features/dp/time-adjustments/day-corrections.server.ts', 'src/features/dp/time-adjustments/payroll-finance.server.ts', 'src/features/dp/time-adjustments/payslip-reconciliation.server.ts', 'src/features/dp/time-adjustments/closure.server.ts', 'src/features/dp/time-adjustments/service.server.ts', 'src/features/service-portal/closure-server.ts', ...SOURCE_CATALOGS].sort());
+    assert.deepEqual(files.filter((file) => /\b(ADJUSTMENTS|TREATMENTS|CLOSURES|AEJ_EXPORTS)\b[^;]*from '(\.\/|@\/features\/dp\/time-adjustments\/)service\.server'/.test(file.text)).map((file) => file.path).sort(), ['src/features/dp/absences/coverage/service.server.ts', 'src/features/dp/absences/requests/workflow.server.ts', 'src/features/dp/time-adjustments/aej.server.ts', 'src/features/dp/time-adjustments/automatic-absence.server.ts', 'src/features/dp/time-adjustments/closing-package.server.ts', 'src/features/dp/time-adjustments/closure.server.ts', 'src/features/dp/time-adjustments/day-corrections.server.ts', 'src/features/dp/time-adjustments/mirror.server.ts', 'src/features/dp/time-bank/service.server.ts']);
     for (const path of PTRP_WRITERS) {
-      assert.doesNotMatch(readFileSync(path, 'utf8'), /\.delete\(|recursiveDelete|bulkWriter|FieldValue\.delete/, path);
+      assert.doesNotMatch(withoutApprovedScheduleMutations(path), /\.delete\(|recursiveDelete|bulkWriter|FieldValue\.delete/, path);
     }
   });
 

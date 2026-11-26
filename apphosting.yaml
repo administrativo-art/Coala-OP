@@ -158,6 +158,12 @@ env:
     secret: ASSET_MAINTENANCE_JOB_SECRET
   - variable: INTER_SERVICE_PAYMENT_APPROVAL_ENABLED
     value: "true"
+  # CT Sorvetes LTDA: titular da conta Pix confirmado em 26/11/2026.
+  # A API ainda pode retornar PROCESSAR; a resposta real prevalece na UI.
+  - variable: INTER_DOCUMENT_RECEIPT_BANK_APPROVAL_CONFIRMED
+    value: "true"
+  - variable: INTER_DOCUMENT_RECEIPT_PAYER_CNPJ
+    value: "14276603000125"
   - variable: INTER_SERVICE_PAYMENT_APPROVAL_SOURCE_IDS
     value: "7c1c9815-0167-4132-a1c4-116c0ea8c20d,dd5b24aa-19f4-4550-a94a-83ab4e735232"
   - variable: INTER_ACCOUNT_NUMBER

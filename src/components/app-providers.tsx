@@ -42,12 +42,13 @@ import { ClientErrorObserver } from "@/components/observability/client-error-obs
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const isServicePortal = pathname === '/prestadores' || pathname?.startsWith('/prestadores/');
   const isStandaloneEscala = pathname === '/escala';
   const isPlayerRoute = pathname?.startsWith('/player');
   const isSignageRoute = pathname?.startsWith('/signage');
   const isInstagramScheduleRoute = pathname?.startsWith('/instagram-programacao');
 
-  if (isStandaloneEscala || isPlayerRoute) {
+  if (isStandaloneEscala || isPlayerRoute || isServicePortal) {
     return (
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
         {children}

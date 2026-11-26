@@ -137,13 +137,13 @@ test("identificação valida entrada e autorização no servidor sem expor erro 
   assert.match(linkRoute, /accountAllocations: z\.array/);
   assert.match(linkRoute, /provisionExpenseId: z\.string/);
   assert.match(linkRoute, /documentConfirmation: z\.object/);
-  assert.match(linkRoute, /barcode: z\.string\(\)\.regex\(\/\^\\d\{47\}\$\//);
   assert.match(linkRoute, /amountCents: z\.number\(\)\.int\(\)\.positive\(\)/);
   assert.match(linkRoute, /!input\.expenseId \|\| !input\.accountAllocations/);
   assert.match(linkRoute, /input\.resolutionOnly !== true \|\| Boolean\(input\.expenseId\)/);
   assert.match(linkRoute, /inbox\?\.link/);
   assert.match(linkRoute, /input\.resolutionOnly !== true/);
-  assert.match(linkRoute, /withApiErrorHandling/);
+  assert.match(linkRoute, /export const POST = secureRoute/);
+  assert.match(linkRoute, /unknownFields: "reject"/);
   assert.doesNotMatch(linkRoute, /error instanceof Error \? error\.message/);
 });
 

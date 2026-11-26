@@ -40,6 +40,11 @@ test("manifesto de compra fixa total, boleto, parcelas e recebimento futuro", ()
   assert.equal(purchaseCreatePayload(parsed).origin, "direct");
   assert.doesNotThrow(() => assertPurchaseSnapshot({
     supplierId: parsed.supplierId,
+    destinationKioskId: parsed.destinationKioskId,
+    deliveryFee: parsed.deliveryFee,
+    paymentDueDate: parsed.paymentDueDate,
+    estimatedReceiptDate: parsed.estimatedReceiptDate,
+    resultCenterId: parsed.resultCenterId,
     paymentMethod: "boleto",
     paymentCondition: "installments",
     installmentsCount: 3,
@@ -67,6 +72,33 @@ test("manifesto fiscal normaliza e limita a chave da NF-e", () => {
   assert.equal(purchaseFiscalSchema.safeParse({ ...fiscal, invoiceAccessKey: "1".repeat(43) }).success, false);
 });
 
+test("manifesto Pix à vista preserva caixa logística e frete separado", () => {
+  const parsed = purchaseRegistrationSchema.parse({
+    supplierId: "entity-example", supplierName: "Fornecedor exemplo", destinationKioskId: "unit-example",
+    externalOrderNumber: "PO-123", receiptMode: "future_delivery", paymentMethod: "pix",
+    paymentCondition: "cash", paymentDueDate: "2026-11-24", estimatedReceiptDate: "2026-11-25",
+    accountPlanId: "goods-plan", accountPlanName: "Mercadoria", resultCenterId: "center-example",
+    deliveryFee: 20, freightPaymentMode: "separate", freightAccountPlanId: "freight-plan",
+    freightAccountPlanName: "Frete", freightSupplierName: "Transportadora exemplo", notes: "Pedido comercial de teste",
+    expectedTotalCents: 15000,
+    items: [{ baseItemId: "base-example", productId: "product-example", itemName: "Caixa exemplo",
+      unit: "CX", purchaseUnitType: "logistic", quantityOrdered: 1, unitPriceOrdered: 130 }],
+  });
+  const payload = purchaseCreatePayload(parsed);
+  assert.equal(payload.paymentMethod, "pix");
+  assert.equal(payload.freightSupplierName, "Transportadora exemplo");
+  assert.equal(payload.items[0].purchaseUnitType, "logistic");
+  assert.doesNotThrow(() => assertPurchaseSnapshot({
+    supplierId: parsed.supplierId, destinationKioskId: parsed.destinationKioskId,
+    externalOrderNumber: parsed.externalOrderNumber, paymentMethod: "pix", paymentCondition: "cash",
+    installmentsCount: 1, paymentDueDate: parsed.paymentDueDate,
+    estimatedReceiptDate: parsed.estimatedReceiptDate, resultCenterId: parsed.resultCenterId,
+    deliveryFee: 20, freightPaymentMode: "separate", freightAccountPlanId: "freight-plan",
+    freightSupplierName: "Transportadora exemplo", totalEstimated: 150,
+  }, parsed));
+  assert.equal(purchaseRegistrationSchema.safeParse({ ...parsed, freightSupplierName: undefined }).success, false);
+});
+
 test("manifesto do fornecedor normaliza CNPJ e CEP sem aceitar campos extras", () => {
   const supplier = supplierEntitySchema.parse({
     type: "pessoa_juridica",
@@ -85,6 +117,21 @@ test("manifesto do fornecedor normaliza CNPJ e CEP sem aceitar campos extras", (
     notes: "NF-e 22930",
   });
   assert.equal(supplier.document, "02911413000153");
-  assert.equal(supplier.address.zipCode, "75465086");
+  assert.equal(supplier.address?.zipCode, "75465086");
   assert.equal(supplierEntitySchema.safeParse({ ...supplier, token: "segredo" }).success, false);
+});
+
+test("manifesto de prestador pessoa física exige CPF válido e tipo compatível", () => {
+  const base = {
+    type: "pessoa_fisica" as const, name: "Prestador de teste", document: "529.982.247-25",
+  };
+  assert.equal(supplierEntitySchema.parse(base).document, "52998224725");
+  const withAddress = supplierEntitySchema.parse({
+    ...base, address: { street: "Rua Teste", number: "1", neighborhood: "Centro", city: "Belém", state: "PA", zipCode: "66000-000" },
+  });
+  assert.equal(withAddress.address?.zipCode, "66000000");
+  assert.equal(supplierEntitySchema.safeParse({ ...base, address: { street: "Rua Teste" } }).success, false);
+  assert.equal(supplierEntitySchema.safeParse({ ...base, document: "11111111111" }).success, false);
+  assert.equal(supplierEntitySchema.safeParse({ ...base, type: "pessoa_juridica" }).success, false);
+  assert.equal(supplierEntitySchema.safeParse({ ...base, type: "pessoa_juridica", document: "02.911.413/0001-53", fantasyName: "Fornecedor" }).success, false);
 });

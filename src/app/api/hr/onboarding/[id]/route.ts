@@ -1,5 +1,4 @@
 import { canAccessUnit } from "@/lib/unit-access";
-import { contextWorkspaceAllowed } from "@/features/documents/central/context-archive-access";
 import { discardCancelledOnboardingDocuments } from "@/lib/hr/onboarding-document-discard.server";
 import { provisionOnboardingAuth, checkpointOnboardingIdentities } from "@/features/privacy/onboarding-provisioning.server";
 import { prepareOnboardingPersonForWrite } from "@/features/privacy/onboarding-person.server";
@@ -158,7 +157,7 @@ const patchEnforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown,
 });
 
 function assertOnboardingMutationScope(actor: Awaited<ReturnType<typeof assertFormalizationAccess>>, process: Record<string, unknown>) {
-  if (!contextWorkspaceAllowed(process, actor.workspaceId, actor.isDefaultAdmin) || !canAccessUnit(actor.userDoc, asString(process.unitId), { isDefaultAdmin: actor.isDefaultAdmin })) throw new AppError({ code: "ONBOARDING_SCOPE_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Processo indisponível para esta unidade ou empresa." });
+  if ((process.workspaceId != null && process.workspaceId !== actor.workspaceId) || !canAccessUnit(actor.userDoc, asString(process.unitId), { isDefaultAdmin: actor.isDefaultAdmin })) throw new AppError({ code: "ONBOARDING_SCOPE_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Processo indisponível para esta unidade ou empresa." });
 }
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -812,7 +811,10 @@ async function createCollaboratorFromOnboarding(params: {
   if (childRecords.length > 0) {
     values['employee.children'] = { value_json: childRecords };
     values['employee.children_under_14'] = { value_text: childCountLabel(childrenUnder14) };
-    values['employee.has_family_salary'] = { value_boolean: childrenUnder14 > 0 };
+  }
+  const familySalaryDecision = asRecord(params.process.familySalaryDecision);
+  if (typeof familySalaryDecision.grant === 'boolean') {
+    values['employee.has_family_salary'] = { value_boolean: familySalaryDecision.grant };
   }
 
   Object.entries(values).forEach(([fieldKey, value]) => {
