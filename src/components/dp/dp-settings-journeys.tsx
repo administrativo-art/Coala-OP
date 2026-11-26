@@ -70,8 +70,8 @@ type JourneyForm = {
   validTo: string;
 };
 
-// Única tolerância do ponto: a jornada vale para saldo, banco de horas e avisos de entrada, saída e intervalo.
-const TOLERANCE_NOTE = 'Diferença do dia dentro dela não vira débito nem crédito no banco; acima dela, conta inteira. Também é a margem dos avisos de entrada, saída e intervalo.';
+// Tolerância da jornada: vale enquanto a política de hora extra do dia não definir as próprias.
+const TOLERANCE_NOTE = 'Se a política de hora extra da pessoa definir tolerâncias, valem as da política. Sem isso, este valor vale para a entrada e a saída; o intervalo segue o previsto no turno.';
 
 type PanelState =
   | { mode: 'view'; item: DPJourney }
