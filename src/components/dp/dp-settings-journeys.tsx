@@ -59,6 +59,8 @@ type JourneyForm = {
   scaleValidationMode: NonNullable<DPJourney['scaleValidation']>['mode'];
   expectedBreakMinutes: string;
   useDefinedShiftWhenShorter: boolean;
+  coverageRoleIds: string[];
+  coverageFunctionIds: string[];
   toleranceMinutes: string;
   maxConsecutiveWorkDays: string;
   sundayCadenceWeeks: string;
@@ -68,8 +70,8 @@ type JourneyForm = {
   validTo: string;
 };
 
-// Única tolerância do ponto: a jornada vale para saldo, banco de horas e avisos de entrada, saída e intervalo.
-const TOLERANCE_NOTE = 'Diferença do dia dentro dela não vira débito nem crédito no banco; acima dela, conta inteira. Também é a margem dos avisos de entrada, saída e intervalo.';
+// Tolerância da jornada: vale enquanto a política de hora extra do dia não definir as próprias.
+const TOLERANCE_NOTE = 'Se a política de hora extra da pessoa definir tolerâncias, valem as da política. Sem isso, este valor vale para a entrada e a saída; o intervalo segue o previsto no turno.';
 
 type PanelState =
   | { mode: 'view'; item: DPJourney }
@@ -119,6 +121,8 @@ function formFor(item?: DPJourney): JourneyForm {
     scaleValidationMode: item?.scaleValidation?.mode ?? 'consecutive_days',
     expectedBreakMinutes: String(item?.expectedBreakMinutes ?? defaultExpectedBreakMinutes(firstWorkdayMinutes)),
     useDefinedShiftWhenShorter: item ? item.useDefinedShiftWhenShorter ?? true : false,
+    coverageRoleIds: item?.coveragePolicy?.jobRoleIds ?? [],
+    coverageFunctionIds: item?.coveragePolicy?.jobFunctionIds ?? [],
     toleranceMinutes: item ? item.toleranceMinutes === undefined ? '' : String(item.toleranceMinutes) : '5',
     maxConsecutiveWorkDays: String(item?.weeklyRest?.maxConsecutiveWorkDays ?? 5),
     sundayCadenceWeeks: item?.weeklyRest?.sundayCadenceWeeks ? String(item.weeklyRest.sundayCadenceWeeks) : '',
@@ -133,6 +137,28 @@ function statusVariant(status: DPJourney['status']) {
   if (status === 'published') return 'ok' as const;
   if (status === 'archived') return 'neutral' as const;
   return 'warn' as const;
+}
+
+/** Explicação da Política de jornada de cobertura (plano de turno de cobertura). */
+function CoveragePolicyInfo() {
+  return (
+    <InfoTooltip title="O que é a política de cobertura">
+      <p>O turno escalado marca o início e a cobertura mínima na unidade.</p>
+      <p>Quem está nesta política pode estender o dia até completar a carga da jornada, com 1h de intervalo, sem gerar “Saída após o previsto”. Até 6h trabalhadas, vale o intervalo do turno.</p>
+      <p>O banco de horas continua comparando com a carga da jornada. A decisão vale para os turnos escritos depois de salvar; dias já escalados não mudam.</p>
+    </InfoTooltip>
+  );
+}
+
+function coveragePolicyLabel(journey: Pick<DPJourney, 'coveragePolicy' | 'useDefinedShiftWhenShorter'>,
+  roles: Array<{ id: string; name: string }>, functions: Array<{ id: string; name: string }>) {
+  const policy = journey.coveragePolicy;
+  const names = [
+    ...(policy?.jobRoleIds ?? []).map((id) => roles.find((role) => role.id === id)?.name ?? id),
+    ...(policy?.jobFunctionIds ?? []).map((id) => functions.find((entry) => entry.id === id)?.name ?? id),
+  ];
+  if (!names.length) return 'Ninguém';
+  return journey.useDefinedShiftWhenShorter === false ? `Inativa: ${names.join(', ')}` : names.join(', ');
 }
 
 function ApplicabilityDetails({
@@ -282,6 +308,8 @@ function buildPayload(form: JourneyForm) {
     scaleValidation: { mode: form.scaleValidationMode },
     expectedBreakMinutes,
     useDefinedShiftWhenShorter: form.useDefinedShiftWhenShorter,
+    ...(form.coverageRoleIds.length || form.coverageFunctionIds.length
+      ? { coveragePolicy: { jobRoleIds: form.coverageRoleIds, jobFunctionIds: form.coverageFunctionIds } } : {}),
     ...(toleranceMinutes !== undefined ? { toleranceMinutes } : {}),
     ...(form.allowedShiftDefinitionIds.length ? { allowedShiftDefinitionIds: form.allowedShiftDefinitionIds } : {}),
     applicability: form.applicability,
@@ -346,6 +374,8 @@ export function DPSettingsJourneys() {
             description: form.description.trim() || null,
             allowedShiftDefinitionIds: form.allowedShiftDefinitionIds,
             toleranceMinutes: payload.toleranceMinutes ?? null,
+            // Esvaziar cargos e funções remove a política do rascunho (null apaga o campo na mescla).
+            coveragePolicy: payload.coveragePolicy ?? null,
             validTo: form.validTo || null,
           },
         });
@@ -546,6 +576,9 @@ export function DPSettingsJourneys() {
                 {formatShiftMinutes(item.expectedBreakMinutes ?? defaultExpectedBreakMinutes(item.days.find((day) => !day.isRestDay)?.plannedMinutes ?? 0))}
               </PanelField>
             </PanelSection>
+            <PanelSection title="Política de jornada de cobertura" aside={<CoveragePolicyInfo />}>
+              <PanelField label="Aplica-se a">{coveragePolicyLabel(item, roles, functions)}</PanelField>
+            </PanelSection>
             <PanelSection title="Aplicação">
               <PanelField label="Abrangência">{applicabilityLabel(item.applicability, { unitNames, unitGroupNames: groupNames, unitOrganizationNames: organizationNames })}</PanelField>
               <PanelField label="Turnos permitidos">
@@ -727,6 +760,33 @@ export function DPSettingsJourneys() {
                   onChange={(event) => setForm((current) => ({ ...current, expectedBreakMinutes: event.target.value }))}
                 />
               </Field>
+            </PanelSection>
+            <PanelSection title="Política de jornada de cobertura" aside={<CoveragePolicyInfo />}>
+              {form.useDefinedShiftWhenShorter ? (
+                <>
+                  <Field label="Cargos" requirement="opcional" hint="Todas as pessoas com o cargo entram na política.">
+                    <MultiSelect
+                      options={roles.map((role) => ({ value: role.id, label: role.name }))}
+                      selected={form.coverageRoleIds}
+                      onChange={(coverageRoleIds) => setForm((current) => ({ ...current, coverageRoleIds }))}
+                      placeholder="Nenhum cargo"
+                    />
+                  </Field>
+                  <Field label="Funções" requirement="opcional" hint="Quem tiver qualquer uma das funções entra na política.">
+                    <MultiSelect
+                      options={functions.map((entry) => ({ value: entry.id, label: entry.name }))}
+                      selected={form.coverageFunctionIds}
+                      onChange={(coverageFunctionIds) => setForm((current) => ({ ...current, coverageFunctionIds }))}
+                      placeholder="Nenhuma função"
+                    />
+                  </Field>
+                </>
+              ) : (
+                <p className="rounded-ds-btn border border-dashed border-ds-divider px-3.5 py-3 text-xs text-ds-ink-muted">
+                  Ligue “Usar o expediente definido no turno” para usar esta política.
+                  {form.coverageRoleIds.length || form.coverageFunctionIds.length ? ' A seleção atual fica guardada, mas inativa.' : ''}
+                </p>
+              )}
             </PanelSection>
             <PanelSection
               title="Descanso semanal remunerado"

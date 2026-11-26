@@ -45,6 +45,9 @@ interface ApiService {
     @PATCH("api/dp/time-recording/markings/{receiptId}/classification") suspend fun classifyMarking(@Path("receiptId") receiptId: String, @Body request: ClassificationUpdate): ClassificationResult
     @GET("api/dp/time-recording/markings") suspend fun markings(@Query("startDate") startDate: String, @Query("endDate") endDate: String): OwnMarkings
     @GET("api/dp/time-recording/month") suspend fun timeMonth(@Query("month") month: String): OwnMonth
+    /** Contrato central do dia: dias calculados no servidor e pedidos de revisão do mês. */
+    @GET("api/dp/time-recording/month-view") suspend fun monthView(@Query("month") month: String): OwnMonthView
+    @POST("api/dp/time-recording/review-requests/{requestId}") suspend fun markReviewed(@Path("requestId") requestId: String, @Body request: ReviewAction): ReviewResult
     @POST("api/dp/time-recording/journey-location") suspend fun journeyLocation(@Body request: JourneyLocationBatch): JourneyLocationAccepted
     @POST("api/dp/time-recording/journey-location/lease") suspend fun journeyLocationLease(@Body request: JourneyLocationLeaseRequest): JourneyLocationLease
     @Streaming @GET("api/dp/time-recording/receipts/{receiptId}") suspend fun receipt(@Path("receiptId") receiptId: String): ResponseBody

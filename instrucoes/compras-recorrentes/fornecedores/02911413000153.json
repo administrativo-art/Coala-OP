@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-11-26",
+  "scope": {
+    "recipientDocuments": [
+      "14276603000397"
+    ],
+    "currency": "BRL",
+    "purpose": "Compras para estoque destinadas à Matriz. Não cobre outras filiais/finalidades."
+  },
+  "defaults": {
+    "status": "approved",
+    "requiresFirstUseConfirmation": false,
+    "destinationKioskId": "matriz",
+    "destinationKioskName": "Centro de distribuição - Matriz",
+    "resultCenterId": "KNKNWZ7tdhIxnrlStRum",
+    "resultCenterName": "Centro administrativo - Renascença",
+    "approval": {
+      "by": "usuário nesta conversa",
+      "at": "2026-11-26T21:23:27.475861+00:00",
+      "decision": "Adotar esses padrões nas próximas compras equivalentes",
+      "scope": "Compras equivalentes para a Matriz, no escopo de destinatários e finalidade deste registro; alimentos do Cantinho em Insumos composição, pazinhas/copos/tampas em Embalagens de venda compradas para estoque; duas identidades ambíguas do Cantinho continuam pendentes."
+    }
+  },
+  "sourceEvidence": {
+    "verifiedAt": "2026-11-26",
+    "basis": "Consulta autenticada filtrada por fornecedor, documentos de origem e produtos por IDs exatos. Evidências detalhadas permanecem no chamado privado. Ausência em consulta limitada não comprova ausência universal."
+  },
+  "supplier": {
+    "document": "02911413000153",
+    "entityId": "ByySzskoEPIKwiAVE3MM",
+    "legalName": "GRÁFICA DA FAMÍLIA LTDA",
+    "displayName": "NATUCOPOS",
+    "aliases": [
+      "Natucopos",
+      "Gráfica da Família"
+    ],
+    "status": "verified",
+    "evidence": "Cadastro empresarial e documentos de origem conferidos em 2026-11-26; evidências detalhadas preservadas no chamado privado."
+  },
+  "accounting": {
+    "accountPlanId": "gdNkWMam7BQbaRADNZTm",
+    "accountPlanName": "Embalagens de venda compradas para estoque",
+    "status": "approved",
+    "purposeRule": "Copos e tampas de venda comprados para estoque: conta patrimonial, conforme plano de contas, seção6.",
+    "approval": {
+      "by": "usuário nesta conversa",
+      "at": "2026-11-26T21:23:27.475861+00:00",
+      "decision": "Adotar esses padrões nas próximas compras equivalentes",
+      "scope": "Compras equivalentes para a Matriz, no escopo de destinatários e finalidade deste registro; alimentos do Cantinho em Insumos composição, pazinhas/copos/tampas em Embalagens de venda compradas para estoque; duas identidades ambíguas do Cantinho continuam pendentes."
+    }
+  },
+  "items": [
+    {
+      "externalCodeScope": "document_only_until_stability_verified",
+      "invoiceDescription": "COPO PERSONALIZADO 200 ML (AZUL)",
+      "baseItemId": "QC80HTHoBH6MwC3ApugE",
+      "productId": "1qi0sKArb7CIb2ibvcSL",
+      "internalName": "Copo | 200ml",
+      "brand": "Natucopos",
+      "color": "azul",
+      "status": "verified",
+      "matchRule": "Fornecedor e descrição/apresentação exata registrada (volume, personalização, cor ou tipo de furo). Os códigos observados incluem número do documento; estabilidade como SKU não comprovada. Não casar somente por sufixo ou semelhança. Normalizar apenas caixa, acentos e espaços. Descrição nova exige verificação.",
+      "descriptionAliases": [
+        "COPO PERSONALIZADO 200 ML (AZUL)",
+        "COPO PERSONALIZADO 200 ML ( AZUL )"
+      ],
+      "purchase": {
+        "unit": "un",
+        "purchaseUnitType": "content",
+        "purchaseUnitLabel": "Unidade",
+        "quantityMultiplier": 1,
+        "priceDivisor": 1
+      },
+      "operationalCategoryId": "UUcZTjxW2rSkFTN9og8V",
+      "operationalCategoryName": "Descartáveis",
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    },
+    {
+      "externalCodeScope": "document_only_until_stability_verified",
+      "invoiceDescription": "COPO PERSONALIZADO 300 ML (BRANCO)",
+      "baseItemId": "3LAquKSGFZL8DFrGkuqb",
+      "productId": "kIMSoFq4hFCbefNgTt7Z",
+      "internalName": "Copo | 300ml",
+      "brand": "Natucopos",
+      "color": "branco",
+      "status": "verified",
+      "matchRule": "Fornecedor e descrição/apresentação exata registrada (volume, personalização, cor ou tipo de furo). Os códigos observados incluem número do documento; estabilidade como SKU não comprovada. Não casar somente por sufixo ou semelhança. Normalizar apenas caixa, acentos e espaços. Descrição nova exige verificação.",
+      "descriptionAliases": [
+        "COPO PERSONALIZADO 300 ML (BRANCO)",
+        "COPO PERSONALIZADO 300 ML ( BRANCO )"
+      ],
+      "purchase": {
+        "unit": "un",
+        "purchaseUnitType": "content",
+        "purchaseUnitLabel": "Unidade",
+        "quantityMultiplier": 1,
+        "priceDivisor": 1
+      },
+      "operationalCategoryId": "UUcZTjxW2rSkFTN9og8V",
+      "operationalCategoryName": "Descartáveis",
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    },
+    {
+      "externalCodeScope": "document_only_until_stability_verified",
+      "invoiceDescription": "TAMPA BOLHA COM FURO REDONDO 300 ML",
+      "baseItemId": "3vg4LIqfib6oXHA3oty6",
+      "productId": "fKsWNPqzfHPYsCRxZ2sG",
+      "internalName": "Tampa bolha | 300ml",
+      "brand": "Natucopos",
+      "color": null,
+      "status": "verified",
+      "matchRule": "Fornecedor e descrição/apresentação exata registrada (volume, personalização, cor ou tipo de furo). Os códigos observados incluem número do documento; estabilidade como SKU não comprovada. Não casar somente por sufixo ou semelhança. Normalizar apenas caixa, acentos e espaços. Descrição nova exige verificação.",
+      "descriptionAliases": [
+        "TAMPA BOLHA COM FURO REDONDO 300 ML",
+        "TAMPA BOLHA COM FURO REDONDO 300 ML"
+      ],
+      "purchase": {
+        "unit": "un",
+        "purchaseUnitType": "content",
+        "purchaseUnitLabel": "Unidade",
+        "quantityMultiplier": 1,
+        "priceDivisor": 1
+      },
+      "operationalCategoryId": "UUcZTjxW2rSkFTN9og8V",
+      "operationalCategoryName": "Descartáveis",
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    }
+  ],
+  "monetaryRules": [
+    "Preservar a precisão do preço unitário da nota e conferir totais monetários em centavos.",
+    "Usar descontos, IPI, frete e outros encargos da nota atual; uma compensação observada entre desconto e IPI não é regra permanente.",
+    "Parcelas e vencimentos vêm dos documentos atuais; não repetir os vencimentos do histórico."
+  ],
+  "exceptions": []
+}

@@ -10,7 +10,7 @@ import { canAccessUnit, getLinkedUnitIds, resolveUnitAccess } from '@/lib/unit-a
 import { AppError } from '@/lib/observability/app-error';
 import { readRosterHistories, resolveRosterEmploymentOnDate } from '@/features/dp/employment-reference/service.server';
 import type { EmploymentHistory } from '@/features/dp/employment-reference/resolve';
-import { bankLinesWithMovements, TIME_BANK_ALGORITHM_VERSION, type BankManualMovement, type BankMonthRecord, type BankStatementLine } from '@/features/dp/time-bank/core';
+import { bankLinesWithMovements, isReadableTimeBankAlgorithmVersion, type BankManualMovement, type BankMonthRecord, type BankStatementLine } from '@/features/dp/time-bank/core';
 import { readBankStatementForProvider, readPayrollReadiness, type BankMonthDocument } from '@/features/dp/time-bank/service.server';
 import { payrollReviewReason } from '@/features/dp/time-bank/payroll-readiness';
 import { assertClosureAccess } from '@/features/dp/time-adjustments/closure.server';
@@ -95,7 +95,7 @@ type HrSources = {
 };
 function assertBank(month: BankMonthDocument | undefined, uid: string, competence: string, version: number) {
   if (!month || month.uid !== uid || month.competence !== competence || month.closureVersion !== version
-    || month.algorithmVersion !== TIME_BANK_ALGORITHM_VERSION || !Array.isArray(month.days) || month.days.length > 31) throw fail('A apuração precisa ser conferida para esta versão.');
+    || !isReadableTimeBankAlgorithmVersion(month.algorithmVersion) || !Array.isArray(month.days) || month.days.length > 31) throw fail('A apuração precisa ser conferida para esta versão.');
   return month;
 }
 async function hrSources(deps: ClosureReleaseDependencies, tx: Transaction, workspaceId: string, competence: string, uid: string, includePayslip: boolean): Promise<HrSources> {
@@ -220,6 +220,7 @@ export function buildProviderClosureContent(input: {
   const overtime = new Map<string, ProviderClosureContent['payroll']['overtime'][number]>();
   let creditMinutes = 0; let debitMinutes = 0; let discountMinutes = 0; let expiredCreditMinutes = 0; let bankPayrollMinutes = 0; let payrollOvertimeMinutes = 0;
   for (const { date, line } of effective) {
+    if (line.nature === 'payroll_indemnity') throw fail('Há intervalo intrajornada indenizado, que a entrega ao contador ainda não leva. A liberação fica bloqueada para ele não ficar de fora.');
     if (!['bank_credit', 'bank_debit', 'payroll_overtime', 'payroll_discount'].includes(line.nature)) throw fail('Há um lançamento com natureza não reconhecida.');
     if (date < start || date > end) throw fail('Um lançamento aponta para uma data fora do mês.');
     const amount = minutes(line.minutes);

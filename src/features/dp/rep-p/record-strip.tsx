@@ -252,7 +252,7 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded, dialog
 
   return (
     <ControlPanel className="mx-auto w-full max-w-[1180px] p-0">
-      {kicker ? <span className="block px-5 pt-4 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">{kicker}</span> : null}
+      {kicker ? <h1 className="block px-5 pt-4 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">{kicker}</h1> : null}
       <div className="flex flex-col gap-3 px-5 py-3 md:flex-row md:items-center md:gap-6">
         <div className="shrink-0">
           {options ? <OfficialClockDisplay clock={unitClock} tone="dark" /> : <p className="text-sm text-ds-on-dark-muted">Carregando…</p>}

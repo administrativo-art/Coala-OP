@@ -13,6 +13,7 @@ import { journeyReferenceMinutes, type BankJourney } from '@/features/dp/time-ba
 import { AUTOMATIC_ABSENCES } from '@/features/dp/time-adjustments/automatic-absence.server';
 import { adjustmentRestoresAutomaticAbsence, automaticAbsenceSuperseded } from '@/features/dp/time-adjustments/automatic-absence-core';
 
+import { policyDayRulesFor } from '@/features/dp/time-config/policy-tolerance.server';
 import { repPOwnMonthSchema } from './schemas';
 import { isBrazilTimeZone } from './time-zones';
 
@@ -46,9 +47,14 @@ export type RepPOwnScheduledShift = {
   breakMinPauseMinutes: number | null;
   /** Tolerância da versão da jornada resolvida na escrita do turno; null = sem jornada ou sem tolerância. */
   toleranceMinutes: number | null;
+  /** Da política vigente no dia, quando ela define tolerâncias. */
+  policyTolerances?: { markingMinutes: number; dailyMinutes: number; breakMinutes: { upTo15: number; upTo30: number; upTo60: number } };
+  intrajornada?: boolean;
   /** Versão da jornada do turno e a carga dela no dia (referência do banco de horas); null sem jornada resolvida. */
   journeyId: string | null;
   referenceMinutes: number | null;
+  /** Turno de quem está na Política de jornada de cobertura, decidido na escrita do turno. */
+  coverage?: boolean;
 };
 
 export type RepPOwnMonth = {
@@ -158,6 +164,7 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
     unitIds.length ? db.getAll(...unitIds.map((id) => db.collection('dp_units').doc(id))) : [],
     journeyIds.length ? db.getAll(...journeyIds.map((id) => db.collection('dp_journeys').doc(id))) : [],
   ]);
+  const policyRulesOn = ownIds.length ? await policyDayRulesFor(db, ownIds[0]) : () => null;
   const journeyById = new Map(journeys.filter((doc) => doc.exists).map((doc) => [doc.id, doc]));
   const toleranceByJourney = new Map([...journeyById].map(([id, doc]) => [id, minutes(doc.get('toleranceMinutes'))]));
   // Feriados do calendário das escalas oficiais do mês, só para o banco de horas (um calendário por ano, até 200 datas).
@@ -217,9 +224,20 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       breakSplit: definition?.get('breakSplit') === 'multiple' && breakType !== 'fixed' ? 'multiple' : 'single',
       breakPauseCount: minutes(definition?.get('breakPauseCount')),
       breakMinPauseMinutes: minutes(definition?.get('breakMinPauseMinutes')),
-      toleranceMinutes: toleranceByJourney.get(text(doc.get('journeyResolution.journeyId')) ?? '') ?? null,
+      // Política com tolerâncias manda no dia; sem ela, vale a tolerância da versão da jornada.
+      toleranceMinutes: policyRulesOn(String(doc.get('date')))?.tolerances.markingMinutes
+        ?? toleranceByJourney.get(text(doc.get('journeyResolution.journeyId')) ?? '') ?? null,
+      ...(policyRulesOn(String(doc.get('date'))) ? {
+        policyTolerances: {
+          markingMinutes: policyRulesOn(String(doc.get('date')))!.tolerances.markingMinutes,
+          dailyMinutes: policyRulesOn(String(doc.get('date')))!.tolerances.dailyMinutes,
+          breakMinutes: policyRulesOn(String(doc.get('date')))!.tolerances.breakMinutes },
+        intrajornada: policyRulesOn(String(doc.get('date')))!.intrajornada,
+      } : {}),
       journeyId: journeyById.has(text(doc.get('journeyResolution.journeyId')) ?? '') ? text(doc.get('journeyResolution.journeyId')) : null,
       referenceMinutes: journeyReferenceMinutes(journeyOf(journeyById.get(text(doc.get('journeyResolution.journeyId')) ?? '')), String(doc.get('date'))),
+      // Política de jornada de cobertura congelada na escrita do turno; nunca relida do cadastro atual.
+      ...(doc.get('journeyResolution.coverage.applies') === true ? { coverage: true } : {}),
     };
   });
   const automaticDates = new Set(automaticAbsences?.docs.filter((doc) => doc.get('status') === 'active').map((doc) => String(doc.get('workDate'))) ?? []);

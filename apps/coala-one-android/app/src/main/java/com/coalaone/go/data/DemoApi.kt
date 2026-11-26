@@ -180,6 +180,9 @@ import javax.inject.Singleton
         "PK\u0003\u0004demo".toResponseBody("application/zip".toMediaType())
     override suspend fun dayCorrections(month: String) = DayCorrections()
     override suspend fun respondToDayCorrection(request: DayCorrectionResponse): DayCorrection = error("Nenhuma devolução disponível na demonstração.")
+    override suspend fun monthView(month: String) = OwnMonthView()
+    override suspend fun markReviewed(requestId: String, request: ReviewAction) =
+        ReviewResult(requestId, "reviewed", java.time.Instant.now().toString())
     override suspend fun adjustments(month: String): OwnAdjustments {
         seedMarkings()
         val current = java.time.YearMonth.now()

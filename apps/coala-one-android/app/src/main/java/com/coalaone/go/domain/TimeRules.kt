@@ -220,7 +220,29 @@ object TimeRules {
     }
 
     /** Live organizational guidance. It never blocks or changes the fiscal punch. */
+    /** Acima de 6h trabalhadas o intervalo é 1h (CLT art. 71); mesma constante da web (`day-model.ts`). */
+    const val COVERAGE_BREAK_MINUTES = 60
+
+    /** Política de jornada de cobertura com a mesma condição da web (`coverageOf`): turno comum, não noturno, não manual, carga maior que o turno. */
+    fun coverageDay(shift: OwnShift?): Boolean {
+        if (shift == null || !shift.coverage || shift.type != "work" || shift.overnight || shift.manualOrder != null || shift.startTime == null) return false
+        val planned = plannedWorkMinutes(shift) ?: return false
+        return (shift.referenceMinutes ?: 0) > planned
+    }
+
+    /**
+     * Aviso de intervalo. Sem tolerância no intervalo (decisão de 25/11/2026); na cobertura, até 1h é permitido e o aviso
+     * orienta quem vai estender. Nunca bloqueia a batida.
+     */
     fun breakStatus(shift: OwnShift?, markings: List<OwnMarking>, nowEpochMillis: Long, zone: ZoneId): BreakStatus? {
+        val status = turnBreakStatus(shift, markings, nowEpochMillis, zone)
+        if (status == null || !coverageDay(shift) || status.level == BreakLevel.DANGER || status.usedMinutes >= COVERAGE_BREAK_MINUTES) return status
+        val split = if (shift?.breakSplit == "multiple") "" else " numa pausa só"
+        val note = "Vai estender além de 6h? Faça 1h de intervalo$split."
+        return status.copy(detail = listOfNotNull(status.detail, note).joinToString(" "))
+    }
+
+    private fun turnBreakStatus(shift: OwnShift?, markings: List<OwnMarking>, nowEpochMillis: Long, zone: ZoneId): BreakStatus? {
         if (shift == null || shift.type != "work" || shift.breakType == null || shift.breakType == "none" || shift.endTime == null) {
             if (markings.any { it.classification?.purpose == null }) return null
             var pauseStart: Instant? = null
@@ -270,13 +292,12 @@ object TimeRules {
         val inPause = pauseStart != null
         val progress = if (planned == 1) null else "Usados $used de $total min · ${closed.size}" +
             (planned?.let { " de $it" } ?: "") + " ${if (closed.size == 1 && planned == null) "pausa" else "pausas"}"
-        val tolerance = shift.toleranceMinutes ?: 0
+        val breakLimit = if (coverageDay(shift)) maxOf(total, COVERAGE_BREAK_MINUTES) else total
         val journeyEnded = ordered.lastOrNull()?.classification?.purpose == "journey_end"
         if (journeyEnded && used < total) return result(BreakLevel.DANGER, "Jornada finalizada sem o intervalo completo",
             "Foram classificados $used de $total min de intervalo. A batida continua válida e o dia segue para conferência.", used, closed.size)
-        if (usedSeconds > (total + tolerance) * 60L) return result(BreakLevel.DANGER, "Intervalo passou de $total min ($used min)",
-            if (tolerance > 0) "Tolerância de $tolerance min da jornada excedida." else "A jornada não tem tolerância.",
-            used, closed.size, inPause, if (inPause) countdownSeconds else null, "Intervalo", usedSeconds)
+        if (usedSeconds > breakLimit * 60L) return result(BreakLevel.DANGER, "Intervalo passou de $breakLimit min ($used min)",
+            "O intervalo não tem tolerância.", used, closed.size, inPause, if (inPause) countdownSeconds else null, "Intervalo", usedSeconds)
 
         val nowZoned = now.atZone(zone)
         val startMinute = shift.startTime?.let(::clockMinutes) ?: 0
@@ -308,7 +329,16 @@ object TimeRules {
                 val secondsToEnd = (end - nowMinute) * 60L - nowZoned.second
                 val back = Math.ceil(secondsToEnd / 60.0).toInt()
                 val passed = Math.ceil(kotlin.math.abs(secondsToEnd) / 60.0).toInt()
-                return result(if (secondsToEnd < -tolerance * 60L) BreakLevel.DANGER else if (secondsToEnd <= 120) BreakLevel.WARN else BreakLevel.INFO,
+                val coverageStart = pauseStart
+                if (coverageDay(shift) && secondsToEnd < 0 && coverageStart != null) {
+                    val coverageBack = COVERAGE_BREAK_MINUTES * 60L - java.time.Duration.between(coverageStart, now).seconds
+                    val backAt = coverageStart.plusSeconds(COVERAGE_BREAK_MINUTES * 60L).atZone(zone)
+                    return result(if (coverageBack < 0) BreakLevel.DANGER else if (coverageBack <= 120) BreakLevel.WARN else BreakLevel.INFO,
+                        if (coverageBack < 0) "Passou de 1h de intervalo há ${Math.ceil(-coverageBack / 60.0).toInt()} min"
+                        else "Intervalo de 1h para estender · volte às ${String.format(Locale.ROOT, "%02d:%02d", backAt.hour, backAt.minute)}",
+                        progress, used, closed.size, true, coverageBack, "Intervalo", usedSeconds)
+                }
+                return result(if (secondsToEnd < 0) BreakLevel.DANGER else if (secondsToEnd <= 120) BreakLevel.WARN else BreakLevel.INFO,
                     if (secondsToEnd < 0) "Passou do fim do intervalo há $passed min" else "Em intervalo · volte às ${segment.end} (${left(back.coerceAtLeast(0))})",
                     progress, used, closed.size, true, countdownSeconds, "Intervalo", usedSeconds)
             }

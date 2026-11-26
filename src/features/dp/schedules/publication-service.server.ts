@@ -1,4 +1,5 @@
 import 'server-only';
+import { coverageResolutionField } from '@/lib/dp-coverage-policy';
 
 import { createHash, randomUUID } from 'node:crypto';
 import { FieldValue, Timestamp, type DocumentSnapshot, type QueryDocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
@@ -612,7 +613,7 @@ async function prepareScheduleActivation(
       ...(assignment.assignmentKind === 'external_coverage' ? { originUnitId: assignment.originUnitId } : {}),
       journeyResolution: { journeyId: summary.id, lineageId: summary.lineageId, version: summary.version,
         name: summary.name, resolvedBy: summary.resolvedBy, validationMode: summary.validationMode,
-        maxConsecutiveWorkDays: summary.maxConsecutiveWorkDays, resolvedAt: stableAt },
+        maxConsecutiveWorkDays: summary.maxConsecutiveWorkDays, resolvedAt: stableAt, ...coverageResolutionField(reference) },
       referenceRevisionId: referenceId, updatedAt: stableAt };
     references.push({ id: referenceId, value: { workspaceId, scheduleId, shiftId: id,
       shiftPath: state.ref.collection('revisions').doc(revisionId).collection('entries').doc(id).path,

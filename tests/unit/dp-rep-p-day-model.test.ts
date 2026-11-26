@@ -10,14 +10,18 @@ const shift: DayShift = { type: 'work', startTime: '10:00', endTime: '16:15', sh
 const mark = (date: string, time: string, nsr: number) => ({ receiptId: `r${nsr}`, markedAt: `${date}T${time}:00-0300`, nsr, executionUnitId: 'u', receiptStatus: 'available' as const });
 
 describe('Leitura do dia no Registro de ponto', () => {
-  it('soma os pares, mede o intervalo e não acusa nada dentro da tolerância', () => {
+  it('soma os pares; tolerância vale na entrada e na saída, nunca no intervalo (25/11/2026)', () => {
     const day = buildDayView({ date: '2026-10-16', today: '2026-10-19', shift, absences: [],
       markings: [mark('2026-10-16', '16:16', 4), mark('2026-10-16', '09:58', 1), mark('2026-10-16', '13:00', 2), mark('2026-10-16', '13:13', 3)] });
     assert.deepEqual(day.markings.map((item) => item.nsr), [1, 2, 3, 4]);
     assert.equal(day.workedMinutes, 365);
     assert.equal(day.breakMinutes, 13);
-    assert.deepEqual(day.incidents, []);
+    // Entrada 2 min antes e saída 1 min depois: dentro da tolerância. Intervalo de 13 de 15 min: abaixo, sem tolerância.
+    assert.deepEqual(day.incidents, ['short_break']);
     assert.equal(day.balanceMinutes, 0);
+    const exact = buildDayView({ date: '2026-10-16', today: '2026-10-19', shift, absences: [],
+      markings: [mark('2026-10-16', '09:58', 1), mark('2026-10-16', '13:00', 2), mark('2026-10-16', '13:15', 3), mark('2026-10-16', '16:16', 4)] });
+    assert.deepEqual(exact.incidents, []);
   });
 
   it('acusa dia sem batida, batida ímpar, saída tardia e intervalo fora da tolerância', () => {

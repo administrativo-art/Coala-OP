@@ -4,11 +4,12 @@ import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import { canAccessUnit, getLinkedUnitIds } from '@/lib/unit-access';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { AppError } from '@/lib/observability/app-error';
-import { buildMonthView, INCIDENT_SEVERITY, type DayTreatment } from '../rep-p/day-model';
+import { buildMonthView, type DayTreatment } from '../rep-p/day-model';
+import { policyRulesEnabled } from '../time-config/rollout.server';
 import { readRepPMonthOfPerson } from '../rep-p/own-month.server';
 import { closureClassificationRef, readClosureMarkings } from '../rep-p/service.server';
 import { competenceRange, sha256, type ClosurePerson } from './closure-core';
-import type { ClosureAlert } from './closure-alerts';
+import { blockingClosureIncidents, type ClosureAlert } from './closure-alerts';
 
 type Sources = { mainDb: Firestore; hrDb: Firestore; repDb: Firestore };
 
@@ -35,7 +36,7 @@ export async function checkPersonAlerts(dbs: Sources, actor: ServerUserContext, 
     treatments, absences: person.absences });
   const result: Array<{ alert: ClosureAlert; inScope: boolean }> = [];
   for (const day of days) {
-    const incidents = day.incidents.filter((incident) => INCIDENT_SEVERITY[incident] === 'danger');
+    const incidents = blockingClosureIncidents(day, policyRulesEnabled());
     if (!incidents.length) continue;
     const shifts = schedule.shifts.filter((shift) => shift.date === day.date);
     const dayUnits = [...new Set([...shifts.map((shift) => shift.unitId), ...day.markings.map((m) => m.executionUnitId)].filter((unit): unit is string => Boolean(unit)))].sort();

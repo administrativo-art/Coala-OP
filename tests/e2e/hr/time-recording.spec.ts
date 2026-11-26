@@ -15,7 +15,7 @@ test('Registro de ponto separa a consulta pessoal da conferência administrativa
   const receiptId = `${'a'.repeat(64)}_000000003`;
   const shift = { date: today, type: 'work', startTime: '08:00', endTime: '16:00', overnight: false,
     unitId: 'unit-e2e', unitName: 'Unidade E2E', shiftName: 'Turno E2E', breakType: 'fixed',
-    breakStart: '12:00', breakEnd: '13:00', breakDurationMinutes: 60, expectedPunches: 4 };
+    breakStart: '12:00', breakEnd: '13:00', breakDurationMinutes: 60, expectedPunches: 4, locationTrackingPolicy: 'workday' };
   const marking = { receiptId, workDate: today, nsr: 3, markedAt: `${today}T08:00:00-0300`,
     executionUnitId: 'unit-e2e', collectorId: '02', hash: 'b'.repeat(64), receiptStatus: 'available', receiptIssue: null };
 
@@ -30,6 +30,10 @@ test('Registro de ponto separa a consulta pessoal da conferência administrativa
     executionUnits: [{ id: 'unit-e2e', name: 'Unidade E2E', employer: true, timeZone: 'America/Belem', locationPolicy: { mode: 'disabled', revision: 0 } }],
     officialClock: { available: true, instant: `${today}T12:00:00.000Z`, timeZone: 'America/Belem' },
   }) }));
+  // A tela própria lê o mês numa só rota (contrato central do dia). Sem `monthDays`, a tela usa o cálculo local de reserva.
+  await page.route('**/api/dp/time-recording/month-view?*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+    schedule: { month, shifts: [shift], truncated: false }, history: { markings: [marking], truncated: false },
+    absences: [], absencesUnavailable: false, adjustments: [], treatments: [], reviewRequests: [] }) }));
   await page.route('**/api/dp/time-recording/month?*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ month, shifts: [shift], truncated: false }) }));
   await page.route('**/api/dp/time-recording/markings?*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ startDate: `${month}-01`, endDate: today, markings: [marking], truncated: false }) }));
   await page.route('**/api/dp/time-recording/adjustments?*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ adjustments: [], treatments: [] }) }));
@@ -44,33 +48,30 @@ test('Registro de ponto separa a consulta pessoal da conferência administrativa
   await page.route('**/api/dp/time-recording/location-access', (route) => {
     const input = route.request().postDataJSON() as Record<string, unknown>;
     locationBodies.push(input);
-    return route.fulfill({ status: locationBodies.length === 3 ? 403 : 200, contentType: 'application/json', body: JSON.stringify(
-      locationBodies.length === 1 ? { entries: [{ id: 'synthetic-location', capturedAt: `${today}T12:00:00Z`,
-        position: { latitude: -1.45583, longitude: -48.50444, accuracyMeters: 15 } }], nextCursor: 'synthetic-location', auditId: 'synthetic-audit' }
-        : { entries: [], nextCursor: null, auditId: 'synthetic-audit-2' }) });
+    return route.fulfill({ status: locationBodies.length === 1 ? 403 : 200, contentType: 'application/json', body: JSON.stringify(
+      locationBodies.length === 1 ? { error: { message: 'Consulta não autorizada no ensaio.' } }
+        : locationBodies.length === 2 ? { entries: [{ id: 'synthetic-location', capturedAt: `${today}T12:00:00Z`,
+          formattedAddress: 'Endereço sintético E2E', status: 'sample', position: { accuracyMeters: 15 } }], nextCursor: null, auditId: 'synthetic-audit' }
+          : { entries: [], nextCursor: null, auditId: 'synthetic-audit-2' }) });
   });
 
   await page.goto('/dashboard/collaborator/time-recording', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: 'Registro de ponto' })).toBeVisible();
   await expect(page.getByText('Registro pelo sistema ainda não liberado')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Registrar 2ª de 4/ })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Registro indisponível' })).toBeDisabled();
   await expect(page.getByText('Turno E2E').first()).toBeVisible();
   await expect(page.getByText('08:00').first()).toBeVisible();
-  const location = page.getByRole('region', { name: 'Consulta de localização' });
-  await expect(location).toBeVisible();
+  // A consulta auditada agora fica no detalhe do dia e só carrega por ação explícita.
   expect(locationBodies).toHaveLength(0);
-  await location.getByRole('button', { name: 'Consultar localização' }).click();
-  await expect(location.getByText(/-1.45583, -48.50444/)).toBeVisible();
-  await location.screenshot({ path: '.ai-work/development-technology/rep-p-availability-location/location-panel.png' });
-  expect(locationBodies[0]).toMatchObject({ employeeUid: E2E_USER.uid, reason: 'own_data', source: 'marking', unitId: 'unit-e2e', workDate: today });
-  await location.getByRole('button', { name: 'Próxima página' }).click();
-  await expect(location.getByText('Nenhuma localização disponível nesta página.')).toBeVisible();
-  await expect(location.getByText(/-1.45583, -48.50444/)).toHaveCount(0);
-  expect(locationBodies[1].cursor).toBe('synthetic-location');
-  await location.getByLabel('Captura').selectOption('journey');
-  await location.getByRole('button', { name: 'Consultar localização' }).click();
-  await expect(location.getByRole('alert')).toBeVisible();
-  await expect(location.getByText('Nenhuma localização disponível nesta página.')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Ver as batidas de hoje' }).click();
+  expect(locationBodies).toHaveLength(0);
+  await page.getByRole('button', { name: 'Ver registros do dia' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Consulta não autorizada no ensaio.' })).toBeVisible();
+  expect(locationBodies[0]).toMatchObject({ employeeUid: E2E_USER.uid, reason: 'own_data', source: 'journey', unitId: 'unit-e2e', workDate: today });
+  await page.getByRole('button', { name: 'Ver registros do dia' }).click();
+  await expect(page.getByText('Endereço sintético E2E')).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'Consulta não autorizada no ensaio.' })).toHaveCount(0);
+  expect(locationBodies).toHaveLength(2);
 
   await page.goto('/dashboard/dp/collaborators/employee-e2e/time-recording', { waitUntil: 'domcontentloaded' });
   await expect(page.getByText('Heucilene E2E')).toBeVisible({ timeout: 120_000 });
@@ -79,4 +80,10 @@ test('Registro de ponto separa a consulta pessoal da conferência administrativa
   await expect(page.getByText('Ela não registra ponto em nome do colaborador.')).toBeVisible();
   await expect(page.getByRole('button', { name: /Registrar .*batida/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Solicitar ausência' })).toHaveCount(0);
+  expect(locationBodies).toHaveLength(2);
+  await page.getByRole('button', { name: /Turno E2E/ }).first().click();
+  expect(locationBodies).toHaveLength(2);
+  await page.getByRole('button', { name: 'Ver registros do dia' }).click();
+  await expect(page.getByText('Nenhum registro de acompanhamento foi guardado para este dia.')).toBeVisible();
+  expect(locationBodies[2]).toMatchObject({ employeeUid: 'employee-e2e', reason: 'operational_review', source: 'journey', unitId: 'unit-e2e', workDate: today });
 });

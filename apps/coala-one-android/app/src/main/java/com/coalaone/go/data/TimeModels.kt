@@ -64,7 +64,19 @@ import kotlinx.serialization.Serializable
     val breakType: String? = null, val breakStart: String? = null, val breakEnd: String? = null, val breakDurationMinutes: Int? = null, val breakWindowStart: String? = null, val breakWindowEnd: String? = null,
     val breakSegments: List<BreakSegment>? = null, val breakSplit: String? = null, val breakPauseCount: Int? = null, val breakMinPauseMinutes: Int? = null,
     val toleranceMinutes: Int? = null, val expectedPunches: Int? = null,
-    val executionUnitPolicy: String = "scheduled", val locationTrackingPolicy: String = "disabled", val unitTimeZone: String? = null)
+    val executionUnitPolicy: String = "scheduled", val locationTrackingPolicy: String = "disabled", val unitTimeZone: String? = null,
+    /** Política de jornada de cobertura congelada no turno e carga da jornada no dia (referência do banco). */
+    val coverage: Boolean = false, val referenceMinutes: Int? = null)
+/** Dia calculado no servidor (contrato central, `month-days.ts`); o app só exibe. */
+@Serializable data class ServerDay(val date: String, val incidents: List<String> = emptyList(), val workedMinutes: Int = 0,
+    val breakMinutes: Int? = null, val balanceMinutes: Int? = null, val extendUntil: String? = null, val expectedBreakMinutes: Int? = null)
+@Serializable data class MonthDays(val month: String, val today: String, val algorithmVersion: Int, val days: List<ServerDay>)
+/** Pedido de revisão antecipada; organizacional, nunca altera batida. */
+@Serializable data class ReviewRequest(val id: String, val date: String, val status: String, val origin: String,
+    val reasonLabel: String? = null, val incidents: List<String> = emptyList(), val createdAt: String, val reviewedAt: String? = null)
+@Serializable data class OwnMonthView(val monthDays: MonthDays? = null, val reviewRequests: List<ReviewRequest> = emptyList())
+@Serializable data class ReviewAction(val action: String = "reviewed")
+@Serializable data class ReviewResult(val id: String, val status: String, val reviewedAt: String)
 @Serializable data class OwnMonth(val month: String, val shifts: List<OwnShift>, val automaticAbsences: List<String> = emptyList(), val truncated: Boolean = false)
 
 /** Privacy-separated journey trail. It never changes a punch, NSR, receipt, AFD or payroll result. */

@@ -58,6 +58,7 @@ export const natashaJourneyCandidateSchema = z.object({
   ]).optional(),
   expectedBreakMinutes: z.number().int().min(0).max(480).optional(),
   useDefinedShiftWhenShorter: z.boolean().optional(),
+  coveragePolicy: z.object({ jobRoleIds: z.array(idSchema).max(50), jobFunctionIds: z.array(idSchema).max(50) }).strict().optional(),
   allowedShiftDefinitionIds: z.array(idSchema).max(100).optional(),
   applicability: applicabilitySchema,
   validFrom: dateSchema,

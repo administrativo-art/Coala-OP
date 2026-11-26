@@ -215,6 +215,7 @@
 
 ## Registro de compras a partir de comprovantes
 
+- Antes de pedir dados ao usuário ou popular uma compra, consulte [Compras recorrentes](instrucoes/compras-recorrentes/README.md) e o JSON do CNPJ. Reutilize vínculos verificados e decisões aprovadas dentro do escopo registrado, revalidando os cadastros atuais. Uma decisão recorrente nova pertence a esse mesmo diretório, com origem, data e escopo; não crie uma fonte paralela em memória ou fora do Git. Propostas, identidades ambíguas e novas finalidades continuam pendentes. O padrão não autoriza confirmar pedido, criar despesa ou enviar pagamento por si só.
 - Quando o desenvolvedor pedir para popular uma compra a partir de captura, pedido ou comprovante externo, faça o lançamento por backend/CLI com script determinístico; não use a interface nem o navegador para transcrever os dados.
 - O comprovante é evidência dos campos que ele mostra, não autorização para criar vínculos por semelhança. Não associe automaticamente fornecedor, produto, insumo, despesa, transação ou outro cadastro interno. Grave os textos observados e mantenha as referências vazias até uma instrução explícita ou uma chave determinística já fornecida.
 - Plano de contas e centro de resultado fazem parte do pré-voo do lançamento. Preencha somente quando houver regra aprovada ou orientação explícita; se não houver, apresente a pendência antes da escrita em vez de omitir silenciosamente ou inferir pelo nome do fornecedor.

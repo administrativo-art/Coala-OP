@@ -5,6 +5,7 @@ import { ChevronDown, Plus, Trash2 } from 'lucide-react';
 
 import { Chevron, EmptyResults, ListHead, ListRow, ListShell, ListSkeleton } from '@/components/cadastros/cadastros-ui';
 import { useDP } from '@/components/dp-context';
+import { PolicyRulesFields, PolicyRulesView } from '@/components/dp/dp-overtime-policy-rules-fields';
 import { DPTimeApplicabilityFields, TimeConfigurationNotice } from '@/components/dp/dp-time-config-fields';
 import { ControlPanel, ControlSearch } from '@/components/patterns/control-panel';
 import { Field, fieldInputClass } from '@/components/patterns/field';
@@ -31,6 +32,7 @@ import { activeOperationalUnits } from '@/lib/dp-units';
 import { filterTimeConfigsByListStatus, timeConfigListCounts, type DPTimeConfigListStatus } from '@/lib/dp-time-config-status';
 import { resolveUnitAccess } from '@/lib/unit-access';
 import { cn } from '@/lib/utils';
+import { policyRulesFormFor, policyRulesFromForm, type PolicyRulesForm } from '@/features/dp/time-config/policy-rules-form';
 import { CYCLE_PRESET_LABELS, CYCLE_PRESETS, cycleLabel, presetOf, RESIDUAL_LABELS, type CyclePreset } from '@/features/dp/time-bank/cycle';
 import type { DPOvertimeCategory, DPOvertimePolicy, DPTimeApplicability, DPTimeBankCycle } from '@/types';
 
@@ -75,6 +77,7 @@ type OvertimeForm = {
     cycleResidual: DPTimeBankCycle['residualDestination'];
   };
   externalCoverageRule: DPOvertimePolicy['externalCoverageRule'];
+  rules: PolicyRulesForm;
 };
 
 type PanelState =
@@ -94,6 +97,20 @@ function defaultCategory(index = 0): CategoryForm {
   };
 }
 
+/** Faixas com que uma política nova nasce; o operador ajusta conforme a CCT ou o acordo individual. */
+function legalCategories(): CategoryForm[] {
+  const category = (id: string, name: string, trigger: DPOvertimeCategory['trigger'], ratePercent: string, destination: DPOvertimeCategory['destination']): CategoryForm =>
+    ({ id, name, trigger, ratePercent, destination, bankCreditFactor: '', requiresApproval: destination === 'payroll' && trigger === 'workday' });
+  return [
+    category('HE1 - 50%', 'Hora extra 50%', 'workday', '50', 'payroll'),
+    category('HE2.1 - 100%', 'Hora extra 100% - Feriado', 'holiday', '100', 'payroll'),
+    category('HE2.1.2 - 100%', 'Hora extra 100% - Domingo', 'sunday', '100', 'payroll'),
+    // A lei só garante 100% no descanso semanal; outra folga (ex.: a segunda do 5x2) depende da CCT.
+    category('folga', 'Trabalho em dia de folga', 'rest_day', '0', 'review'),
+    category('fora-da-escala', 'Trabalho fora da escala', 'unplanned_work', '0', 'review'),
+  ];
+}
+
 function formFor(item?: DPOvertimePolicy): OvertimeForm {
   return {
     name: item?.name ?? '',
@@ -102,13 +119,14 @@ function formFor(item?: DPOvertimePolicy): OvertimeForm {
     applicability: item?.applicability ?? { scope: { kind: 'company' } },
     validFrom: item?.validFrom ?? new Date().toISOString().slice(0, 10),
     validTo: item?.validTo ?? '',
-    dailyOvertimeLimit: item?.dailyOvertimeLimitMinutes ? formatDuration(item.dailyOvertimeLimitMinutes) : '',
+    // Política nova nasce com o limite legal de 2h por dia (CLT art. 59).
+    dailyOvertimeLimit: item?.dailyOvertimeLimitMinutes ? formatDuration(item.dailyOvertimeLimitMinutes) : item ? '' : '02:00',
     weeklyOvertimeLimit: item?.weeklyOvertimeLimitMinutes ? formatDuration(item.weeklyOvertimeLimitMinutes) : '',
     categories: item?.categories.map((category) => ({
       ...category,
       ratePercent: String(category.ratePercent),
       bankCreditFactor: category.bankCreditFactor == null ? '' : String(category.bankCreditFactor),
-    })) ?? [defaultCategory()],
+    })) ?? legalCategories(),
     timeBank: {
       enabled: item?.timeBank.enabled ?? false,
       allowNegativeBalance: item?.timeBank.allowNegativeBalance ?? false,
@@ -123,6 +141,7 @@ function formFor(item?: DPOvertimePolicy): OvertimeForm {
       cycleResidual: item?.timeBank.cycle?.residualDestination ?? 'review',
     },
     externalCoverageRule: item?.externalCoverageRule ?? 'origin',
+    rules: policyRulesFormFor(item),
   };
 }
 
@@ -185,6 +204,7 @@ function buildPayload(form: OvertimeForm) {
   const expirationDays = form.timeBank.expirationDays ? Number(form.timeBank.expirationDays) : undefined;
   if (expirationDays !== undefined && (!Number.isInteger(expirationDays) || expirationDays <= 0)) throw new Error('A validade do banco deve ser informada em dias inteiros.');
   const cycle = buildCycle(form.timeBank);
+  const rules = policyRulesFromForm(form.rules);
 
   return {
     name: form.name.trim(),
@@ -206,6 +226,8 @@ function buildPayload(form: OvertimeForm) {
       ...(form.timeBank.enabled && cycle ? { cycle } : {}),
     },
     externalCoverageRule: form.externalCoverageRule,
+    ...(rules.tolerances ? { tolerances: rules.tolerances } : {}),
+    ...(rules.intrajornada ? { intrajornada: rules.intrajornada } : {}),
   };
 }
 
@@ -281,6 +303,8 @@ export function DPSettingsOvertime() {
           action: 'update',
           data: {
             ...payload,
+            // Seção desligada apaga a regra do rascunho.
+            ...policyRulesFromForm(form.rules),
             description: form.description.trim() || null,
             collectiveAgreementReference: form.collectiveAgreementReference.trim() || null,
             validTo: form.validTo || null,
@@ -370,7 +394,7 @@ export function DPSettingsOvertime() {
         {items.length === 0 ? <p className="px-5 py-12 text-center text-sm text-ds-ink-muted">Nenhuma política cadastrada. Crie a primeira como rascunho.</p> : visibleItems.length === 0 ? <EmptyResults title={statusItems.length === 0 ? `Nenhuma política ${listStatus === 'active' ? 'ativa' : 'arquivada'}.` : 'Nenhuma política encontrada com essa busca.'} onClear={() => setSearch('')} /> : null}
       </ListShell>
 
-      <SidePanel open={!!panel} onOpenChange={(open) => { if (!open) setPanel(null); }} kicker={panel?.mode === 'create' ? (panel.supersedes ? 'Nova versão' : 'Nova política') : panel?.mode === 'edit' ? 'Editar política' : `Hora extra · v${item?.version ?? 1}`} title={editing ? (form.name || 'Sem nome') : (item?.name ?? '')} subtitle="Abrangência, vigência, tolerância geral, faixas e banco de horas.">
+      <SidePanel open={!!panel} onOpenChange={(open) => { if (!open) setPanel(null); }} kicker={panel?.mode === 'create' ? (panel.supersedes ? 'Nova versão' : 'Nova política') : panel?.mode === 'edit' ? 'Editar política' : `Hora extra · v${item?.version ?? 1}`} title={editing ? (form.name || 'Sem nome') : (item?.name ?? '')} subtitle="Abrangência, vigência, tolerâncias, faixas e banco de horas.">
         {panel && !editing && item ? (
           <>
             <PanelSection title="Aplicação">
@@ -388,6 +412,7 @@ export function DPSettingsOvertime() {
                 {item.timeBank.enabled && item.timeBank.cycle ? <PanelField label="Saldo no fim do ciclo">{RESIDUAL_LABELS[item.timeBank.cycle.residualDestination]}</PanelField> : null}
               </div>
             </PanelSection>
+            <PolicyRulesView policy={item} />
             <PanelSection title="Faixas" aside={`${item.categories.length}`}>
               {item.categories.map((category) => (
                 <div key={category.id} className="rounded-ds-md border border-ds-divider px-3 py-2.5">
@@ -437,9 +462,10 @@ export function DPSettingsOvertime() {
                 <Field label="Limite de hora extra por semana" htmlFor="overtime-weekly-limit" requirement="opcional" hint="Máximo acumulado de horas extras reconhecidas automaticamente na semana. O excedente deverá seguir para revisão. Use HH:MM."><Input id="overtime-weekly-limit" className={`${fieldInputClass} font-ds-mono`} value={form.weeklyOvertimeLimit} onChange={(event) => setForm((current) => ({ ...current, weeklyOvertimeLimit: event.target.value }))} placeholder="10:00" /></Field>
               </div>
             </PanelSection>
+            <PolicyRulesFields value={form.rules} onChange={(rules) => setForm((current) => ({ ...current, rules }))} />
             <PanelSection title="Faixas de hora extra" aside={`${form.categories.length}`}>
               <TimeConfigurationNotice>
-                A tolerância fica na jornada de cada pessoa, não aqui. Para uma CCT com 50% nos dias comuns, crie uma faixa geral e cadastre domingo e feriado em faixas separadas. Feriado é a condição mais específica e deve prevalecer na apuração futura.
+                Para uma CCT com 50% nos dias comuns, crie uma faixa geral e cadastre domingo e feriado em faixas separadas. Feriado é a condição mais específica e deve prevalecer na apuração futura.
               </TimeConfigurationNotice>
               <div className="space-y-3">
                 {form.categories.map((category, index) => (

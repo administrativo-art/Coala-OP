@@ -6,6 +6,7 @@ import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { applicabilityOverlaps, applicabilityScopeCollection, applicabilitySpecificity, changedShiftBizneoIdentity, previousCalendarDate, validityOverlaps } from '@/lib/dp-time-config-rules';
 import { AppError } from '@/lib/observability/app-error';
+import { assertPolicyRulesPublication } from './rollout.server';
 import { resolveUnitAccess } from '@/lib/unit-access';
 import type { DPTimeApplicability } from '@/types';
 
@@ -99,8 +100,8 @@ function parseComplete(collectionName: TimeConfigCollection, value: unknown) {
     : completeOvertimePolicySchema.safeParse(editable);
 }
 
-const JOURNEY_FIELDS = ['name', 'description', 'weeklyMinutes', 'cycleLengthDays', 'days', 'regime', 'weeklyRest', 'scaleValidation', 'expectedBreakMinutes', 'useDefinedShiftWhenShorter', 'toleranceMinutes', 'allowedShiftDefinitionIds', 'applicability', 'validFrom', 'validTo'] as const;
-const OVERTIME_FIELDS = ['name', 'description', 'collectiveAgreementReference', 'applicability', 'validFrom', 'validTo', 'dailyOvertimeLimitMinutes', 'weeklyOvertimeLimitMinutes', 'categories', 'timeBank', 'externalCoverageRule'] as const;
+const JOURNEY_FIELDS = ['name', 'description', 'weeklyMinutes', 'cycleLengthDays', 'days', 'regime', 'weeklyRest', 'scaleValidation', 'expectedBreakMinutes', 'useDefinedShiftWhenShorter', 'toleranceMinutes', 'coveragePolicy', 'allowedShiftDefinitionIds', 'applicability', 'validFrom', 'validTo'] as const;
+const OVERTIME_FIELDS = ['name', 'description', 'collectiveAgreementReference', 'applicability', 'validFrom', 'validTo', 'dailyOvertimeLimitMinutes', 'weeklyOvertimeLimitMinutes', 'categories', 'timeBank', 'externalCoverageRule', 'tolerances', 'intrajornada'] as const;
 const SHIFT_FIELDS = ['code', 'name', 'startTime', 'endTime', 'breakStart', 'breakEnd', 'breakType', 'breakDurationMinutes', 'breakWindowStart', 'breakWindowEnd', 'breakSegments', 'breakSplit', 'breakPauseCount', 'breakMinPauseMinutes', 'unitId', 'unitName', 'unitIds', 'unitNames', 'daysOfWeek', 'bizneoTemplateId', 'journeyIds', 'description', 'configurationNotes', 'overnight', 'expectedPunches', 'executionUnitPolicy', 'locationTrackingPolicy', 'isArchived'] as const;
 
 function pickFields(source: Record<string, unknown>, fields: readonly string[]) {
@@ -242,6 +243,7 @@ export async function updateTimeConfig(params: {
     if (current.status !== 'draft') throw new AppError({ code: 'DP_TIME_CONFIG_NOT_DRAFT', kind: 'CONFLICT', safeMessage: 'Somente rascunhos podem ser publicados.' });
     const parsed = parseComplete(collectionName, current);
     if (!parsed.success) throw new AppError({ code: 'DP_TIME_CONFIG_PUBLISH_INVALID', kind: 'VALIDATION', safeMessage: parsed.error.issues[0]?.message ?? 'Complete a configuração antes de publicar.' });
+    if (collectionName === OVERTIME_POLICIES) assertPolicyRulesPublication(parsed.data as unknown as Record<string, unknown>);
     await validateTimeConfigReferences(collectionName, parsed.data as unknown as Record<string, unknown>);
   } else if (current.status === 'archived') {
     throw new AppError({ code: 'DP_TIME_CONFIG_ALREADY_ARCHIVED', kind: 'CONFLICT', safeMessage: 'A configuração já está arquivada.' });
@@ -265,6 +267,7 @@ export async function updateTimeConfig(params: {
       );
       transaction.update(ref, { ...removedOptionalFields, ...nextFields, updatedAt: now, updatedBy: context.decoded.uid });
     } else if (input.action === 'publish') {
+      if (collectionName === OVERTIME_POLICIES) assertPolicyRulesPublication(fresh.data() ?? {});
       const published = await transaction.get(dbAdmin.collection(collectionName).where('status', '==', 'published').limit(LIST_LIMIT + 1));
       if (published.size > LIST_LIMIT) {
         throw new AppError({ code: 'DP_TIME_PUBLISHED_LIMIT_REACHED', kind: 'DATA_INTEGRITY', safeMessage: 'Há configurações publicadas demais para validar a vigência.' });

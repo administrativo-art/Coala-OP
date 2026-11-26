@@ -168,3 +168,29 @@ test('cobertura externa por ponteiro usa índice da pessoa e ignora turno legado
   assert.deepEqual(await externalCoverageUnits(dbAdmin, uid, '2027-09-14', [origin]), [unitId]);
   assert.deepEqual(await externalCoverageUnits(dbAdmin, uid, '2027-09-15', [origin]), []);
 });
+
+test('política com tolerâncias chega ao turno do mês, resolvida pela organização da unidade da pessoa', async () => {
+  const prefix = 'rep-p-policy-tolerance';
+  const uid = `${prefix}-employee`;
+  const unitId = `${prefix}-unit`;
+  const schedule = dbAdmin.collection('dp_schedules').doc(`${prefix}-official`);
+  const policy = dbAdmin.collection('dp_overtimePolicies').doc(`${prefix}-policy`);
+  const breakMinutes = { upTo15: 1, upTo30: 2, upTo60: 5 };
+  await Promise.all([
+    dbAdmin.collection('users').doc(uid).set({ unitId }),
+    dbAdmin.collection('dp_units').doc(unitId).set({ name: 'Unidade', organizationId: `${prefix}-org` }),
+    schedule.set({ year: 2028, month: 3, unitId, locked: true, createdAt: Timestamp.fromMillis(1_000) }),
+    schedule.collection('shifts').doc('s').set({ scheduleId: schedule.id, userId: uid, unitId, type: 'work', date: '2028-03-02', startTime: '08:00', endTime: '17:00' }),
+    policy.set({ status: 'published', version: 1, validFrom: '2028-01-01', applicability: { scope: { kind: 'unit_organization', id: `${prefix}-org` } },
+      tolerances: { markingMinutes: 5, dailyMinutes: 10, breakMinutes, source: { origin: 'law' } },
+      intrajornada: { code: 'HEI - 50%', ratePercent: 50, source: { origin: 'law' } } }),
+  ]);
+  try {
+    const [shift] = (await readRepPMonthOfPerson([uid], '2028-03', { db: dbAdmin })).shifts;
+    assert.equal(shift.toleranceMinutes, 5);
+    assert.deepEqual(shift.policyTolerances, { markingMinutes: 5, dailyMinutes: 10, breakMinutes });
+    assert.equal(shift.intrajornada, true);
+  } finally {
+    await policy.delete();
+  }
+});

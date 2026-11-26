@@ -1,4 +1,5 @@
 import 'server-only';
+import { coverageResolutionField } from '@/lib/dp-coverage-policy';
 
 import { createHash } from 'node:crypto';
 import { FieldValue, Timestamp, type DocumentReference, type DocumentSnapshot, type QueryDocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
@@ -488,13 +489,15 @@ export async function decideShiftSwap(context: ServerUserContext, requestId: str
       journeyResolution: { journeyId: newOfferedReference.resolution.journey.id, lineageId: newOfferedReference.resolution.journey.lineageId,
         version: newOfferedReference.resolution.journey.version, name: newOfferedReference.resolution.journey.name,
         resolvedBy: newOfferedReference.resolution.resolvedBy, validationMode: newOfferedReference.resolution.journey.scaleValidation?.mode ?? 'consecutive_days',
-        maxConsecutiveWorkDays: newOfferedReference.resolution.journey.weeklyRest?.maxConsecutiveWorkDays ?? 6, resolvedAt: now },
+        maxConsecutiveWorkDays: newOfferedReference.resolution.journey.weeklyRest?.maxConsecutiveWorkDays ?? 6, resolvedAt: now,
+        ...coverageResolutionField(newOfferedReference.data.reference) },
       shiftSwapRequestId: requestId, updatedAt: now };
     const requestedPatch = { userId: stored.requesterUid, userName: stored.requesterName, referenceRevisionId: newRequestedReference.ref.id,
       journeyResolution: { journeyId: newRequestedReference.resolution.journey.id, lineageId: newRequestedReference.resolution.journey.lineageId,
         version: newRequestedReference.resolution.journey.version, name: newRequestedReference.resolution.journey.name,
         resolvedBy: newRequestedReference.resolution.resolvedBy, validationMode: newRequestedReference.resolution.journey.scaleValidation?.mode ?? 'consecutive_days',
-        maxConsecutiveWorkDays: newRequestedReference.resolution.journey.weeklyRest?.maxConsecutiveWorkDays ?? 6, resolvedAt: now },
+        maxConsecutiveWorkDays: newRequestedReference.resolution.journey.weeklyRest?.maxConsecutiveWorkDays ?? 6, resolvedAt: now,
+        ...coverageResolutionField(newRequestedReference.data.reference) },
       shiftSwapRequestId: requestId, updatedAt: now };
     const preparedOverlay = schedule.get('activeRevisionId')
       ? await prepareActiveRevisionOperationalChanges({ tx, schedule, workspaceId: context.workspace_id, actorId: context.decoded.uid,

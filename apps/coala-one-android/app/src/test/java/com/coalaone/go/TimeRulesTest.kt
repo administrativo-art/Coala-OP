@@ -465,4 +465,29 @@ class TimeRulesTest {
         assertFalse(TimeRules.dayEquationExplainsLines(additional))
         assertFalse(TimeRules.dayEquationExplainsLines(credit + credit))
     }
+
+    @Test fun breakStatusHasNoToleranceAndCoverageAllowsOneHour() {
+        fun marking(id: String, time: String, purpose: String) = OwnMarking(id, "2026-12-01", id.drop(1).toLong(),
+            "2026-12-01T$time:00-03:00", "slz", "01", "available", classification = MarkingClassification(purpose))
+        fun now(time: String) = java.time.OffsetDateTime.parse("2026-12-01T$time:00-03:00").toInstant().toEpochMilli()
+        val zone = ZoneId.of("America/Fortaleza")
+        val fixed = OwnShift("2026-12-01", "work", "09:00", "15:15", breakType = "fixed", breakStart = "12:00", breakEnd = "12:15",
+            breakDurationMinutes = 15, toleranceMinutes = 5)
+        val over = listOf(marking("r1", "09:00", "journey_start"), marking("r2", "12:00", "break_start"), marking("r3", "12:18", "break_end"))
+        val noTolerance = TimeRules.breakStatus(fixed, over, now("12:20"), zone)
+        assertEquals(com.coalaone.go.domain.BreakLevel.DANGER, noTolerance?.level)
+        assertEquals("O intervalo não tem tolerância.", noTolerance?.detail)
+
+        val coverage = fixed.copy(coverage = true, referenceMinutes = 480)
+        val during = TimeRules.breakStatus(coverage, over.take(2), now("12:20"), zone)
+        assertFalse(during?.level == com.coalaone.go.domain.BreakLevel.DANGER)
+        assertTrue(during?.detail.orEmpty().contains("Vai estender além de 6h? Faça 1h de intervalo numa pausa só."))
+        assertEquals(com.coalaone.go.domain.BreakLevel.DANGER, TimeRules.breakStatus(coverage,
+            listOf(marking("r1", "09:00", "journey_start"), marking("r2", "12:00", "break_start"), marking("r3", "13:05", "break_end")), now("13:06"), zone)?.level)
+        // Mesma condição da web: sem carga maior que o turno, noturno ou manual, não é cobertura.
+        assertFalse(TimeRules.coverageDay(coverage.copy(referenceMinutes = 360)))
+        assertFalse(TimeRules.coverageDay(coverage.copy(overnight = true)))
+        assertFalse(TimeRules.coverageDay(coverage.copy(manualOrder = 1)))
+        assertTrue(TimeRules.coverageDay(coverage))
+    }
 }

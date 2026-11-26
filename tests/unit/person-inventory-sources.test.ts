@@ -154,7 +154,24 @@ test('day correction separates its subject, request author and historical actors
   assert.equal(sourceById('user-notification-owners')?.field, 'ownerUid');
 });
 
- test('fiscal export actor sources require an explicit matching workspace even for global admin', () => {
+test('pedidos de revisão antecipada: titular e ator separados, descobertos pelas unidades do dia', () => {
+  const subject = sourceById('time-review-subjects')!;
+  const requester = sourceById('time-review-requesters')!;
+  assert.equal(subject.collection, 'dp_timeReviewRequests');
+  assert.equal(subject.field, 'employeeUid');
+  assert.equal(subject.role, 'subject');
+  assert.equal(requester.field, 'requestedBy');
+  assert.equal(requester.role, 'actor');
+  const actor = { isDefaultAdmin: false, workspace_id: 'w', userDoc: { unitAccessScope: 'selected', unitAccessUnitIds: ['A'] },
+    permissions: { dp: { timeRecording: { view: true } } } } as Parameters<typeof canViewPersonRecord>[0];
+  for (const source of [subject, requester]) {
+    assert.equal(canViewPersonRecord(actor, source, { workspaceId: 'w', unitIds: ['A'] }), true);
+    assert.equal(canViewPersonRecord(actor, source, { workspaceId: 'w', unitIds: ['B'] }), false);
+    assert.equal(canViewPersonRecord(actor, source, { workspaceId: 'other', unitIds: ['A'] }), false);
+  }
+});
+
+test('fiscal export actor sources require an explicit matching workspace even for global admin', () => {
   const actor = { workspace_id: 'coala', isDefaultAdmin: true, permissions: {}, userDoc: {} } as Parameters<typeof canViewPersonRecord>[0];
   for (const id of ['fiscal-afd-export-actors', 'fiscal-aej-export-actors']) {
     const source = sourceById(id)!;
@@ -176,4 +193,33 @@ test('manifestos privados admissionais têm consulta por titular separada do ato
     assert.ok(field?.indexes.some((entry: { arrayConfig?: string; queryScope: string }) => entry.arrayConfig === 'CONTAINS' && entry.queryScope === 'COLLECTION_GROUP'));
   }
   assert.equal(sourceById('admission-signature-workflow-actors')?.role, 'actor');
+});
+
+
+test('DP settings inventory preserves subject, actor and responsibility namespaces with exact list lookup', () => {
+  assert.equal(PERSON_SOURCES[0].id, 'accounts');
+  const subject = sourceById('overtime-policy-subjects')!;
+  assert.deepEqual([subject.namespace, subject.field, subject.role, subject.queryMode, subject.permissionPolicy], ['main.users', 'applicability.collaboratorIds', 'subject', 'array-contains', 'time-config-admin']);
+  for (const suffix of ['creators', 'updaters', 'publishers', 'archivers']) {
+    const source = sourceById(`overtime-policy-${suffix}`)!;
+    assert.equal(source.role, 'actor'); assert.equal(source.namespace, 'main.users');
+  }
+  for (const prefix of ['dp-unit-group', 'dp-unit-organization']) {
+    for (const suffix of ['responsible-users', 'vacated-responsible-users']) {
+      const source = sourceById(`${prefix}-${suffix}`)!;
+      assert.equal(source.role, 'participant'); assert.equal(source.namespace, 'main.users');
+      assert.equal(source.permissionPolicy, 'unit-structure-admin');
+    }
+  }
+  assert.equal(PERSON_SOURCES.some(source => source.collection === 'dp_units'), false, 'operational units have no responsibility producer fields');
+  const config = JSON.parse(readFileSync('firestore.indexes.json', 'utf8'));
+  const dpSources = PERSON_SOURCES.filter(source => ['time-config-admin', 'unit-structure-admin'].includes(source.permissionPolicy));
+  assert.equal(dpSources.length, 9);
+  for (const source of dpSources) for (const tenantField of ['workspaceId', 'workspace_id']) {
+    const fields = [{ fieldPath: tenantField, order: 'ASCENDING' },
+      { fieldPath: source.field, ...(source.queryMode === 'array-contains' ? { arrayConfig: 'CONTAINS' } : { order: 'ASCENDING' }) },
+      { fieldPath: '__name__', order: 'ASCENDING' }];
+    assert.ok(config.indexes.some((index: { collectionGroup: string; queryScope: string; fields: unknown }) =>
+      index.collectionGroup === source.collection && index.queryScope === 'COLLECTION' && JSON.stringify(index.fields) === JSON.stringify(fields)), `missing ${source.id}/${tenantField} index`);
+  }
 });

@@ -1,6 +1,6 @@
 import { onboardingOrigin, readOnboardingPerson } from "./onboarding-person";
 import { savePersonCursor, readPersonCursor } from "./person-cursor.server";
-import { FieldPath } from "firebase-admin/firestore";
+import { FieldPath, Filter } from "firebase-admin/firestore";
 import type { ServerUserContext } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
@@ -16,12 +16,14 @@ import { PERSON_SOURCES, SOURCE_VALUES, sourceById, type Source } from "./person
 import { resolveStrictPersonRefs, subjectKey, type SubjectRef } from "./person-subject";
 
 const LIMIT_MAX = 50;
+const DP_ADMIN_POLICIES = new Set<Source["permissionPolicy"]>(["time-config-admin", "unit-structure-admin"]);
 export function canViewPersonSource(actor: ServerUserContext, source: Source): boolean {
   // Validate typed dispatch before the administrator shortcut.
   if (!SOURCE_VALUES.permissionPolicy.includes(source.permissionPolicy) || !SOURCE_VALUES.scopePolicy.includes(source.scopePolicy)) return false;
   if (source.permissionPolicy === "rep-p-location" && (actor.permissions.dp?.view !== true || actor.permissions.dp?.timeRecording?.readLocation !== true)) return false;
   if (source.permissionPolicy === "cursor-private") return false;
   if (source.permissionPolicy === "payroll-finance-review" && actor.viewAs) return false;
+  if (DP_ADMIN_POLICIES.has(source.permissionPolicy) && actor.viewAs) return false;
   if (actor.isDefaultAdmin) return true;
   switch (source.permissionPolicy) {
     case "admissions": return hasFormalizationPermission(actor.permissions, "view");
@@ -36,6 +38,8 @@ export function canViewPersonSource(actor: ServerUserContext, source: Source): b
     case "rep-p": return actor.permissions.dp?.timeRecording?.view === true;
     case "rep-p-location": return actor.permissions.dp?.timeRecording?.view === true && actor.permissions.dp?.timeRecording?.readLocation === true;
     case "schedule-global": return actor.permissions.dp?.schedules?.view === true && resolveUnitAccess(actor.userDoc).allUnits;
+    case "time-config-admin": return actor.permissions.dp?.settings?.manageTime === true && resolveUnitAccess(actor.userDoc).allUnits;
+    case "unit-structure-admin": return Boolean(actor.permissions.settings?.manageUsers || actor.permissions.settings?.manageKiosks || actor.permissions.dp?.settings?.manageUnits) && resolveUnitAccess(actor.userDoc).allUnits;
     case "time-closure": return actor.permissions.dp?.timeClosure?.close === true || actor.permissions.dp?.timeClosure?.reopen === true;
     case "requests": return actor.permissions.dp?.requests?.view === true;
     case "vacations": return actor.permissions.dp?.vacation?.viewAll === true;
@@ -57,6 +61,7 @@ export function canViewPersonSource(actor: ServerUserContext, source: Source): b
 }
 /** Source-native scope fields; financial result centers never become operational units. */
 export function canViewPersonRecord(actor: ServerUserContext, source: Source, data: Record<string, unknown> | undefined): boolean {
+  if (DP_ADMIN_POLICIES.has(source.permissionPolicy) && !matchesPersonWorkspace(data, actor.workspace_id)) return false;
   if (["fiscal-afd-export-actors", "fiscal-aej-export-actors"].includes(source.id) && data?.workspaceId !== actor.workspace_id) return false;
   // Existing cash-withdrawal claims own their tenant under source, not at the root.
   if (source.id === "financial-source-settlement-updaters") {
@@ -291,7 +296,10 @@ export async function collectPersonSource(params: {
       ? db.collection("employees").doc(value).collection(source.collection)
       : group ? db.collectionGroup(source.collection) : db.collection(source.collection);
     let query: FirebaseFirestore.Query = collection;
-    if (source.field !== "__parent__") query = source.namespace === "subjectKeys" ? query.where(source.field, "array-contains-any", prepared.resolution.refs.map(subjectKey)) : query.where(source.field, "==", value);
+    if (source.field !== "__parent__") query = source.namespace === "subjectKeys" ? query.where(source.field, "array-contains-any", prepared.resolution.refs.map(subjectKey)) : query.where(source.field, source.queryMode === "array-contains" ? "array-contains" : "==", value);
+    if (DP_ADMIN_POLICIES.has(source.permissionPolicy)) query = query.where(Filter.or(
+      Filter.where("workspaceId", "==", actor.workspace_id), Filter.where("workspace_id", "==", actor.workspace_id),
+    ));
     if (source.scopePolicy === "finance-workspace") query = query.where(source.id === "financial-source-settlement-updaters" ? "source.workspaceId" : "workspaceId", "==", actor.workspace_id);
     if (source.id.startsWith("financial-") && source.id.endsWith("-payments")) query = query.where("beneficiaryReference.sourceType", "==", "employee").where("sourceType", "==", source.id.split("-")[1]);
     // The entity reference is exact; source type and expense linkage are checked per row.

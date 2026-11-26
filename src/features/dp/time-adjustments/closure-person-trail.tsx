@@ -28,6 +28,7 @@ function destinationOf(line: BankStatementLine["line"]): { label: string; varian
   if (line.nature === "bank_credit") return { label: "Banco · crédito", variant: "ok" };
   if (line.nature === "bank_debit") return { label: "Banco · débito", variant: "danger" };
   if (line.nature === "payroll_discount") return { label: "Folha · desconto", variant: "danger" };
+  if (line.nature === "payroll_indemnity") return { label: `Folha · ${line.categoryId ?? "intrajornada"}`, variant: "info" };
   return { label: "Em revisão", variant: "warn" };
 }
 
