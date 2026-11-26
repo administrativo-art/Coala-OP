@@ -27,6 +27,7 @@
 | [Plano — Falta automática e declarada](plano-falta-automatica.md) | Ponto e DP |
 | [Plano — Revisão antecipada das batidas](plano-revisao-antecipada-ponto.md) | Ponto e DP |
 | [Plano — Turno de cobertura e cálculo único do dia de ponto](plano-turno-de-cobertura.md) | Ponto e DP |
+| [Plano — Fechamento do ponto por organização e política de hora extra completa](plano-fechamento-ponto-politica-hora-extra.md) | Ponto, DP e folha |
 | [Plano — Onboarding, integração, documentos e assinatura](plano-onboarding-integracao-documentos-assinatura.md) | Pessoas e RH |
 | [Plano de correção — Organizador Inteligente de Documentos de RH](plano-correcao-organizador-documentos.md) | Pessoas e RH |
 | [Plano — Implantação da API do Banco Inter para pagamentos](plano-integracao-api-banco-inter-pagamentos.md) | Financeiro |

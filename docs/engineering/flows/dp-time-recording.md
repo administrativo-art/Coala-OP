@@ -324,3 +324,15 @@ Testes locais cobrem fases, centavos, entrada estrita, emulador com fontes reais
 
 
 Revisão documental do item 7: título e mensagem devem concordar em tipo fiscal (FGTS ou DARF), número normalizado, CNPJ e competência. Como a classificação antiga é da mensagem, apenas mensagem com um único PDF é elegível; anexos múltiplos ficam pendentes. O operador transcreve tipo, número, CNPJ e competência lidos nesse PDF exato, além do valor; o registro liga essa confirmação ao ID/hash do anexo. Reclassificação da identidade é relida na transação e muda a reserva lógica. Na individualização, todos os pares usuário/RH são validados antes de remover duplicatas: dois IDs RH para um usuário são ambíguos em qualquer ordem. Salário legado com colisão entre namespaces exige employeeUserId ou beneficiário inequívoco; título UID legado sem colisão continua elegível.
+
+### Tolerâncias e intervalo intrajornada pela política (25/11/2026)
+
+A política de hora extra pode trazer `tolerances` (por marcação, limite do dia e tolerância **total** do intervalo para 15, 30 e 60 min; outro tamanho usa a proporção do valor de 60 min, arredondada para baixo) e `intrajornada` (código, adicional de pelo menos 50%, origem). Sem `tolerances`, nada muda: entrada e saída usam `toleranceMinutes` da jornada e o intervalo não tem tolerância.
+
+Com `tolerances`, `own-month.server.ts` coloca no turno do dia as tolerâncias da política (`time-config/policy-tolerance.server.ts`, mesma resolução do banco). Entrada e saída usam `absorbedEdgeMinutes` na prévia e na apuração: dentro de 5 por marcação e 10 no dia o que falta **nunca** é descontado, mesmo com política mais estreita; o que sobra respeita os limites da política.
+
+Com `intrajornada`, prévia e apuração usam `assessBreak`: até 4h sem intervalo; até 6h (aceitando 10 min) 15 min; acima, 1h. Acima da tolerância total, gera `payroll_indemnity` (`break_suppressed`) com todo o suprimido, separada da hora extra e fora do banco. Sem pausa, pausas divididas (sem fracionamento no turno, ou pausa menor que o mínimo), turno de até 6h que passou de 6h, intervalo cadastrado de 30 a 59 min, turno manual ou noturno, e dia já mandado para conferência: **nada é pago**; o dia ganha `BREAK_REVIEW` na apuração e `short_break` (grave, trava o fechamento até o RH liberar) no Registro. Apuração `time-bank-v4`.
+
+Lacunas: não há ação para o DP decidir o valor de um dia `BREAK_REVIEW` (a apuração fica "a conferir"); a prévia não conhece feriado; trabalho em folga não é avaliado; sem limite de habitualidade da tolerância; a entrega ao contador **recusa** apuração com `payroll_indemnity`; o AEJ não tem registro para a parcela (a supressão está nas marcações); conferência do contracheque, Coala Go e a tela de análise de ajuste não conhecem a tolerância do intervalo. Sem política com tolerâncias, entrada e saída seguem a jornada, inclusive quando ela é zero.
+
+Custo: cada leitura do mês passa a consultar `dp_overtimePolicies` publicadas e arquivadas (limite 500); com alguma política com tolerâncias, mais até 3 leituras por pessoa (usuário, unidade, grupo).
