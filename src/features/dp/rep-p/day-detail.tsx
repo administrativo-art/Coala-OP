@@ -51,6 +51,7 @@ const NATURE: Record<BankStatementLine["line"]["nature"], { title: (line: BankSt
   bank_debit: { title: () => "Banco de horas · débito", sign: -1, tone: "bg-ds-danger-bg text-ds-danger", mark: "−" },
   payroll_overtime: { title: (line) => `Folha · hora extra${line.ratePercent ? ` ${line.ratePercent}%` : ""}`, sign: 1, tone: "bg-ds-info-bg text-ds-info", mark: "$" },
   payroll_discount: { title: () => "Folha · desconto", sign: -1, tone: "bg-ds-danger-bg text-ds-danger", mark: "$" },
+  payroll_indemnity: { title: (line) => `Folha · intervalo intrajornada${line.categoryId ? ` (${line.categoryId})` : ""}`, sign: 1, tone: "bg-ds-info-bg text-ds-info", mark: "$" },
   review: { title: () => "Em conferência pelo DP", sign: 0, tone: "bg-ds-caution-bg text-ds-caution", mark: "?" },
 };
 
@@ -270,7 +271,8 @@ export function DayDetailPanel({ day, days, today, unitNames, receipts, classifi
   // Prévia do resultado e tolerância: a mesma regra da apuração (tolerância única da jornada).
   const difference = past && work && !day.absence && effective.length && effective.length % 2 === 0 && day.plannedWorkMinutes !== null
     ? day.workedMinutes - day.plannedWorkMinutes : null;
-  const toleranceApplied = difference !== null && difference !== 0 && Math.abs(difference) <= toleranceOf(work);
+  const toleranceApplied = difference !== null && difference !== 0
+    && (work?.policyTolerances ? day.balanceMinutes === 0 : Math.abs(difference) <= toleranceOf(work));
 
   return (
     <SidePanel open onOpenChange={(open) => !open && onClose()}

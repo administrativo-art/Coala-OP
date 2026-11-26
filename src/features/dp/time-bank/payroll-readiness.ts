@@ -10,6 +10,7 @@ const issueLabels: Partial<Record<BankIssue, string>> = {
   NO_JOURNEY: 'jornada não definida', NO_POLICY: 'política de horas não definida',
   HOLIDAY_SCHEDULED: 'feriado com escala a conferir', WORK_ON_ABSENCE: 'trabalho durante ausência',
   ABSENCE_REVIEW: 'ausência com tratamento pendente',
+  BREAK_REVIEW: 'intervalo intrajornada a decidir',
 };
 
 export function payrollReviewReason(month: BankMonthRecord, movements: BankManualMovement[], previous?: BankMonthRecord): string | null {

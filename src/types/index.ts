@@ -3923,7 +3923,27 @@ export type DPTimeBankCycle = {
   residualDestination: 'carry' | 'payroll' | 'review' | 'forfeit';
 };
 
+/** De onde veio uma regra da política: lei, convenção coletiva, acordo individual ou regra interna. */
+export type DPPolicyRuleSource = { origin: 'law' | 'cct' | 'individual_agreement' | 'internal'; reference?: string };
+
+export type DPPolicyTolerances = {
+  /** Entrada e saída: limite por marcação (CLT art. 58 §1º). */
+  markingMinutes: number;
+  /** Entrada e saída: limite somado no dia (CLT art. 58 §1º). */
+  dailyMinutes: number;
+  /** Intervalo: tolerância TOTAL (saída + volta) para intervalos de 15, 30 e 60 minutos. */
+  breakMinutes: { upTo15: number; upTo30: number; upTo60: number };
+  source: DPPolicyRuleSource;
+};
+
+/** Intervalo intrajornada suprimido (art. 71 §4º): paga todo o tempo suprimido, com natureza indenizatória. */
+export type DPPolicyIntrajornada = { code: string; ratePercent: number; source: DPPolicyRuleSource };
+
 export type DPOvertimePolicy = {
+  /** Presente = a política manda nas tolerâncias do dia; ausente = vale a tolerância da jornada. */
+  tolerances?: DPPolicyTolerances;
+  /** Presente (com `tolerances`) = o intervalo suprimido é apurado. */
+  intrajornada?: DPPolicyIntrajornada;
   id: string;
   lineageId: string;
   version: number;

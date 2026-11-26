@@ -12,12 +12,18 @@
  * - Tolerância única da jornada: até 5 min na entrada e até 5 min na saída, somando no máximo a tolerância da jornada
  *   (art. 58 §1º; pendência (a) do Doc Brown). Dentro dela, entrada e saída contam como no horário; acima, conta tudo.
  *   Intervalo reduzido não herda a tolerância (pendência (b)).
+ * - Política com `tolerances` (26/11/2026): as tolerâncias de entrada/saída passam a vir dela, e o que falta dentro de
+ *   5/10 min nunca é descontado. Com `intrajornada`, o intervalo exigido segue a duração trabalhada (art. 71); acima da
+ *   tolerância TOTAL do intervalo paga todo o suprimido. Sem pausa, pausas fracionadas, turno de 6h estendido, intervalo
+ *   reduzido, turno manual ou noturno: nada é lançado e o dia vai para o DP.
  * Feriado com escala de trabalho, batida ímpar e faixa ausente vão para revisão do DP, sem lançamento. Turnos que
  * atravessam a meia-noite são pareados pelo instante fiscal e preservam os minutos noturnos para a folha.
  */
 import type { DPAbsenceType, DPOvertimeCategory, DPOvertimePolicy } from '@/types';
 
-export const TIME_BANK_ALGORITHM_VERSION = 'time-bank-v3' as const;
+import { absorbedEdgeMinutes, assessBreak } from '../time-config/policy-rules';
+
+export const TIME_BANK_ALGORITHM_VERSION = 'time-bank-v4' as const;
 export const MARKING_TOLERANCE_LIMIT = 5;
 
 export type BankJourney = { cycleLengthDays: number; validFrom: string; days: Array<{ dayIndex: number; plannedMinutes: number }>;
@@ -29,23 +35,29 @@ export type BankShift = {
   referenceMinutes: number | null; toleranceMinutes: number | null; journeyId: string | null;
   /** Política de jornada de cobertura congelada no turno: a saída é comparada com início + carga + 1h. */
   coverage?: boolean;
+  /** Intervalo previsto do turno e se o cadastro permite várias pausas. */
+  breakMinutes?: number | null;
+  breakSplit?: 'single' | 'multiple' | null;
+  breakMinPauseMinutes?: number | null;
+  /** Dia com turno manual em partes. */
+  manual?: boolean;
 };
 
 /** Mesmo limite do Registro de ponto (`day-model.ts`): início + carga da jornada + 1h de intervalo. */
 export const COVERAGE_BREAK_MINUTES = 60;
 export type BankAbsence = { id: string; typeName: string; effect: DPAbsenceType['workdayEffect']; unit: 'day' | 'hour'; startDate: string; endDate: string; minutes: number | null };
-export type BankPolicy = Pick<DPOvertimePolicy, 'id' | 'version' | 'categories' | 'timeBank' | 'dailyOvertimeLimitMinutes' | 'weeklyOvertimeLimitMinutes'>;
+export type BankPolicy = Pick<DPOvertimePolicy, 'id' | 'version' | 'categories' | 'timeBank' | 'dailyOvertimeLimitMinutes' | 'weeklyOvertimeLimitMinutes' | 'tolerances' | 'intrajornada'>;
 export type BankDayInput = { date: string; shift: BankShift | null; markings: string[]; absences: BankAbsence[]; holiday: boolean; policy: BankPolicy | null };
 
-export type BankLineNature = 'bank_credit' | 'bank_debit' | 'payroll_overtime' | 'payroll_discount' | 'review';
+export type BankLineNature = 'bank_credit' | 'bank_debit' | 'payroll_overtime' | 'payroll_discount' | 'payroll_indemnity' | 'review';
 export type BankLineReason = 'worked_less' | 'worked_more' | 'missing_day' | 'absence_debit' | 'absence_unexcused' | 'absence_review'
   | 'rest_day_work' | 'sunday_work' | 'holiday_work' | 'unplanned_work' | 'daily_limit_exceeded' | 'weekly_limit_exceeded'
   | 'no_category' | 'needs_review' | 'pending_approval' | 'approved_overtime' | 'manual_compensation' | 'manual_adjustment'
-  | 'payroll_settlement' | 'credit_expired';
+  | 'payroll_settlement' | 'credit_expired' | 'break_suppressed';
 export type BankLine = { nature: BankLineNature; minutes: number; reason: BankLineReason; categoryId?: string; ratePercent?: number;
   factor?: number; requiresApproval?: boolean };
 export type BankIssue = 'MISSING_DAY' | 'ODD_MARKINGS' | 'NIGHT_SHIFT' | 'NO_JOURNEY' | 'NO_POLICY' | 'TIME_BANK_DISABLED' | 'HOLIDAY_SCHEDULED'
-  | 'WORK_ON_ABSENCE' | 'ABSENCE_REVIEW';
+  | 'WORK_ON_ABSENCE' | 'ABSENCE_REVIEW' | 'BREAK_REVIEW';
 export type BankDay = {
   date: string; kind: 'workday' | 'rest_day' | 'no_schedule'; holiday: boolean; sunday: boolean;
   referenceMinutes: number | null; plannedMinutes: number | null; workedMinutes: number; consideredMinutes: number | null;
@@ -135,7 +147,45 @@ function overtimeLines(minutes: number, category: DPOvertimeCategory | null, rea
   return lines;
 }
 
+/** Pausas entre os períodos trabalhados, em minutos. */
+function pausesOf(markings: string[]) {
+  const pauses: number[] = [];
+  for (let index = 2; index + 1 < markings.length; index += 2) {
+    pauses.push(Math.max(0, Math.round((instantMs(markings[index]) - instantMs(markings[index - 1])) / 60_000)));
+  }
+  return pauses;
+}
+
+/** Cobertura que de fato estende o dia: mesma condição do Registro de ponto. */
+const isCoverageShift = (shift: BankShift) => shift.coverage === true && !shift.overnight && Boolean(shift.referenceMinutes)
+  && shift.plannedMinutes !== null && shift.referenceMinutes! > shift.plannedMinutes;
+
+/**
+ * Intervalo intrajornada do dia. O pagamento é parcela própria: não entra no banco nem se confunde com a hora extra.
+ * Caso com dúvida, ou dia que já foi para conferência, não lança nada: marca o dia para o DP.
+ */
+function applyIntrajornada(day: BankDay, input: BankDayInput, markings: string[]) {
+  const { shift, policy } = input;
+  if (shift?.type !== 'work' || !policy?.tolerances || !policy.intrajornada || markings.length < 2 || markings.length % 2) return;
+  const assessment = assessBreak({
+    workedMinutes: pairedMinutes(markings), pauses: pausesOf(markings), plannedWorkMinutes: shift.plannedMinutes,
+    scheduledBreakMinutes: shift.breakMinutes ?? 0, coverage: isCoverageShift(shift), split: shift.breakSplit,
+    minPauseMinutes: shift.breakMinPauseMinutes, unsupported: shift.overnight || shift.manual === true, tolerances: policy.tolerances,
+  });
+  if (assessment.status === 'ok') return;
+  const blocked = day.issues.some((value) => value !== 'NIGHT_SHIFT' && value !== 'TIME_BANK_DISABLED');
+  if (assessment.status === 'review' || blocked) { day.issues.push('BREAK_REVIEW'); return; }
+  day.lines = [...day.lines, { nature: 'payroll_indemnity', minutes: assessment.minutes, reason: 'break_suppressed',
+    categoryId: policy.intrajornada.code, ratePercent: policy.intrajornada.ratePercent }];
+}
+
 export function computeBankDay(input: BankDayInput): BankDay {
+  const day = computeWorkedTimeDay(input);
+  applyIntrajornada(day, input, [...input.markings].sort((left, right) => instantMs(left) - instantMs(right)));
+  return day;
+}
+
+function computeWorkedTimeDay(input: BankDayInput): BankDay {
   const shift = input.shift;
   const kind: BankDay['kind'] = shift?.type === 'work' ? 'workday' : shift?.type === 'day_off' ? 'rest_day' : 'no_schedule';
   const sunday = weekday(input.date) === 0;
@@ -201,15 +251,20 @@ export function computeBankDay(input: BankDayInput): BankDay {
 
   // Tolerância: entrada e saída dentro de 5 min cada e da tolerância da jornada somadas contam como no horário.
   let considered = worked;
+  const policyTolerances = policy?.tolerances;
   const tolerance = Math.min(shift!.toleranceMinutes ?? 0, 2 * MARKING_TOLERANCE_LIMIT);
-  if (markings.length && shift!.startTime && shift!.endTime && tolerance > 0) {
+  if (markings.length && shift!.startTime && shift!.endTime && (policyTolerances || tolerance > 0)) {
     const early = clockMinutes(shift!.startTime) - localMinutes(markings[0]);
     // Na cobertura, ficar até completar a carga é esperado: a tolerância da saída compara com o limite de extensão.
     const coverageEnd = shift!.coverage && !shift!.overnight && shift!.referenceMinutes && shift!.plannedMinutes !== null
       && shift!.referenceMinutes > shift!.plannedMinutes
       ? clockMinutes(shift!.startTime) + shift!.referenceMinutes + COVERAGE_BREAK_MINUTES : null;
     const late = localMinutes(markings[markings.length - 1]) - (coverageEnd ?? clockMinutes(shift!.endTime));
-    if (Math.abs(early) <= MARKING_TOLERANCE_LIMIT && Math.abs(late) <= MARKING_TOLERANCE_LIMIT && Math.abs(early) + Math.abs(late) <= tolerance) {
+    if (policyTolerances) {
+      const absorbed = absorbedEdgeMinutes([early, late], policyTolerances);
+      considered = worked - absorbed.minutes;
+      day.toleranceApplied = absorbed.applied;
+    } else if (Math.abs(early) <= MARKING_TOLERANCE_LIMIT && Math.abs(late) <= MARKING_TOLERANCE_LIMIT && Math.abs(early) + Math.abs(late) <= tolerance) {
       considered = worked - early - late;
       day.toleranceApplied = early !== 0 || late !== 0;
     }
@@ -235,12 +290,12 @@ function finish(day: BankDay) {
   return day;
 }
 
-export type BankMonthTotals = { credit: number; debit: number; payroll: number; discount: number; review: number; balance: number; reviewDays: number };
+export type BankMonthTotals = { credit: number; debit: number; payroll: number; discount: number; indemnity?: number; review: number; balance: number; reviewDays: number };
 export function monthTotals(days: BankDay[]): BankMonthTotals {
   const sum = (nature: BankLineNature) => days.reduce((total, day) => total + day.lines.filter((line) => line.nature === nature).reduce((acc, line) => acc + line.minutes, 0), 0);
   const credit = sum('bank_credit');
   const debit = sum('bank_debit');
-  return { credit, debit, payroll: sum('payroll_overtime'), discount: sum('payroll_discount'), review: sum('review'), balance: credit - debit, reviewDays: days.filter((day) => day.issues.length).length };
+  return { credit, debit, payroll: sum('payroll_overtime'), discount: sum('payroll_discount'), indemnity: sum('payroll_indemnity'), review: sum('review'), balance: credit - debit, reviewDays: days.filter((day) => day.issues.length).length };
 }
 
 const overtimeReasons = new Set<BankLineReason>(['worked_more', 'rest_day_work', 'sunday_work', 'holiday_work', 'unplanned_work', 'pending_approval']);

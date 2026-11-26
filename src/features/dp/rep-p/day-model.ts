@@ -1,5 +1,7 @@
 import { applyTreatments } from "@/features/dp/time-adjustments/effective";
 import { pairedNightMinutes } from "@/features/dp/time-bank/core";
+import { absorbedEdgeMinutes, assessBreak, breakToleranceFor, suppressedBreakMinutes, type BreakReviewReason } from "@/features/dp/time-config/policy-rules";
+import type { DPPolicyTolerances } from "@/types";
 
 import { repPInstantMs } from "./time-zones";
 
@@ -37,6 +39,10 @@ export type DayShift = {
   breakMinPauseMinutes?: number | null;
   /** Tolerância única da jornada do dia (minutos); ausente = sem tolerância. */
   toleranceMinutes?: number | null;
+  /** Política do dia com tolerância de intervalo; ausente = o intervalo não tem tolerância. */
+  policyTolerances?: Pick<DPPolicyTolerances, 'markingMinutes' | 'dailyMinutes' | 'breakMinutes'> | null;
+  /** A política do dia apura o intervalo intrajornada suprimido. */
+  intrajornada?: boolean;
   /** Política de jornada de cobertura, congelada na escrita do turno. */
   coverage?: boolean;
   /** Carga da jornada no dia (referência do banco); a cobertura estende o dia até ela. */
@@ -87,6 +93,10 @@ export type DayView = {
   extendUntil?: string | null;
   /** Intervalo esperado efetivamente usado na comparação (o do turno, ou 1h na cobertura acima de 6h). */
   expectedBreakMinutes?: number | null;
+  /** Prévia do intervalo intrajornada a indenizar (todo o suprimido, quando passa da tolerância). */
+  suppressedBreakMinutes?: number;
+  /** Intervalo com dúvida: o DP decide; nada é pago sozinho. */
+  breakReview?: BreakReviewReason;
 };
 
 /** Acima de 6h trabalhadas, o intervalo mínimo é 1h (CLT art. 71); até 6h vale o do turno. */
@@ -205,9 +215,20 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
   let deviation: DayView["deviation"] = null;
   const coverage = coverageOf(shift, manualSegments);
 
+  // Com a intrajornada na política, o intervalo é avaliado pela duração trabalhada, com a mesma função da apuração.
+  const intrajornada = past && shift?.intrajornada && shift.policyTolerances && markings.length >= 2 && markings.length % 2 === 0
+    ? assessBreak({ workedMinutes: worked, pauses: pauseLengths(markings), plannedWorkMinutes: plannedWorkMinutes,
+      scheduledBreakMinutes: plannedBreakMinutesOf(shift), coverage: Boolean(coverage), split: shift.breakSplit,
+      minPauseMinutes: shift.breakMinPauseMinutes, unsupported: Boolean(shift.overnight) || manualSegments.length > 0,
+      tolerances: shift.policyTolerances })
+    : null;
+  const intrajornadaView = !intrajornada || intrajornada.status === 'ok' ? {}
+    : intrajornada.status === 'pay' ? { suppressedBreakMinutes: intrajornada.minutes } : { breakReview: intrajornada.reason };
+
   // Jornada que atravessa a meia-noite tem batidas em dois dias civis: sem tratamento, só o total é mostrado.
   if (shift?.overnight) {
-    return { date: input.date, shift: input.shift, manualSegments, markings, allMarkings, absence, incidents, workedMinutes: worked, breakMinutes,
+    if (intrajornada && intrajornada.status !== 'ok') incidents.push("short_break");
+    return { ...intrajornadaView, date: input.date, shift: input.shift, manualSegments, markings, allMarkings, absence, incidents, workedMinutes: worked, breakMinutes,
       plannedWorkMinutes, nightMinutes, balanceMinutes: null, deviation };
   }
   if (past && shift && !markings.length && !absence) incidents.push("missing");
@@ -234,16 +255,21 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
   const hasBreakStart = markings.some((marking) => marking.classification?.purpose === "break_start");
   const hasBreakEnd = markings.some((marking) => marking.classification?.purpose === "break_end");
   if (shift && expectedBreak && classificationsComplete && journeyEnded && (!hasBreakStart || !hasBreakEnd)) incidents.push("missing_break");
-  // Intervalo nunca usa a tolerância da jornada (decisão de 25/11/2026).
-  if (breakMinutes !== null && expectedBreak) {
+  // O intervalo nunca usa a tolerância de entrada e saída: só a tolerância total do intervalo, que vem da política.
+  if (intrajornada) {
+    if (intrajornada.status !== 'ok') incidents.push("short_break");
+    if (breakMinutes !== null && expectedBreak && breakMinutes > expectedBreak) incidents.push("long_break");
+  } else if (breakMinutes !== null && expectedBreak) {
     // Sem fracionamento no cadastro do turno, a 1h da cobertura precisa ser uma pausa só.
     const counted = longCoverageDay && shift?.breakSplit !== "multiple" ? Math.max(0, ...pauseLengths(markings)) : breakMinutes;
-    if (counted < expectedBreak) incidents.push("short_break");
+    const breakTolerance = shift?.policyTolerances ? breakToleranceFor(expectedBreak, shift.policyTolerances) : 0;
+    const missing = suppressedBreakMinutes(expectedBreak, counted, breakTolerance);
+    if (missing) incidents.push("short_break");
     if (breakMinutes > expectedBreak) incidents.push("long_break");
   } else if (longCoverageDay && expectedBreak && breakMinutes === null && markings.length % 2 === 0) {
     incidents.push("short_break");
   }
-  if (shift?.breakMinPauseMinutes && pauseLengths(markings).some((length) => length < shift.breakMinPauseMinutes!)) {
+  if (!intrajornada && shift?.breakMinPauseMinutes && pauseLengths(markings).some((length) => length < shift.breakMinPauseMinutes!)) {
     if (!incidents.includes("short_break")) incidents.push("short_break");
   }
   // Unidade fixa da escala: batida em outra unidade não é bloqueada, só fica a conferir pelo DP.
@@ -253,13 +279,26 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
   }
   const comparable = past && shift && !absence && markings.length % 2 === 0 && plannedWorkMinutes !== null;
   // Na cobertura, entre o turno e a carga não há saldo no dia (o banco compara com a carga).
-  const difference = !comparable ? null
-    : coverage ? (worked < coverage.planned ? worked - coverage.planned : Math.max(0, worked - coverage.reference))
-    : worked - plannedWorkMinutes!;
-  const balanceMinutes = difference === null ? null : Math.abs(difference) <= tolerance ? 0 : difference;
+  const differenceOf = (minutes: number) => coverage
+    ? (minutes < coverage.planned ? minutes - coverage.planned : Math.max(0, minutes - coverage.reference))
+    : minutes - plannedWorkMinutes!;
+  const difference = !comparable ? null : differenceOf(worked);
+  // Com tolerâncias na política, a prévia usa a mesma função do banco: as pontas são absorvidas no tempo trabalhado
+  // ANTES de comparar (na cobertura a comparação não é linear). Sem elas, vale a tolerância da jornada sobre a diferença.
+  let balanceMinutes = difference === null ? null : Math.abs(difference) <= tolerance ? 0 : difference;
+  if (difference !== null && shift?.policyTolerances) {
+    let considered = worked;
+    if (shift.startTime && shift.endTime && !manualSegments.length) {
+      const early = minutesOf(shift.startTime) - minutesOf(fiscalClock(markings[0]?.markedAt ?? `0000-00-00T${shift.startTime}`));
+      const end = coverage ? minutesOf(shift.startTime) + coverage.reference + COVERAGE_LONG_DAY_BREAK_MINUTES : minutesOf(shift.endTime);
+      const late = markings.length ? minutesOf(fiscalClock(markings[markings.length - 1].markedAt)) - end : 0;
+      if (markings.length) considered = worked - absorbedEdgeMinutes([early, late], shift.policyTolerances).minutes;
+    }
+    balanceMinutes = differenceOf(considered);
+  }
   return { date: input.date, shift: input.shift, manualSegments, markings, allMarkings, absence, incidents, workedMinutes: worked, breakMinutes,
     plannedWorkMinutes, nightMinutes, balanceMinutes, deviation, extendUntil: coverage?.extendUntil ?? null,
-    expectedBreakMinutes: expectedBreak };
+    expectedBreakMinutes: expectedBreak, ...intrajornadaView };
 }
 
 export function monthDates(month: string) {

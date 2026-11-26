@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { FieldPath, type Firestore, type Transaction } from 'firebase-admin/firestore';
 
 import { readRepPMonthOfPerson } from '@/features/dp/rep-p/own-month.server';
+import { policyTargetOf } from '@/features/dp/time-config/policy-tolerance.server';
 import { readRepPMarkingsForMirror, readRepPPilotMarkingsForBank } from '@/features/dp/rep-p/service.server';
 import type { AbsenceRequestRecord } from '@/features/dp/absences/requests/workflow-types';
 import { competenceRange, sha256, type ClosureAdjustment, type ClosurePerson } from '@/features/dp/time-adjustments/closure-core';
@@ -94,18 +95,8 @@ async function readBankPolicies(deps: Dependencies) {
 }
 
 async function policiesAndTarget(deps: Dependencies, uid: string, published?: DPOvertimePolicy[]) {
-  const user = await deps.mainDb.collection('users').doc(uid).get();
-  const unitId = text(user.get('unitId'));
-  const unit = unitId ? await deps.mainDb.collection('dp_units').doc(unitId).get() : null;
-  const unitGroupId = text(unit?.get('groupId'));
-  const group = unitGroupId ? await deps.mainDb.collection('dp_unitGroups').doc(unitGroupId).get() : null;
-  const unitOrganizationId = text(unit?.get('organizationId')) ?? text(group?.get('organizationId'));
+  const { user, target } = await policyTargetOf(deps.mainDb, uid);
   const policies = published ?? await readBankPolicies(deps);
-  const target = {
-    collaboratorId: uid, ...(text(user.get('jobRoleId')) ? { jobRoleId: text(user.get('jobRoleId'))! } : {}),
-    jobFunctionIds: Array.isArray(user.get('jobFunctionIds')) ? (user.get('jobFunctionIds') as string[]) : [],
-    ...(unitId ? { unitId } : {}), ...(unitGroupId ? { unitGroupId } : {}), ...(unitOrganizationId ? { unitOrganizationId } : {}),
-  };
   return { user, policyOn: (date: string) => {
     const resolution = resolveDPJourney({ journeys: policies, target, date });
     return resolution.status === 'resolved' ? resolution.journey : null;
@@ -208,6 +199,8 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
       overnight: raw.overnight,
       plannedMinutes: pieces.length ? pieces.reduce((total, item) => total + (plannedMinutesOf(item) ?? 0), 0) : plannedMinutesOf(raw),
       referenceMinutes: raw.referenceMinutes, toleranceMinutes: raw.toleranceMinutes, journeyId: raw.journeyId,
+      // Dia manual tem pausas próprias: o intervalo previsto do turno não se aplica.
+      ...(!pieces.length ? { breakMinutes: raw.breakDurationMinutes, breakSplit: raw.breakSplit, breakMinPauseMinutes: raw.breakMinPauseMinutes } : { manual: true }),
       // Dia manual prevalece sobre a política de cobertura.
       ...(raw.coverage === true && !pieces.length ? { coverage: true } : {}),
     } : null;
@@ -222,7 +215,8 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
       date, shift, markings, holiday: holidays.has(date),
       absences: absences.filter((item) => item.startDate <= date && item.endDate >= date),
       policy: policy ? { id: policy.id, version: policy.version, categories: policy.categories, timeBank: policy.timeBank,
-        dailyOvertimeLimitMinutes: policy.dailyOvertimeLimitMinutes, weeklyOvertimeLimitMinutes: policy.weeklyOvertimeLimitMinutes } satisfies BankPolicy : null,
+        dailyOvertimeLimitMinutes: policy.dailyOvertimeLimitMinutes, weeklyOvertimeLimitMinutes: policy.weeklyOvertimeLimitMinutes,
+        ...(policy.tolerances ? { tolerances: policy.tolerances } : {}), ...(policy.intrajornada ? { intrajornada: policy.intrajornada } : {}) } satisfies BankPolicy : null,
     });
     if (day.kind !== 'no_schedule' || day.workedMinutes || day.lines.length || day.issues.length) days.push(day);
   }

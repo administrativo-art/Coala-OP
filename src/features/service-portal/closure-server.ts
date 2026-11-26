@@ -220,6 +220,7 @@ export function buildProviderClosureContent(input: {
   const overtime = new Map<string, ProviderClosureContent['payroll']['overtime'][number]>();
   let creditMinutes = 0; let debitMinutes = 0; let discountMinutes = 0; let expiredCreditMinutes = 0; let bankPayrollMinutes = 0; let payrollOvertimeMinutes = 0;
   for (const { date, line } of effective) {
+    if (line.nature === 'payroll_indemnity') throw fail('Há intervalo intrajornada indenizado, que a entrega ao contador ainda não leva. A liberação fica bloqueada para ele não ficar de fora.');
     if (!['bank_credit', 'bank_debit', 'payroll_overtime', 'payroll_discount'].includes(line.nature)) throw fail('Há um lançamento com natureza não reconhecida.');
     if (date < start || date > end) throw fail('Um lançamento aponta para uma data fora do mês.');
     const amount = minutes(line.minutes);
