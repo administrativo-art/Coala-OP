@@ -1,5 +1,9 @@
 {
   "indexes": [
+    { "collectionGroup": "events", "queryScope": "COLLECTION_GROUP", "fields": [
+      { "fieldPath": "actorId", "order": "ASCENDING" },
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }
+    ] },
     { "collectionGroup": "financialAcquirerFeeBatches", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "unitId", "order": "ASCENDING" }, { "fieldPath": "stoneCode", "order": "ASCENDING" }, { "fieldPath": "referenceDate", "order": "ASCENDING" }, { "fieldPath": "source", "order": "ASCENDING" }
     ] },
@@ -37,6 +41,13 @@
     { "collectionGroup": "bankPaymentRequests", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "sourceType", "order": "ASCENDING" },
       { "fieldPath": "sourceId", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "bankPaymentRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" },
+      { "fieldPath": "beneficiaryReference.sourceId", "order": "ASCENDING" },
+      { "fieldPath": "beneficiaryReference.sourceType", "order": "ASCENDING" },
+      { "fieldPath": "sourceType", "order": "ASCENDING" },
+      { "fieldPath": "__name__", "order": "ASCENDING" }
     ] },
     { "collectionGroup": "financialInboxMessages", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "rawSha256", "order": "ASCENDING" }

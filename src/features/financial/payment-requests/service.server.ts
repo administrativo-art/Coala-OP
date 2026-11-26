@@ -1203,7 +1203,7 @@ async function commitBankSubmissionResult(params: {
   });
 }
 
-export async function submitPaymentRequest(id: string, actor: PaymentActor | "system") {
+export async function submitPaymentRequest(id: string, actor: PaymentActor | "system", options: { receiptVerified?: true } = {}) {
   const requestRef = paymentRequestRef(id);
   const submissionStartedAt = new Date().toISOString();
   const submissionEventId = randomUUID();
@@ -1211,6 +1211,9 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
     const snapshot = await transaction.get(requestRef);
     if (!snapshot.exists) throw new Error("Solicitação de pagamento não encontrada.");
     const current = { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
+    if (current.sourceType === "document_receipt" && (!options.receiptVerified || process.env.INTER_DOCUMENT_RECEIPT_BANK_APPROVAL_CONFIRMED !== "true")) {
+      throw new Error("A aprovação Pix no aplicativo Inter não foi confirmada para esta origem.");
+    }
     if (current.bankInstructionOrigin === "inter_dda") {
       throw new Error("Agendamento importado do Inter não pode ser reenviado.");
     }
@@ -1782,6 +1785,9 @@ async function completeSource(request: BankPaymentRequest) {
   }
   if (request.sourceType === "generated_receipt") {
     await financialDbAdmin.collection("generatedReceipts").doc(request.sourceId).set({ status: "paid", paidAt: request.paidAt, paymentRequestId: request.id, paymentProofStoragePath: request.proofStoragePath, updatedAt: new Date().toISOString() }, { merge: true });
+  }
+  if (request.sourceType === "document_receipt") {
+    await dbAdmin.collection("generatedDocuments").doc(request.sourceId).set({ receiptPaymentStatus: "paid", receiptPaymentRequestId: request.id, receiptPaidAt: request.paidAt }, { merge: true });
   }
 }
 

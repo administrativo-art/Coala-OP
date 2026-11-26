@@ -5,7 +5,7 @@ export type BankPaymentRequestStatus =
   | "awaiting_bank_approval" | "scheduled" | "processing" | "awaiting_statement" | "paid" | "rejected"
   | "approval_expired" | "failed" | "cancelled";
 
-export type BankPaymentSourceType = "aso" | "generated_receipt" | "termination" | "vacation" | "purchase_order" | "salary" | "expense_complement" | "financial_inbox" | "expense_boleto";
+export type BankPaymentSourceType = "aso" | "generated_receipt" | "document_receipt" | "termination" | "vacation" | "purchase_order" | "salary" | "expense_complement" | "financial_inbox" | "expense_boleto";
 export type LegacyBankPaymentSourceType = Exclude<BankPaymentSourceType, "financial_inbox" | "expense_boleto">;
 export type BankPaymentRail = "pix" | "barcode" | "pix_copy_paste";
 
@@ -46,6 +46,8 @@ type BankPaymentRequestBase = {
   id: string;
   workspaceId?: string;
   sourceId: string;
+  receiptPdfContentHash?: string;
+  receiptFormValuesHash?: string;
   expenseId?: string;
   installmentNumber?: number | null;
   legalEntitySnapshot?: PaymentLegalEntitySnapshot;

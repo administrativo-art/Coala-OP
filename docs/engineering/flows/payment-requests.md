@@ -1,5 +1,9 @@
 # Solicitações de pagamento e Banco Inter
 
+26/11/2026 — recibo documental: `document_receipt` usa `generatedDocuments/{id}` e snapshot financeiro limitado em `audit/resolvedValues`, distinta de `generated_receipt` do financeiro. O envio parte de `POST /api/documents/generated/{id}/payment` e exige em conjunto permissão documental e `financial.paymentRequests.view/create/authorize/submit`; o mesmo clique registra autorização Coala e envia ao Inter, cuja aprovação final permanece no aplicativo. A origem determina valor/beneficiário no servidor, compara chave Pix do recibo com perfil validado, usa ID determinístico na coleção existente `bankPaymentRequests` e não cria despesa. Retorno `PROCESSAR` é mostrado como processamento, não pendência de aprovação. Configuração de aprovação bancária e CNPJ pagador devem estar explícitos; execução real não foi ensaiada.
+
+O GET do mesmo caminho apenas lê o estado atual por ID determinístico com `documents.view` e `financial.paymentRequests.view`; é acionado ao abrir o recibo e manualmente, sem polling nem consulta ao banco. Pagamento de recibo não usa a autorização Coala em etapa separada: o POST exige `authorize` no mesmo ator que cria e envia. Perfis restritos sem qualquer dessas permissões continuam sem ação e recebem 403 em chamada direta.
+
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
 **Estado:** criação, autorização interna, envio, atualização bancária e pós-pagamento traçados no checkout `3f64b3ccd77acf2ba304bf2d7c4fe427b36983fe` em 2026-09-25. Matching de extrato e variantes de recuperação ainda exigem revisão complementar.

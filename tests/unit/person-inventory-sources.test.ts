@@ -21,6 +21,12 @@ test('every registered source declares an exact namespace, field, role and hones
   assert.equal(sourceById('signature-actors')?.role, 'actor');
   assert.equal(sourceById('signature-actors')?.scopePolicy, 'admin-global');
   assert.equal(sourceById('generated-documents')?.role, 'subject');
+  assert.equal(sourceById('financial-document_receipt-payments')?.namespace, 'hr.employees');
+  assert.equal(sourceById('financial-document_receipt-payments')?.coverage, 'live');
+  assert.equal(sourceById('financial-receipt-preparation-actors')?.namespace, 'main.users');
+  assert.equal(sourceById('financial-receipt-preparation-actors')?.role, 'actor');
+  assert.equal(sourceById('financial-receipt-preparation-actors')?.parentCollection, 'bankPaymentRequests');
+  assert.equal(sourceById('generated-document-actors')?.namespace, 'main.users');
 });
 test('unknown permission policy denies by default', () => {
   const actor = { isDefaultAdmin: false, permissions: { dp: { collaborators: { view: true } } }, userDoc: { unitAccessScope: 'all' } } as Parameters<typeof canViewPersonSource>[0];

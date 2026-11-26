@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle2, Clock3, Download, Eye, FileStack, Loader2, Lock, RefreshCw, Search, Send, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { InlineConfirm } from "@/components/patterns/inline-confirm";
 import { DocumentGeneratorWorkspace } from "@/components/documents/document-generator-workspace";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
+import { documentReceiptPaymentAction } from "@/features/financial/payment-requests/document-receipt-permissions";
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
 import {
   DOCUMENT_STATUS_LABELS,
@@ -29,6 +31,9 @@ type GeneratedDocument = {
   postAdmissionSignatureScope?: string | null;
   signatureStatus?: string | null;
   signatureRequestId?: string | null;
+  receiptPaymentStatus?: string | null;
+  receiptPaymentCanResume?: boolean;
+  receiptPaymentStatusKnown?: boolean;
   protocol?: string | null;
   preSignatureHash?: string | null;
   parties?: Array<{
@@ -249,6 +254,22 @@ function formatDateTime(value?: string) {
     : "—";
 }
 
+function receiptPaymentStatusLabel(status: string) {
+  return ({
+    ready_to_submit: "pronto para envio",
+    submitting: "envio em conferência",
+    awaiting_bank_approval: "aguardando aprovação no aplicativo Inter",
+    scheduled: "agendado no Inter",
+    processing: "em processamento no Inter",
+    awaiting_statement: "aguardando conciliação do extrato",
+    paid: "pago",
+    rejected: "recusado",
+    approval_expired: "aprovação expirada",
+    failed: "falha; conferir antes de nova tentativa",
+    cancelled: "cancelado",
+  } as Record<string, string>)[status] ?? "estado em conferência";
+}
+
 export default function GeneratedDocumentsPage({ history = false }: { history?: boolean }) {
   const searchParams = useSearchParams();
   const { firebaseUser, permissions } = useAuth();
@@ -256,6 +277,14 @@ export default function GeneratedDocumentsPage({ history = false }: { history?: 
   const canReview = hasFormalizationPermission(permissions, "documents.review");
   const canViewAudit = hasFormalizationPermission(permissions, "sensitiveData.view");
   const canSendSignature = hasFormalizationPermission(permissions, "signatures.send");
+  const canSendReceiptPayment = hasFormalizationPermission(permissions, "documents.view")
+    && permissions.financial?.view === true
+    && permissions.financial?.paymentRequests?.view === true
+    && permissions.financial?.paymentRequests?.create === true
+    && permissions.financial?.paymentRequests?.authorize === true
+    && permissions.financial?.paymentRequests?.submit === true;
+  const canViewReceiptPayment = hasFormalizationPermission(permissions, "documents.view")
+    && permissions.financial?.view === true && permissions.financial?.paymentRequests?.view === true;
   const canViewSignature = hasFormalizationPermission(permissions, "signatures.view");
   const [documents, setDocuments] = useState<GeneratedDocument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -263,6 +292,8 @@ export default function GeneratedDocumentsPage({ history = false }: { history?: 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<DocumentQueueFilter>("all");
   const [busyDocument, setBusyDocument] = useState<string | null>(null);
+  const [confirmReceiptPaymentId, setConfirmReceiptPaymentId] = useState<string | null>(null);
+  const paymentRequests = useRef(new Map<string, { known: boolean; sending: boolean }>());
   const [audit, setAudit] = useState<AuditPayload | null>(null);
   const [signatureTrail, setSignatureTrail] = useState<SignatureTrailPayload | null>(null);
   const [selectedId, setSelectedId] = useState(searchParams.get("document") ?? "");
@@ -347,13 +378,13 @@ export default function GeneratedDocumentsPage({ history = false }: { history?: 
         )
         || (statusFilter === "superseded" && normalizedStatus === "superseded");
       if (!matchesStatus) return false;
-      if (!history && (["cancelled", "superseded"].includes(normalizedStatus) || ["signed", "archived", "cancelled"].includes(signatureStatus))) return false;
+      if (!history && item.id !== searchParams.get("document") && (["cancelled", "superseded"].includes(normalizedStatus) || ["signed", "archived", "cancelled"].includes(signatureStatus))) return false;
       if (!term) return true;
       return `${item.templateName ?? ""} ${item.employeeName ?? ""} ${item.protocol ?? ""}`
         .toLocaleLowerCase("pt-BR")
         .includes(term);
     });
-  }, [documents, search, statusFilter, history]);
+  }, [documents, search, statusFilter, history, searchParams]);
   // Mantém a seleção dentro do filtro visível apó uma troca de fila.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -370,6 +401,32 @@ export default function GeneratedDocumentsPage({ history = false }: { history?: 
     () => documents.find((item) => item.id === selectedId) ?? null,
     [documents, selectedId],
   );
+  const loadReceiptPaymentStatus = useCallback(async (id: string) => {
+    if (paymentRequests.current.get(id)?.sending) return;
+    const requestState = { known: false, sending: false };
+    paymentRequests.current.set(id, requestState);
+    setConfirmReceiptPaymentId((current) => current === id ? null : current);
+    setDocuments((current) => current.map((item) => item.id === id ? { ...item, receiptPaymentStatusKnown: false } : item));
+    try {
+      const response = await fetch(`/api/documents/generated/${encodeURIComponent(id)}/payment`, { headers: { Authorization: `Bearer ${await token()}` }, cache: "no-store" });
+      if (paymentRequests.current.get(id) !== requestState) return;
+      if (!response.ok) throw new Error("Falha ao consultar pagamento");
+      const payload = await response.json();
+      if (paymentRequests.current.get(id) !== requestState) return;
+      if (payload.request !== null && (typeof payload.request?.status !== "string" || !payload.request.status)) throw new Error("Estado de pagamento inválido");
+      requestState.known = true;
+      setDocuments((current) => current.map((item) => item.id === id ? { ...item, receiptPaymentStatus: payload.request?.status ? String(payload.request.status) : null, receiptPaymentCanResume: payload.request?.canResume === true, receiptPaymentStatusKnown: true } : item));
+    } catch {
+      if (paymentRequests.current.get(id) !== requestState) return;
+      requestState.known = false;
+      setDocuments((current) => current.map((item) => item.id === id ? { ...item, receiptPaymentStatusKnown: false } : item));
+      setMessage("Não foi possível consultar o pagamento. Use Atualizar pagamento antes de enviar ou retomar.");
+    }
+  }, [token]);
+  useEffect(() => {
+    if (!canViewReceiptPayment || selectedDocument?.templateId !== "system-receipt-standard" || !["approved", "final"].includes(selectedDocument.status)) return;
+    void loadReceiptPaymentStatus(selectedDocument.id);
+  }, [canViewReceiptPayment, selectedDocument?.id, selectedDocument?.templateId, selectedDocument?.status, loadReceiptPaymentStatus]);
   const selectedSignatureContacts = useMemo(
     () => selectedDocument ? signatureContacts(selectedDocument) : [],
     [selectedDocument],
@@ -516,6 +573,42 @@ export default function GeneratedDocumentsPage({ history = false }: { history?: 
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Falha ao enviar para assinatura.");
     } finally {
+      setBusyDocument(null);
+    }
+  }
+
+  async function sendReceiptPayment(id: string) {
+    setConfirmReceiptPaymentId(null);
+    const document = documents.find((item) => item.id === id);
+    const previousState = paymentRequests.current.get(id);
+    if (!canSendReceiptPayment || busyDocument === id || !previousState?.known || previousState.sending || !document || !documentReceiptPaymentAction(document.receiptPaymentStatus, document.receiptPaymentCanResume, document.receiptPaymentStatusKnown === true).enabled) {
+      setMessage("Atualize o pagamento antes de enviar ou retomar.");
+      return;
+    }
+    const requestState = { known: false, sending: true };
+    paymentRequests.current.set(id, requestState);
+    setDocuments((current) => current.map((item) => item.id === id ? { ...item, receiptPaymentStatusKnown: false } : item));
+    setBusyDocument(id);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/documents/generated/${encodeURIComponent(id)}/payment`, {
+        method: "POST", headers: { Authorization: `Bearer ${await token()}` },
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Não foi possível confirmar o envio. Consulte o estado bancário.");
+      if (typeof payload.request?.status !== "string" || !payload.request.status) throw new Error("Não foi possível confirmar o estado bancário. Atualize o pagamento antes de continuar.");
+      const status = String(payload.request?.status ?? "");
+      requestState.known = true;
+      setDocuments((current) => current.map((item) => item.id === id ? { ...item, receiptPaymentStatus: status, receiptPaymentCanResume: false, receiptPaymentStatusKnown: true } : item));
+      setMessage(status === "awaiting_bank_approval"
+        ? "Pix enviado ao Inter. Aprovação pendente no aplicativo do banco."
+        : `Estado bancário: ${receiptPaymentStatusLabel(status)}. Consulte a solicitação antes de nova tentativa.`);
+    } catch (cause) {
+      requestState.known = false;
+      setDocuments((current) => current.map((item) => item.id === id ? { ...item, receiptPaymentStatusKnown: false, receiptPaymentCanResume: false } : item));
+      setMessage(cause instanceof Error ? cause.message : "Não foi possível confirmar o envio. Consulte o estado bancário.");
+    } finally {
+      requestState.sending = false;
       setBusyDocument(null);
     }
   }
@@ -800,6 +893,13 @@ export default function GeneratedDocumentsPage({ history = false }: { history?: 
                         && !["sent", "signed"].includes(String(selectedDocument.signatureStatus)) ? (
                           <Button size="sm" className="bg-violet-700 hover:bg-violet-800" disabled={!selectedHasSignatureRecipients || busyDocument === selectedDocument.id} onClick={() => void sendForSignature(selectedDocument.id)}><Send className="mr-1.5 h-4 w-4" />Enviar para assinatura</Button>
                         ) : null}
+                      {canSendReceiptPayment && selectedDocument.templateId === "system-receipt-standard" && ["approved", "final"].includes(selectedDocument.status) ? (
+                        <Button size="sm" variant="outline" disabled={busyDocument === selectedDocument.id || !documentReceiptPaymentAction(selectedDocument.receiptPaymentStatus, selectedDocument.receiptPaymentCanResume, selectedDocument.receiptPaymentStatusKnown === true).enabled} onClick={() => setConfirmReceiptPaymentId(selectedDocument.id)}><Send className="mr-1.5 h-4 w-4" />{documentReceiptPaymentAction(selectedDocument.receiptPaymentStatus, selectedDocument.receiptPaymentCanResume).label}</Button>
+                      ) : null}
+                      {canViewReceiptPayment && selectedDocument.templateId === "system-receipt-standard" && ["approved", "final"].includes(selectedDocument.status) ? (
+                        <>{selectedDocument.receiptPaymentStatus ? <span className="self-center text-xs font-semibold">Inter: {receiptPaymentStatusLabel(selectedDocument.receiptPaymentStatus)}</span> : null}<Button size="sm" variant="outline" disabled={busyDocument === selectedDocument.id} onClick={() => void loadReceiptPaymentStatus(selectedDocument.id)}><RefreshCw className="mr-1.5 h-4 w-4" />Atualizar pagamento</Button></>
+                      ) : null}
+                      {confirmReceiptPaymentId === selectedDocument.id && documentReceiptPaymentAction(selectedDocument.receiptPaymentStatus, selectedDocument.receiptPaymentCanResume, selectedDocument.receiptPaymentStatusKnown === true).enabled ? <InlineConfirm message="Enviar o Pix deste recibo ao Banco Inter? A aprovação final fica no aplicativo do banco." confirmLabel="Enviar ao Inter" cancelLabel="Voltar" onCancel={() => setConfirmReceiptPaymentId(null)} onConfirm={() => void sendReceiptPayment(selectedDocument.id)} /> : null}
                       {canViewSignature && ["sent", "partially_signed"].includes(String(selectedDocument.signatureStatus)) ? (
                         <Button size="sm" variant="outline" className="text-violet-700" disabled={busyDocument === selectedDocument.id} onClick={() => void reconcileSignature(selectedDocument.id)}><Clock3 className="mr-1.5 h-4 w-4" />Atualizar estado</Button>
                       ) : null}

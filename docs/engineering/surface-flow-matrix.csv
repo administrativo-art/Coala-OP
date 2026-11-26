@@ -81,6 +81,7 @@ api,src/app/api/documents/editor/route.ts,,docs/engineering/flows/document-gener
 api,src/app/api/documents/generate/route.ts,,docs/engineering/flows/document-generation.md,POST secureRoute com schema estrito e autorização pessoal servidor antes de resolução e Storage.
 api,src/app/api/documents/generated/[id]/audit/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/generated/[id]/file/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/documents/generated/[id]/payment/route.ts,,docs/engineering/flows/document-generation.md,Envio Pix do recibo aprovado ao Inter com permissao financeira e documental.
 api,src/app/api/documents/generated/[id]/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/generated/[id]/signature/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/generated/route.ts,,docs/engineering/flows/document-generation.md,Destino de investigacao; conferir metodo e ramo no handler.

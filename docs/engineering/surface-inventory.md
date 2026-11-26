@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **563 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **564 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -123,6 +123,7 @@ Inclui **66 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/documents/generated/[id]` | POST, PATCH, DELETE | [src/app/api/documents/generated/[id]/route.ts](../../src/app/api/documents/generated/%5Bid%5D/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/generated/[id]/audit` | GET | [src/app/api/documents/generated/[id]/audit/route.ts](../../src/app/api/documents/generated/%5Bid%5D/audit/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/generated/[id]/file` | GET | [src/app/api/documents/generated/[id]/file/route.ts](../../src/app/api/documents/generated/%5Bid%5D/file/route.ts) | [document-generation](flows/document-generation.md) |
+| `/api/documents/generated/[id]/payment` | POST, GET | [src/app/api/documents/generated/[id]/payment/route.ts](../../src/app/api/documents/generated/%5Bid%5D/payment/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/generated/[id]/signature` | GET, POST | [src/app/api/documents/generated/[id]/signature/route.ts](../../src/app/api/documents/generated/%5Bid%5D/signature/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/generator/parties` | GET | [src/app/api/documents/generator/parties/route.ts](../../src/app/api/documents/generator/parties/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/documents/generator/templates` | GET | [src/app/api/documents/generator/templates/route.ts](../../src/app/api/documents/generator/templates/route.ts) | [document-generation](flows/document-generation.md) |

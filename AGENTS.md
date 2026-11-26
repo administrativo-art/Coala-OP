@@ -104,6 +104,8 @@
 
 ## Design de interface
 
+- Todo campo de valor monetário deve mostrar a moeda informada pelo desenvolvimento; quando não houver moeda explícita, use real brasileiro (`BRL`, `pt-BR`). Formate separador de milhar e vírgula decimal durante a digitação, preservando a entrada natural de centenas e milhares (`100` → `R$ 100,00`; `1000` → `R$ 1.000,00`), inclusive colagem de `1.000` e `1.234,56`. A vírgula já exibida não pode deslocar dígitos digitados para centavos nem impedir editar valores grandes. Campo limpo permanece vazio quando obrigatório; envie ao servidor número decimal canônico, não texto formatado. Cubra digitação representativa, colagem e limpeza em teste.
+
 - Ao criar ou alterar UI, leia `docs/design/README.md` e o arquivo do padrão que a tela usa (botões, listas, painel lateral, modais, feedback). O guia vivo está em `/dashboard/design`.
 - Ao criar ou alterar UI do aplicativo Android (`apps/coala-one-android`), leia `docs/design/app.md` em vez dos padrões web: o app tem `Tokens`, componentes e regras próprios (seta `DropdownChevron`, seletor `UnitPickerHeader`, barra do início sem gesto). Atualize esse arquivo no mesmo trabalho quando mudar um padrão.
 - Use os tokens `--ds-*` / classes `ds-*` e os componentes de `src/components/patterns/` (`LiftRow`, `SidePanel`, `WizardModal`, `InlineConfirm`, `Segmented`, `FilterChips`, `ControlPanel`), as variantes de `Button` e o `StatusPill`. Não use hex solto em `className` (o lint avisa).
