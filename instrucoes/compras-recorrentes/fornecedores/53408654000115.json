@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-11-26",
+  "supplier": {
+    "document": "53408654000115",
+    "entityId": "9Ys3CkYWYwgr2SgUfvxg",
+    "legalName": "Industrial e Comercial Marvi LTDA",
+    "displayName": "Marvi Alimentos",
+    "status": "verified",
+    "evidence": "Cadastro empresarial e documentos de origem conferidos em 2026-11-26; evidências detalhadas preservadas no chamado privado."
+  },
+  "scope": {
+    "recipientName": "CT SORVETES LTDA",
+    "currency": "BRL",
+    "purpose": "Compra dos insumos identificados abaixo para estoque; não cobre outras filiais ou finalidades.",
+    "recipientDocuments": [
+      "14276603000397"
+    ]
+  },
+  "items": [
+    {
+      "externalCode": "PRD000029",
+      "invoiceDescription": "KID CASCAO 1,98KG",
+      "invoiceUnit": "CX",
+      "baseItemId": "4wTEzi2yFQiI85DmpX94",
+      "productId": "aa2OUMXgA4uWrYl6N3Pk",
+      "internalName": "Cascão Marvi — caixa com 120 unidades",
+      "operationalCategoryId": "insumo",
+      "operationalCategoryName": "Perecíveis",
+      "itemTreatment": "stock",
+      "status": "verified",
+      "purchase": {
+        "unit": "Caixa",
+        "purchaseUnitType": "logistic",
+        "purchaseUnitLabel": "Caixa",
+        "invoiceQuantityMultiplier": 1,
+        "invoiceUnitPriceDivisor": 1,
+        "baseUnitsPerPurchaseUnit": 120
+      },
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    },
+    {
+      "externalCode": "PRD000904",
+      "invoiceDescription": "BIJU BAUNILHA 1,0 KG (CX C/6)",
+      "invoiceUnit": "CX_MAS",
+      "baseItemId": "EvB7vdgHhqUhPrDAU4UO",
+      "productId": "2EbOcwJiEDDIKisQaJH7",
+      "internalName": "Biju de Biscoito de Baunilha Marvi — caixa com 300 unidades",
+      "operationalCategoryId": "insumo",
+      "operationalCategoryName": "Perecíveis",
+      "itemTreatment": "stock",
+      "status": "verified",
+      "purchase": {
+        "unit": "Caixa",
+        "purchaseUnitType": "content",
+        "purchaseUnitLabel": "Caixa",
+        "invoiceQuantityMultiplier": 6,
+        "invoiceUnitPriceDivisor": 6,
+        "baseUnitsPerPurchaseUnit": 300,
+        "rule": "Uma caixa-master da nota contém 6 caixas de conteúdo de 300 unidades; multiplicar quantidade por 6 e dividir preço unitário por 6 sem arredondamento antecipado."
+      },
+      "evidence": [
+        "Vínculo e apresentação confrontados com catálogo e compras confirmadas em 2026-11-26; detalhes no chamado privado."
+      ]
+    }
+  ],
+  "accounting": {
+    "accountPlanId": "OofGtZoVn15nmmy2xaI8",
+    "accountPlanName": "Insumos composição",
+    "status": "approved",
+    "purposeRule": "Insumos de composição comprados para estoque usam conta patrimonial folha; custo na DRE via CMV, conforme Coala-OP/docs/plano-de-contas-dre.md, seção 6.",
+    "evidence": "Conta ativa e folha conferida; regra e finalidade aprovadas pelo usuário. Não autoriza reclassificar documentos anteriores.",
+    "approval": {
+      "by": "usuário nesta conversa",
+      "at": "2026-11-26T21:08:14.583152+00:00",
+      "decision": "Adotar esse padrão para esta e as próximas compras equivalentes",
+      "scope": "Marvi CNPJ 53408654000115, filial destinatária 14276603000397, itens e finalidade registrados."
+    }
+  },
+  "defaults": {
+    "status": "approved",
+    "requiresFirstUseConfirmation": false,
+    "destinationKioskId": "matriz",
+    "destinationKioskName": "Centro de distribuição - Matriz",
+    "resultCenterId": "KNKNWZ7tdhIxnrlStRum",
+    "resultCenterName": "Centro administrativo - Renascença",
+    "evidence": "Centro e destino conferidos no histórico e nos cadastros atuais; adoção aprovada pelo usuário para o escopo registrado.",
+    "approval": {
+      "by": "usuário nesta conversa",
+      "at": "2026-11-26T21:08:14.583152+00:00",
+      "decision": "Adotar esse padrão para esta e as próximas compras equivalentes",
+      "scope": "Marvi CNPJ 53408654000115, filial destinatária 14276603000397, itens e finalidade registrados."
+    },
+    "rule": "Aplicar conta Insumos composição, centro Centro administrativo - Renascença e destino Matriz nesta e nas próximas compras equivalentes do escopo; perguntar novamente somente em divergência ou mudança de instrução."
+  }
+}
