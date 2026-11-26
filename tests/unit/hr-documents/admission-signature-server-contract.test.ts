@@ -26,8 +26,8 @@ test("congela o PDF antes do editor e vincula posições ao hash do pacote", () 
   assert.match(source, /normalizeAdmissionSignatureLayout\(params\.layout\)/);
   assert.match(source, /layout\.packageHash !== packageHash/);
   assert.match(source, /hashBuffer\(buffer\) !== packageHash/);
-  assert.match(source, /const claimed = await hrDbAdmin\.runTransaction/);
-  assert.match(source, /sendingStartedAt/);
+  // Concurrent claims and stale placement revisions are covered behaviorally in
+  // public-onboarding-clt-submit.test.mjs, including the extracted shared helper.
   const sendStart = source.indexOf("async function sendAdmissionBundle");
   const prepareStart = source.indexOf("async function prepareAdmissionBundle", sendStart);
   const sendSource = source.slice(sendStart, prepareStart);
