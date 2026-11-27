@@ -116,10 +116,15 @@ export async function readOwnRepPMonth(context: ServerUserContext, raw: unknown,
     { automaticAbsence: { workspaceId: context.workspace_id, uid: context.decoded.uid } });
 }
 
+/** Faltas automáticas de uma pessoa num período; consulta única das duas leituras deste arquivo. */
+function automaticAbsencesOfPerson(hrDb: Firestore, workspaceId: string, uid: string, start: string, end: string) {
+  return hrDb.collection(AUTOMATIC_ABSENCES).where('workspaceId', '==', workspaceId).where('employeeUid', '==', uid)
+    .where('workDate', '>=', start).where('workDate', '<=', end).orderBy('workDate');
+}
+
 /** Turnos que a falta automática retirou da escala e que ainda não voltaram a ela. Só os horários. */
 export async function readDisplacedShifts(hrDb: Firestore, workspaceId: string, uid: string, start: string, end: string) {
-  const snapshot = await hrDb.collection(AUTOMATIC_ABSENCES).where('workspaceId', '==', workspaceId).where('employeeUid', '==', uid)
-    .where('workDate', '>=', start).where('workDate', '<=', end).orderBy('workDate').limit(MAX_DISPLACED_RECORDS + 1).get();
+  const snapshot = await automaticAbsencesOfPerson(hrDb, workspaceId, uid, start, end).limit(MAX_DISPLACED_RECORDS + 1).get();
   const shifts = snapshot.docs.filter((doc) => doc.get('scheduleSyncStatus') !== 'restored')
     .flatMap((doc) => (doc.get('displacedShifts') as Array<{ shift?: Record<string, unknown> }> | undefined) ?? [])
     .flatMap(({ shift }) => typeof shift?.date === 'string' ? [{ date: shift.date, type: shift.type === 'day_off' ? 'day_off' as const : 'work' as const,
@@ -140,9 +145,8 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
 
   const [schedules, automaticAbsences] = await Promise.all([
     db.collection('dp_schedules').where('year', '==', year).where('month', '==', month).select('unitId', 'createdAt', 'calendarId', 'publicationStatus', 'publicationVersion', 'activeRevisionId').get(),
-    options.automaticAbsence ? hrDb.collection(AUTOMATIC_ABSENCES)
-      .where('workspaceId', '==', options.automaticAbsence.workspaceId).where('employeeUid', '==', options.automaticAbsence.uid)
-      .where('workDate', '>=', start).where('workDate', '<=', end).orderBy('workDate').limit(32).get() : null,
+    options.automaticAbsence
+      ? automaticAbsencesOfPerson(hrDb, options.automaticAbsence.workspaceId, options.automaticAbsence.uid, start, end).limit(32).get() : null,
   ]);
   const latestByUnit = new Map<string, string>();
   for (const schedule of schedules.docs.filter((item) => hasPublishedScheduleVersion(item.data())).sort((left, right) =>
