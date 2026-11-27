@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { cn } from "@/lib/utils";
 
 import { breakStatus, journeyStartStatus, plannedPausesOf, type BreakLevel } from "./break-status";
-import { currentManualSegment, fiscalClock, minutesOf, workedMinutes, type DayShift, type DayView } from "./day-model";
+import { currentManualSegment, fiscalClock, minutesOf, minutesSince, workedMinutes, type DayShift, type DayView } from "./day-model";
 import { brDate, LocationCaptureNotice, LocationResultNotice, OfficialClockDisplay, ReceiptPill, saveFile } from "./marking-ui";
 import { formatOfficialClock } from "./official-clock";
 import type { useRepPMarking } from "./use-rep-p-marking";
@@ -64,16 +64,22 @@ function nowMinutesIn(timeZone: string | undefined) {
   return Number(parts.find((part) => part.type === "hour")?.value ?? 0) * 60 + Number(parts.find((part) => part.type === "minute")?.value ?? 0);
 }
 
+/** Depois da meia-noite, a jornada aberta pode ser a de ontem: o relógio de agora conta mais um dia. */
+function dayOffsetMinutes(day: DayView, today: string) {
+  return day.shift?.workDateRule && day.date < today ? 1440 : 0;
+}
+
 /** Aviso "Intervalo de hoje" da faixa; recalcula a cada 30 s, sem ler o banco, e nunca bloqueia a batida. */
-function BreakNotice({ day, timeZone }: { day: DayView; timeZone?: string }) {
+function BreakNotice({ day, timeZone, today }: { day: DayView; timeZone?: string; today: string }) {
   const [now, setNow] = useState(() => nowMinutesIn(timeZone));
   const [showNote, setShowNote] = useState(false);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(nowMinutesIn(timeZone)), 30_000);
     return () => window.clearInterval(timer);
   }, [timeZone]);
-  const beforeJourney = journeyStartStatus(day.shift, day.markings, now);
-  const status = beforeJourney ? null : breakStatus(day.shift, day.markings, now);
+  const elapsed = now + dayOffsetMinutes(day, today);
+  const beforeJourney = journeyStartStatus(day.shift, day.markings, elapsed);
+  const status = beforeJourney ? null : breakStatus(day.shift, day.markings, elapsed);
   if ((!status && !beforeJourney) || !day.shift) return null;
   if (beforeJourney) {
     return (
@@ -131,7 +137,7 @@ export function suggestedPurpose(markings: DayView["markings"], shift?: DayShift
       let used = 0;
       for (const marking of markings) {
         const purpose = marking.classification?.purpose;
-        const time = minutesOf(fiscalClock(marking.markedAt));
+        const time = minutesSince(markings[0].markedAt.slice(0, 10), marking.markedAt);
         if (purpose === "break_start") start = time;
         if (purpose === "break_end" && start !== null) { used += Math.max(0, time - start); start = null; }
       }
@@ -244,7 +250,7 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded, dialog
     if (scheduledUnitId && !otherUnit && !pendingAttempt && unitId !== scheduledUnitId) setUnitId(scheduledUnitId);
   }, [scheduledUnitId, otherUnit, pendingAttempt, unitId, setUnitId]);
   const showSelect = !pendingAttempt && units.length > 1 && (!scheduledUnitId || otherUnit);
-  const nowMinutes = (() => { const now = new Date(); return now.getHours() * 60 + now.getMinutes(); })();
+  const nowMinutes = (() => { const now = new Date(); return now.getHours() * 60 + now.getMinutes() + dayOffsetMinutes(day, marking.today); })();
   const blocked = options && !options.markingEnabled;
   const pilot = options?.mode === "pilot";
   const ineligible = options && options.markingEnabled && units.length === 0;
@@ -287,7 +293,7 @@ export function RecordStrip({ marking, day, today, onOpenDay, onRecorded, dialog
           <button type="button" onClick={onOpenDay} className="block text-left" aria-label="Ver as batidas de hoje">
             <MarkingSequence day={day} today={today} dark highlightNext />
           </button>
-          <BreakNotice day={day} timeZone={unitClock?.available ? unitClock.timeZone : undefined} />
+          <BreakNotice day={day} today={marking.today} timeZone={unitClock?.available ? unitClock.timeZone : undefined} />
           {work?.assignmentKind === 'external_coverage' && scheduledUnitId ? (
             <p className="text-[11px] font-semibold text-ds-on-dark-2">Você foi escalado excepcionalmente para {work.unitName ?? unitName ?? 'esta unidade'} nesta data.</p>
           ) : null}

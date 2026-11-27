@@ -64,7 +64,7 @@ export function closureDayRow(day: DayView, input: { today: string; adjustments:
   if (day.incidents.length) return row("warning");
   if (day.absence) return row("absence");
   // O cálculo do dia não gera falta nem batida ímpar em turno que atravessa a meia-noite: sem alerta não é "sem ocorrência".
-  if (day.shift?.type === "work" && day.shift.overnight) return row("overnight");
+  if (day.shift?.type === "work" && (day.shift.overnight || day.shift.workDateRule)) return row("overnight");
   if (day.shift?.type === "day_off") return row("day_off");
   if (!day.shift) return row(day.markings.length ? "clear" : "unscheduled");
   return row("clear");

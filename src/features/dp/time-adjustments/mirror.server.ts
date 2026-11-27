@@ -71,7 +71,7 @@ async function buildSnapshot(deps: Dependencies, workspaceId: string, competence
   const { start, end } = competenceRange(competence);
   const user = await deps.mainDb.collection('users').doc(uid).get();
   const [arp, month, reference] = await Promise.all([
-    readRepPMarkingsForMirror(workspaceId, uid, start, end, { repDb: deps.repDb }),
+    readRepPMarkingsForMirror(workspaceId, uid, start, end, { repDb: deps.repDb, mainDb: deps.mainDb, hrDb: deps.hrDb }),
     readRepPMonthOfPerson([uid, text(user.get('hrEmployeeId'))], competence, { db: deps.mainDb }),
     resolveEmploymentReferenceForSystem({ workspaceId, userId: uid, date: end, database: deps.mainDb }),
   ]);

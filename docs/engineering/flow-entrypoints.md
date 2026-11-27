@@ -156,7 +156,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/page.tsx`](../../src/app/dashboard/collaborator/page.tsx).
 
-Arquivos locais percorridos: 54.
+Arquivos locais percorridos: 55.
 
 Chamadas candidatas encontradas:
 

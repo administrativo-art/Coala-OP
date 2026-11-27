@@ -5,7 +5,7 @@ import { FieldPath, type Firestore, type Transaction } from 'firebase-admin/fire
 
 import { readRepPMonthOfPerson } from '@/features/dp/rep-p/own-month.server';
 import { policyTargetOf } from '@/features/dp/time-config/policy-tolerance.server';
-import { activeOvertimePolicy } from '@/features/dp/time-config/rollout.server';
+import { activeOvertimePolicy, nightShiftEnabled } from '@/features/dp/time-config/rollout.server';
 import { readRepPMarkingsForMirror, readRepPPilotMarkingsForBank } from '@/features/dp/rep-p/service.server';
 import type { AbsenceRequestRecord } from '@/features/dp/absences/requests/workflow-types';
 import { competenceRange, sha256, type ClosureAdjustment, type ClosurePerson } from '@/features/dp/time-adjustments/closure-core';
@@ -157,7 +157,7 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
       : liveDeclaration(deps, workspaceId, competence, uid),
   ]);
   const [arp, pilot, month] = await Promise.all([
-    readRepPMarkingsForMirror(workspaceId, uid, start, end, { repDb: deps.repDb }),
+    readRepPMarkingsForMirror(workspaceId, uid, start, end, { repDb: deps.repDb, mainDb: deps.mainDb, hrDb: deps.hrDb }),
     closure ? Promise.resolve({ markings: [], truncated: false })
       : readRepPPilotMarkingsForBank(workspaceId, uid, start, end, { repDb: deps.repDb }),
     readRepPMonthOfPerson([uid, text(user.get('hrEmployeeId'))], competence, { db: deps.mainDb }, { holidays: true }),
@@ -178,7 +178,12 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
   }));
   const holidays = new Set(month.holidays);
   const sourceMarkings = [...arp.markings, ...pilot.markings];
-  const datedMarkings = sourceMarkings.map((item) => ({ ...item, bankWorkDate: overnightWorkDate(item.workDate, item.markedAt, month.shifts) }));
+  // Com o turno noturno ligado, a leitura oficial já vem no dia do turno; reaplicar a regra antiga a deslocaria de novo.
+  const legacyDate = (item: { workDate: string; markedAt: string }) => overnightWorkDate(item.workDate, item.markedAt, month.shifts);
+  const datedMarkings = [
+    ...arp.markings.map((item) => ({ ...item, bankWorkDate: nightShiftEnabled() ? item.workDate : legacyDate(item) })),
+    ...pilot.markings.map((item) => ({ ...item, bankWorkDate: legacyDate(item) })),
+  ];
   const usedPolicies = new Map<string, { id: string; version: number }>();
   const days: BankDay[] = [];
   for (let cursor = Date.parse(`${start}T00:00:00Z`); cursor <= Date.parse(`${end}T00:00:00Z`); cursor += 86_400_000) {
@@ -198,6 +203,7 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
       startTime: first ? (first.manualMode === 'fixed' ? first.startTime : null) : raw.startTime,
       endTime: last ? (last.manualMode === 'fixed' ? last.endTime : null) : raw.endTime,
       overnight: raw.overnight,
+      ...(raw.workDateRule ? { workDateRule: true } : {}),
       plannedMinutes: pieces.length ? pieces.reduce((total, item) => total + (plannedMinutesOf(item) ?? 0), 0) : plannedMinutesOf(raw),
       referenceMinutes: raw.referenceMinutes, toleranceMinutes: raw.toleranceMinutes, journeyId: raw.journeyId,
       // Dia manual tem pausas próprias: o intervalo previsto do turno não se aplica.
