@@ -29,6 +29,8 @@ export type DayShift = {
   breakWindowEnd: string | null;
   expectedPunches: number | null;
   overnight?: boolean;
+  /** Turno que passa da meia-noite com `DP_TIME_NIGHT_SHIFT_ENABLED` ligada: as batidas já vêm no dia dele. */
+  workDateRule?: boolean;
   unitId?: string | null;
   executionUnitPolicy?: "scheduled" | "free";
   /** O detalhe só apresenta o resultado geográfico quando o turno daquele dia pediu coleta. */
@@ -110,7 +112,7 @@ function clockOf(minutes: number) {
 
 /** Dia na Política de jornada de cobertura: turno de trabalho comum, com carga conhecida maior que o turno. */
 export function coverageOf(shift: DayShift | null, manualSegments: DayShift[]) {
-  if (!shift || shift.type !== "work" || !shift.coverage || shift.overnight || manualSegments.length) return null;
+  if (!shift || shift.type !== "work" || !shift.coverage || shift.overnight || shift.workDateRule || manualSegments.length) return null;
   const reference = shift.referenceMinutes ?? null;
   const planned = plannedWorkMinutesOf(shift);
   if (!shift.startTime || reference === null || planned === null || reference <= planned) return null;
@@ -148,15 +150,27 @@ export function fiscalClock(markedAt: string) {
   return markedAt.slice(11, 16);
 }
 
+/** Minutos contados a partir da meia-noite de `date`: a batida do dia seguinte passa de 1440. */
+export function minutesSince(date: string, markedAt: string) {
+  const days = (Date.parse(`${markedAt.slice(0, 10)}T00:00:00Z`) - Date.parse(`${date}T00:00:00Z`)) / 86_400_000;
+  return days * 1440 + minutesOf(fiscalClock(markedAt));
+}
+
+/** `nowMinutes` conta a partir da meia-noite do dia da primeira batida. */
 export function workedMinutes(markings: Pick<DayMarking, "markedAt">[], nowMinutes?: number) {
   let total = 0;
   for (let index = 0; index < markings.length; index += 2) {
-    const start = minutesOf(fiscalClock(markings[index].markedAt));
+    const first = markings[0].markedAt.slice(0, 10);
+    const start = minutesSince(first, markings[index].markedAt);
     const next = markings[index + 1];
-    const end = next ? minutesOf(fiscalClock(next.markedAt)) : nowMinutes;
+    const end = next ? minutesSince(first, next.markedAt) : nowMinutes;
     if (end !== undefined) total += Math.max(0, end - start);
   }
   return total;
+}
+
+function minutesBetween(start: string, end: string) {
+  return minutesSince(start.slice(0, 10), end) - minutesSince(start.slice(0, 10), start);
 }
 
 /** Soma das pausas entre pares (2ª→3ª, 4ª→5ª…); null sem pausa fechada. */
@@ -164,7 +178,7 @@ export function breakTaken(markings: Pick<DayMarking, "markedAt">[]) {
   if (markings.length < 3) return null;
   let total = 0;
   for (let index = 1; index + 1 < markings.length; index += 2) {
-    total += minutesOf(fiscalClock(markings[index + 1].markedAt)) - minutesOf(fiscalClock(markings[index].markedAt));
+    total += minutesBetween(markings[index].markedAt, markings[index + 1].markedAt);
   }
   return total;
 }
@@ -173,7 +187,7 @@ export function breakTaken(markings: Pick<DayMarking, "markedAt">[]) {
 export function pauseLengths(markings: Pick<DayMarking, "markedAt">[]) {
   const lengths: number[] = [];
   for (let index = 1; index + 1 < markings.length; index += 2) {
-    lengths.push(minutesOf(fiscalClock(markings[index + 1].markedAt)) - minutesOf(fiscalClock(markings[index].markedAt)));
+    lengths.push(minutesBetween(markings[index].markedAt, markings[index + 1].markedAt));
   }
   return lengths;
 }
@@ -219,23 +233,29 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
   const intrajornada = past && shift?.intrajornada && shift.policyTolerances && markings.length >= 2 && markings.length % 2 === 0
     ? assessBreak({ workedMinutes: worked, pauses: pauseLengths(markings), plannedWorkMinutes: plannedWorkMinutes,
       scheduledBreakMinutes: plannedBreakMinutesOf(shift), coverage: Boolean(coverage), split: shift.breakSplit,
-      minPauseMinutes: shift.breakMinPauseMinutes, unsupported: Boolean(shift.overnight) || manualSegments.length > 0,
+      minPauseMinutes: shift.breakMinPauseMinutes, unsupported: Boolean(shift.overnight || shift.workDateRule) || manualSegments.length > 0,
       tolerances: shift.policyTolerances })
     : null;
   const intrajornadaView = !intrajornada || intrajornada.status === 'ok' ? {}
     : intrajornada.status === 'pay' ? { suppressedBreakMinutes: intrajornada.minutes } : { breakReview: intrajornada.reason };
 
   // Jornada que atravessa a meia-noite tem batidas em dois dias civis: sem tratamento, só o total é mostrado.
-  if (shift?.overnight) {
+  if (shift?.overnight || shift?.workDateRule) {
     if (intrajornada && intrajornada.status !== 'ok') incidents.push("short_break");
+    // Com as batidas já no dia do turno, falta e batida ímpar valem. Como a saída cai no dia seguinte, o dia só é
+    // cobrado depois que esse dia seguinte também terminou.
+    if (shift.workDateRule && input.date < new Date(Date.parse(`${input.today}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10)) {
+      if (!markings.length && !absence) incidents.push("missing");
+      if (markings.length % 2 === 1) incidents.push("odd");
+    }
     return { ...intrajornadaView, date: input.date, shift: input.shift, manualSegments, markings, allMarkings, absence, incidents, workedMinutes: worked, breakMinutes,
       plannedWorkMinutes, nightMinutes, balanceMinutes: null, deviation };
   }
   if (past && shift && !markings.length && !absence) incidents.push("missing");
   if (past && markings.length % 2 === 1) incidents.push("odd");
   if (shift && !manualSegments.length && markings.length >= 2 && markings.length % 2 === 0 && shift.startTime && shift.endTime) {
-    const endDiff = minutesOf(fiscalClock(markings[markings.length - 1].markedAt)) - minutesOf(shift.endTime);
-    const startDiff = minutesOf(fiscalClock(markings[0].markedAt)) - minutesOf(shift.startTime);
+    const endDiff = minutesSince(input.date, markings[markings.length - 1].markedAt) - minutesOf(shift.endTime);
+    const startDiff = minutesSince(input.date, markings[0].markedAt) - minutesOf(shift.startTime);
     // Tolerância só no início e no fim da jornada (decisão de 25/11/2026). Na cobertura, ficar além do turno até
     // completar a carga é esperado: a saída tardia conta pelos minutos trabalhados acima da carga.
     const lateBeyondCoverage = coverage ? worked > coverage.reference + tolerance : endDiff > tolerance;
@@ -289,9 +309,9 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
   if (difference !== null && shift?.policyTolerances) {
     let considered = worked;
     if (shift.startTime && shift.endTime && !manualSegments.length) {
-      const early = minutesOf(shift.startTime) - minutesOf(fiscalClock(markings[0]?.markedAt ?? `0000-00-00T${shift.startTime}`));
+      const early = markings.length ? minutesOf(shift.startTime) - minutesSince(input.date, markings[0].markedAt) : 0;
       const end = coverage ? minutesOf(shift.startTime) + coverage.reference + COVERAGE_LONG_DAY_BREAK_MINUTES : minutesOf(shift.endTime);
-      const late = markings.length ? minutesOf(fiscalClock(markings[markings.length - 1].markedAt)) - end : 0;
+      const late = markings.length ? minutesSince(input.date, markings[markings.length - 1].markedAt) - end : 0;
       if (markings.length) considered = worked - absorbedEdgeMinutes([early, late], shift.policyTolerances).minutes;
     }
     balanceMinutes = differenceOf(considered);

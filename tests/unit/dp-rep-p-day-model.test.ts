@@ -74,7 +74,28 @@ describe('Leitura do dia no Registro de ponto', () => {
     assert.deepEqual(day.markings.map((item) => item.nsr), [11, 12]);
   });
 
-  it('jornada que atravessa a meia-noite não gera aviso nem saldo', () => {
+  it('turno da noite com a regra ligada: falta e batida ímpar valem depois que o dia seguinte termina', () => {
+    const night = { ...shift, startTime: '22:00', endTime: '06:00', overnight: true, workDateRule: true };
+    const view = (today: string, markings: ReturnType<typeof mark>[]) => buildDayView({ date: '2026-10-10', today, shift: night, absences: [], markings });
+    assert.deepEqual(view('2026-10-19', []).incidents, ['missing']);
+    assert.deepEqual(view('2026-10-11', [mark('2026-10-10', '22:00', 1)]).incidents, [], 'na manhã seguinte o turno ainda pode estar aberto');
+    assert.deepEqual(view('2026-10-12', [mark('2026-10-10', '22:00', 1)]).incidents, ['odd']);
+    const complete = view('2026-10-19', [mark('2026-10-10', '22:00', 1), mark('2026-10-11', '01:00', 2), mark('2026-10-11', '02:00', 3), mark('2026-10-11', '06:00', 4)]);
+    assert.deepEqual(complete.incidents, []);
+    assert.equal(complete.workedMinutes, 420);
+    assert.equal(complete.breakMinutes, 60);
+    assert.equal(complete.balanceMinutes, null);
+  });
+
+  it('saída depois da meia-noite em turno que acaba antes dela conta como saída tardia, não antecipada', () => {
+    const day = buildDayView({ date: '2026-10-12', today: '2026-10-19', shift: { ...shift, startTime: '14:00', endTime: '22:00', breakType: 'none' as const }, absences: [],
+      markings: [mark('2026-10-12', '14:00', 1), mark('2026-10-13', '00:20', 2)] });
+    assert.equal(day.workedMinutes, 620);
+    assert.deepEqual(day.incidents, ['late_exit']);
+    assert.deepEqual(day.deviation, { edge: 'end', minutes: 140 });
+  });
+
+  it('sem a regra ligada, jornada que atravessa a meia-noite não gera aviso nem saldo', () => {
     const night = buildDayView({ date: '2026-10-10', today: '2026-10-19', shift: { ...shift, startTime: '22:00', endTime: '06:00', overnight: true }, absences: [], markings: [] });
     assert.deepEqual(night.incidents, []);
     assert.equal(night.balanceMinutes, null);

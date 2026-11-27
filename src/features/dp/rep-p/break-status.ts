@@ -3,7 +3,7 @@
  * escalado de hoje e pelas classificações declaradas pelo colaborador. A sugestão nunca reclassifica uma batida,
  * nunca bloqueia o registro (art. 74) e não é apuração.
  */
-import { COVERAGE_LONG_DAY_BREAK_MINUTES, coverageOf, fiscalClock, minutesOf, plannedBreakMinutesOf, type DayMarking, type DayShift } from "./day-model";
+import { COVERAGE_LONG_DAY_BREAK_MINUTES, coverageOf, minutesOf, minutesSince, plannedBreakMinutesOf, type DayMarking, type DayShift } from "./day-model";
 
 // Antecedência dos avisos: provisória até decisão do programador.
 export const BREAK_INFO_AHEAD_MINUTES = 15;
@@ -80,7 +80,8 @@ function turnBreakStatus(shift: DayShift | null, markings: Pick<DayMarking, "mar
   const closed: { start: number; end: number }[] = [];
   let pauseStart: number | null = null;
   for (const marking of classified) {
-    const time = minutesOf(fiscalClock(marking.markedAt));
+    // Conta a partir do dia da primeira batida: a pausa pode atravessar a meia-noite.
+    const time = minutesSince(classified[0].markedAt.slice(0, 10), marking.markedAt);
     if (marking.classification?.purpose === "break_start") pauseStart = time;
     if (marking.classification?.purpose === "break_end" && pauseStart !== null) {
       closed.push({ start: pauseStart, end: time });

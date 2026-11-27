@@ -399,3 +399,195 @@ test('dia inteiro do pedido: batidas, tratamentos aprovados e histórico, só pa
   // Sem mistura nos dois sentidos: com batida de ensaio no mesmo dia, o pedido oficial continua lendo só as oficiais.
   assert.deepEqual((await readAdjustmentDayContext(reviewer, `${prefix}-main`, deps)).markings.map((item) => item.nsr), [4, 5]);
 });
+
+test('turno que passa da meia-noite: com a chave ligada, a saída do dia seguinte é ajustada no dia do turno', async (t) => {
+  const previous = process.env.DP_TIME_NIGHT_SHIFT_ENABLED;
+  t.after(() => { if (previous === undefined) delete process.env.DP_TIME_NIGHT_SHIFT_ENABLED; else process.env.DP_TIME_NIGHT_SHIFT_ENABLED = previous; });
+  const prefix = `night-${randomUUID().slice(0, 6)}`;
+  const workspaceId = `${prefix}-ws`;
+  const userId = `${prefix}-employee`;
+  const unitId = `${prefix}-unit`;
+  // Turno que começa no último dia do mês e termina no mês seguinte.
+  const workDate = '2026-09-30';
+  const nextDate = '2026-10-01';
+  const clock = { async read() { return { instant: new Date('2026-10-02T12:00:00.000Z') }; } };
+  const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: repPDbAdmin, clock };
+  const admin = { decoded: { uid: `${prefix}-admin` }, userDoc: { id: `${prefix}-admin` }, profileId: null,
+    permissions: structuredClone(defaultAdminPermissions), isDefaultAdmin: true, workspace_id: workspaceId };
+  const titular = { decoded: { uid: userId }, userDoc: { id: userId, username: 'Maria', unitIds: [unitId] }, profileId: null,
+    permissions: structuredClone(defaultGuestPermissions), isDefaultAdmin: false, workspace_id: workspaceId };
+  titular.permissions.app.timeRecording.mark = true;
+  const schedule = dbAdmin.collection('dp_schedules').doc(`${prefix}-schedule`);
+  await Promise.all([
+    dbAdmin.collection('dp_units').doc(unitId).set({ name: 'Quiosque', address: 'Rua fiscal, 1', cnpj: '14276603000125', timeZone: 'America/Fortaleza' }),
+    dbAdmin.collection('users').doc(userId).set({ isActive: true, unitId, unitIds: [unitId] }),
+    schedule.set({ year: 2026, month: 9, unitId, publicationStatus: 'published', publicationVersion: 1, createdAt: new Date('2026-08-20T12:00:00Z') }),
+    schedule.collection('shifts').doc('night').set({ scheduleId: schedule.id, userId, unitId, type: 'work', date: workDate,
+      startTime: '18:00', endTime: '00:00', overnight: true }),
+  ]);
+  await publishEmploymentReference(admin, { userId, expectedRevision: 0, requestId: `${prefix}-ref`, periods: [{
+    validFrom: '2026-01-01', employmentRelationshipType: 'clt', employerUnitId: unitId, unitId, unitIds: [unitId],
+    jobFunctionIds: [], sourceDocumentId: 'admission', sourceReason: 'Admissão conferida para o ensaio' }] });
+  const receiptId = `${prefix}-receipt`;
+  const sameDayReceiptId = `${prefix}-receipt-start`;
+  const seed = (id, recordedDate, time, nsr) => repPDbAdmin.collection('repP_receipts').doc(id).set({ workspaceId, employeeId: userId, recordedDate,
+    status: 'issued', snapshot: { nsr, markedAt: `${recordedDate}T${time}:00-0300`, executionUnitId: unitId } });
+  await Promise.all([seed(sameDayReceiptId, workDate, '18:02', 30), seed(receiptId, nextDate, '01:10', 31)]);
+  const request = (overrides) => ({ attemptId: randomUUID(), workDate, reason: 'Saí depois da meia-noite no fechamento do quiosque.', ...overrides });
+
+  process.env.DP_TIME_NIGHT_SHIFT_ENABLED = 'false';
+  await assert.rejects(createOwnAdjustment(titular, request({ kind: 'discard', targetReceiptId: receiptId }), deps),
+    { code: 'PTRP_ADJUSTMENT_TARGET_INVALID' }, 'desligada, a batida continua valendo só na data civil');
+
+  process.env.DP_TIME_NIGHT_SHIFT_ENABLED = 'true';
+  // A mesma batida não pode ser pedida nos dois dias.
+  await assert.rejects(createOwnAdjustment(titular, request({ workDate: nextDate, kind: 'discard', targetReceiptId: receiptId }), deps),
+    { code: 'PTRP_ADJUSTMENT_TARGET_INVALID' });
+  await assert.rejects(createOwnAdjustment(titular, request({ workDate: nextDate, kind: 'include', newTime: '00:40' }), deps),
+    { code: 'PTRP_ADJUSTMENT_OTHER_SHIFT' });
+  const included = await createOwnAdjustment(titular, request({ kind: 'include', newTime: '00:30' }), deps);
+  assert.equal(included.inclusion.markedAt, `${nextDate}T00:30:00-0300`);
+  assert.equal(included.workDate, workDate);
+  const entry = await createOwnAdjustment(titular, request({ kind: 'include', newTime: '17:55' }), deps);
+  assert.equal(entry.inclusion.markedAt, `${workDate}T17:55:00-0300`);
+  const corrected = await createOwnAdjustment(titular, request({ kind: 'correct', targetReceiptId: receiptId, newTime: '00:45' }), deps);
+  assert.equal(corrected.target.markedAt, `${nextDate}T01:10:00-0300`);
+  assert.equal(corrected.inclusion.markedAt, `${nextDate}T00:45:00-0300`);
+  await assert.rejects(createOwnAdjustment(titular, request({ kind: 'discard', targetReceiptId: receiptId }), deps),
+    { code: 'PTRP_ADJUSTMENT_DUPLICATE' });
+});
+
+test('turno que passa da meia-noite: leitores, alertas e falta automática chegam ao mesmo dia', async (t) => {
+  const previous = process.env.DP_TIME_NIGHT_SHIFT_ENABLED;
+  t.after(() => { if (previous === undefined) delete process.env.DP_TIME_NIGHT_SHIFT_ENABLED; else process.env.DP_TIME_NIGHT_SHIFT_ENABLED = previous; });
+  const { listRepPMarkingsOfPerson, readClosureMarkings, readRepPMarkingsForMirror } = await import('../../src/features/dp/rep-p/service.server.ts');
+  const { readRepPMonthOfPerson } = await import('../../src/features/dp/rep-p/own-month.server.ts');
+  const { readWorkDateShifts } = await import('../../src/features/dp/time-bank/work-date.server.ts');
+  const { buildMonthView } = await import('../../src/features/dp/rep-p/day-model.ts');
+  const { registerOverdueAutomaticAbsences, AUTOMATIC_ABSENCES } = await import('../../src/features/dp/time-adjustments/automatic-absence.server.ts');
+  const prefix = `reader-${randomUUID().slice(0, 6)}`;
+  const workspaceId = `${prefix}-ws`;
+  const uid = `${prefix}-employee`;
+  const unitId = `${prefix}-unit`;
+  const sources = { mainDb: dbAdmin, hrDb: hrDbAdmin };
+  const schedule = dbAdmin.collection('dp_schedules').doc(`${prefix}-schedule`);
+  // Mês próprio deste caso, para a varredura da falta automática não alcançar os turnos dos outros.
+  const night = schedule.collection('shifts').doc(`${prefix}-night`);
+  await Promise.all([
+    dbAdmin.collection('dp_units').doc(unitId).set({ name: 'Quiosque', timeZone: 'America/Fortaleza' }),
+    dbAdmin.collection('users').doc(uid).set({ isActive: true, unitId, unitIds: [unitId] }),
+    schedule.set({ year: 2025, month: 6, unitId, publicationStatus: 'published', publicationVersion: 1, createdAt: new Date('2025-05-20T12:00:00Z') }),
+    night.set({ scheduleId: schedule.id, userId: uid, unitId, type: 'work', date: '2025-06-30', startTime: '22:00', endTime: '06:00', overnight: true }),
+  ]);
+  const seed = (id, recordedDate, time, nsr) => repPDbAdmin.collection('repP_receipts').doc(`${prefix}-${id}`).set({ workspaceId, employeeId: uid, recordedDate,
+    status: 'issued', snapshot: { nsr, markedAt: `${recordedDate}T${time}:00-0300`, executionUnitId: unitId, employeeName: 'Maria', employeeCpf: '00000000000' } });
+  await seed('exit', '2025-07-01', '06:03', 2);
+
+  const read = async (start, end) => ({
+    history: (await listRepPMarkingsOfPerson(workspaceId, uid, { startDate: start, endDate: end }, { repDb: repPDbAdmin, pilotDb: hrDbAdmin, hrDb: hrDbAdmin, mainDb: dbAdmin })).markings.map((item) => item.workDate),
+    closure: (await readClosureMarkings(repPDbAdmin, workspaceId, uid, start, end, sources)).map((item) => item.workDate),
+    mirror: (await readRepPMarkingsForMirror(workspaceId, uid, start, end, { repDb: repPDbAdmin, ...sources })).markings.map((item) => item.workDate),
+  });
+  const same = (dates) => ({ history: dates, closure: dates, mirror: dates });
+  const june = ['2025-06-01', '2025-06-30'];
+  const july = ['2025-07-01', '2025-07-31'];
+
+  process.env.DP_TIME_NIGHT_SHIFT_ENABLED = 'false';
+  assert.deepEqual(await read(...june), same([]));
+  assert.deepEqual(await read(...july), same(['2025-07-01']));
+  assert.equal((await readRepPMonthOfPerson([uid], '2025-06', { db: dbAdmin })).shifts[0].workDateRule, undefined);
+
+  process.env.DP_TIME_NIGHT_SHIFT_ENABLED = 'true';
+  assert.deepEqual(await read(...june), same(['2025-06-30']));
+  assert.deepEqual(await read(...july), same([]));
+
+  // Só a saída, depois da meia-noite: há batida no dia do turno, então a rotina não lança falta.
+  const stats = await registerOverdueAutomaticAbsences(workspaceId, { lookbackDays: 3 }, { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: repPDbAdmin,
+    now: () => new Date('2025-07-03T15:00:00Z') });
+  assert.equal(stats.withMarking, 1);
+  assert.equal(stats.created, 0);
+  assert.equal((await hrDbAdmin.collection(AUTOMATIC_ABSENCES).where('workspaceId', '==', workspaceId).get()).size, 0);
+
+  const incidents = async () => {
+    const month = await readRepPMonthOfPerson([uid], '2025-06', { db: dbAdmin });
+    return buildMonthView({ month: '2025-06', today: '9999-12-31', shifts: month.shifts,
+      markings: await readClosureMarkings(repPDbAdmin, workspaceId, uid, ...june, sources), absences: [] }).find((day) => day.date === '2025-06-30').incidents;
+  };
+  assert.deepEqual(await incidents(), ['odd'], 'jornada incompleta passa a ser apontada');
+  await seed('entry', '2025-06-30', '22:00', 1);
+  assert.deepEqual(await incidents(), [], 'jornada completa não trava');
+  // Mesmo caminho do fechamento: a jornada completa não gera alerta; sem a saída, gera.
+  const { checkPersonAlerts } = await import('../../src/features/dp/time-adjustments/closure-alert-check.server.ts');
+  const actor = { decoded: { uid: `${prefix}-admin` }, userDoc: { id: `${prefix}-admin` }, profileId: null,
+    permissions: structuredClone(defaultAdminPermissions), isDefaultAdmin: true, workspace_id: workspaceId };
+  const nightAlerts = async () => (await checkPersonAlerts({ ...sources, repDb: repPDbAdmin }, actor, '2025-06', 0, { uid, absences: [] }, []))
+    .filter((item) => item.alert.date === '2025-06-30').map((item) => item.alert.incidents);
+  assert.deepEqual(await nightAlerts(), []);
+  const exit = repPDbAdmin.collection('repP_receipts').doc(`${prefix}-exit`);
+  const exitData = (await exit.get()).data();
+  await exit.delete();
+  assert.deepEqual(await nightAlerts(), [['odd']]);
+  await exit.set(exitData);
+
+  // Turno retirado da escala pela falta automática continua decidindo o dia, até ser restaurado.
+  const removed = (await night.get()).data();
+  await night.delete();
+  const record = hrDbAdmin.collection(AUTOMATIC_ABSENCES).doc(`${prefix}-absence`);
+  await record.set({ workspaceId, employeeUid: uid, workDate: '2025-06-30', status: 'active', scheduleSyncStatus: 'removed',
+    displacedShifts: [{ scheduleId: schedule.id, shiftId: night.id, shift: removed }] });
+  assert.deepEqual((await readWorkDateShifts(workspaceId, uid, '2025-06-30', '2025-06-30', sources)).map((shift) => [shift.date, shift.endTime]), [['2025-06-30', '06:00']]);
+  await record.update({ scheduleSyncStatus: 'restored' });
+  assert.deepEqual(await readWorkDateShifts(workspaceId, uid, '2025-06-30', '2025-06-30', sources), []);
+});
+
+test('turno que passa da meia-noite: o AEJ lê o dia seguinte e não inclui quem só aparece nele', async (t) => {
+  const previous = process.env.DP_TIME_NIGHT_SHIFT_ENABLED;
+  t.after(() => { if (previous === undefined) delete process.env.DP_TIME_NIGHT_SHIFT_ENABLED; else process.env.DP_TIME_NIGHT_SHIFT_ENABLED = previous; });
+  const { exportAej } = await import('../../src/features/dp/time-adjustments/aej.server.ts');
+  const prefix = `aej-night-${randomUUID().slice(0, 6)}`;
+  const workspaceId = `${prefix}-ws`;
+  const nightUid = `${prefix}-night-person`;
+  const otherUid = `${prefix}-other-person`;
+  const unitId = `${prefix}-unit`;
+  const admin = { decoded: { uid: `${prefix}-admin` }, userDoc: { id: `${prefix}-admin` }, profileId: null,
+    permissions: structuredClone(defaultAdminPermissions), isDefaultAdmin: true, workspace_id: workspaceId };
+  const schedule = dbAdmin.collection('dp_schedules').doc(`${prefix}-schedule`);
+  await Promise.all([
+    dbAdmin.collection('users').doc(nightUid).set({ isActive: true, unitId, unitIds: [unitId] }),
+    dbAdmin.collection('users').doc(otherUid).set({ isActive: true, unitId, unitIds: [unitId] }),
+    schedule.set({ year: 2025, month: 4, unitId, publicationStatus: 'published', publicationVersion: 1, createdAt: new Date('2025-03-20T12:00:00Z') }),
+    schedule.collection('shifts').doc(`${prefix}-night`).set({ scheduleId: schedule.id, userId: nightUid, unitId, type: 'work', date: '2025-04-30',
+      startTime: '22:00', endTime: '06:00', overnight: true }),
+    hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_2025-04`).set({ workspaceId, competence: '2025-04', status: 'closed', version: 1 }),
+  ]);
+  const punch = (receiptId, nsr, employeeCpf, workDate, time) => ({ receiptId, nsr, employeeCpf, workDate, markedAt: `${workDate}T${time}:00-0300` });
+  const all = [punch('a', 1, '52998224725', '2025-04-30', '22:00'), punch('b', 2, '52998224725', '2025-05-01', '06:00'),
+    punch('c', 3, '11144477735', '2025-05-01', '08:00')];
+  const asked = [];
+  const readArp = async (_workspace, establishmentId, startDate, endDate) => {
+    asked.push([startDate, endDate]);
+    return { profile: { establishmentId, employerCnpj: '14276603000125', employerLegalName: 'Empregador do ensaio LTDA', inpiRegistration: '512026000001', developerCnpj: '14276603000125' },
+      timeZone: 'America/Fortaleza', generatedAt: '2025-05-03T09:00:00-0300', markings: all.filter((item) => item.workDate >= startDate && item.workDate <= endDate),
+      people: [{ cpf: '52998224725', uid: nightUid, name: 'Pessoa Noturna' }, { cpf: '11144477735', uid: otherUid, name: 'Pessoa de Maio' }] };
+  };
+  let generation = 0;
+  const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: repPDbAdmin, developerEmail: 'dev@exemplo.com', readArp,
+    readIdentity: async () => { throw new Error('sem uso'); }, readBank: async () => ({ days: [] }), readMovements: async () => [],
+    sign: async () => ({ bytes: Buffer.from('p7s'), format: 'CAdES', detached: true, certificateCnpj: '14276603000125' }),
+    fiscalStore: { async put(path, bytes, contentType, sha256, retainUntilTime) {
+      generation += 1; return { bucket: 'fiscal-test', generation: String(generation), retainUntilTime, retentionMode: 'Locked' }; } } };
+  const input = { establishmentId: `${prefix}-establishment`, startDate: '2025-04-01', endDate: '2025-04-30' };
+  const linesOf = (aej) => Buffer.from(aej.aejBase64, 'base64').toString('latin1').split('\r\n');
+
+  process.env.DP_TIME_NIGHT_SHIFT_ENABLED = 'true';
+  const lines = linesOf(await exportAej(admin, input, deps));
+  assert.deepEqual(asked.at(-1), ['2025-04-01', '2025-05-01']);
+  assert.deepEqual(lines.filter((line) => line.startsWith('03|')), ['03|1|52998224725|Pessoa Noturna']);
+  assert.deepEqual(lines.filter((line) => line.startsWith('05|')).map((line) => line.split('|').slice(2, 6).join('|')),
+    ['2025-04-30T22:00:00-0300|1|E|001', '2025-05-01T06:00:00-0300|1|S|001']);
+
+  process.env.DP_TIME_NIGHT_SHIFT_ENABLED = 'false';
+  const legacy = linesOf(await exportAej(admin, input, deps));
+  assert.deepEqual(asked.at(-1), ['2025-04-01', '2025-04-30']);
+  assert.equal(legacy.filter((line) => line.startsWith('05|')).length, 1);
+});
