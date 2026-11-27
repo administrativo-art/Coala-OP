@@ -312,3 +312,9 @@ arredondada em reais inteiros no corte de R$ 0,40; prévia e resolvedor usam o
 mesmo helper e preservam exceções manuais. InfoPopover explica alcance e
 exemplos. Ver [preços e custo](flows/pricing.md). Cobertura dirigida da regra,
 sem declarar homologação global de todos os fluxos de precificação.
+
+27/11/2026 — Controle de estoque: normalização de ausência de lote/validade nas
+novas entradas e agrupamento dos saldos legados sem reescrever IDs/histórico.
+Ações continuam por registro físico, selecionado no painel; ver
+[stock-control](flows/stock-control.md). Testes dirigidos não substituem a
+verificação integrada pendente do fluxo.

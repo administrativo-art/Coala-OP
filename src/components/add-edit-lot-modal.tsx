@@ -25,6 +25,7 @@ import {
   pickClass,
 } from './stock/lot-modal-shell';
 import { productInitials, productSpecLine } from './stock/lot-presentation';
+import { canReceiveUntrackedStock, missingDatedStockLotNumberMessage, stockLotNumber, untrackedStockLotId } from '@/lib/stock-lot-identity';
 
 const BarcodeScannerModal = dynamic(
   () => import('@/components/barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
@@ -32,12 +33,15 @@ const BarcodeScannerModal = dynamic(
 );
 
 const lotFormSchema = z.object({
-  lotNumber: z.string().min(1, 'O número do lote é obrigatório.'),
+  lotNumber: z.string(),
   expiryDate: z.date().optional().nullable(),
   kioskId: z.string().min(1, 'O quiosque é obrigatório.'),
   locationId: z.string().optional(),
   quantity: z.coerce.number().min(0.01, 'A quantidade deve ser maior que zero.'),
   imageUrl: z.string().optional(),
+}).refine(values => !values.expiryDate || !!values.lotNumber.trim(), {
+  path: ['lotNumber'],
+  message: missingDatedStockLotNumberMessage,
 });
 
 type LotFormValues = z.infer<typeof lotFormSchema>;
@@ -104,10 +108,13 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
 
   // Lote já existente com a mesma chave: o cadastro soma na quantidade dele.
   const mergeTarget = useMemo(() => {
-    if (isEditing || !selectedProduct || !selectedKioskId || !lotNumber.trim()) return null;
+    if (isEditing || !selectedProduct || !selectedKioskId) return null;
     const dayKey = expiryDate ? format(expiryDate, 'yyyy-MM-dd') : null;
+    const identity = { productId: selectedProduct.id, kioskId: selectedKioskId, lotNumber, expiryDate: dayKey };
+    const untrackedId = untrackedStockLotId(identity);
+    if (untrackedId) return lots.find(l => l.id === untrackedId && canReceiveUntrackedStock(l, identity)) ?? null;
     return lots.find(l =>
-      l.productId === selectedProduct.id && l.kioskId === selectedKioskId && l.lotNumber === lotNumber.trim() &&
+      l.productId === selectedProduct.id && l.kioskId === selectedKioskId && stockLotNumber(l) === stockLotNumber({ lotNumber, expiryDate: dayKey }) &&
       (l.expiryDate ? l.expiryDate.slice(0, 10) : null) === dayKey,
     ) ?? null;
   }, [isEditing, lots, selectedProduct, selectedKioskId, lotNumber, expiryDate]);
@@ -184,7 +191,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
 
         onOpenChange(false);
     } catch (error) {
-        console.error("Failed to save lot:", error);
+        form.setError("root", { message: error instanceof Error ? error.message : "Não foi possível salvar o lote." });
     }
   };
 
@@ -321,8 +328,10 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <label className="flex flex-col gap-1.5 text-xs font-bold text-[#4a4f57]">
                   Número do lote
-                  <input {...form.register('lotNumber')} placeholder="Ex.: 270226" className={cn(MODAL_INPUT, errors.lotNumber && 'border-[#e11d48]')} />
+                  <input {...form.register('lotNumber')} placeholder="Sem lote ou código do fabricante" className={cn(MODAL_INPUT, errors.lotNumber && 'border-[#e11d48]')} />
+                  <span className="text-xs font-normal text-ds-ink-soft">Deixe vazio quando o item não tiver lote.</span>
                   {errors.lotNumber && <span className={MODAL_ERROR_TEXT}>{errors.lotNumber.message}</span>}
+                  {errors.root && <span role="alert" className={MODAL_ERROR_TEXT}>{errors.root.message}</span>}
                 </label>
                 <div className="flex flex-col gap-1.5 text-xs font-bold text-[#4a4f57]">
                   <span className="flex justify-between">
