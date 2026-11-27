@@ -23,11 +23,12 @@ import type { DPAbsenceType, DPOvertimeCategory, DPOvertimePolicy, DPPolicyToler
 
 import { absorbedEdgeMinutes, assessBreak } from '../time-config/policy-rules';
 
-export const TIME_BANK_ALGORITHM_VERSION = 'time-bank-v4' as const;
-export type TimeBankAlgorithmVersion = 'time-bank-v3' | typeof TIME_BANK_ALGORITHM_VERSION;
+// v5: minutos noturnos do turno que termina às 22h.
+export const TIME_BANK_ALGORITHM_VERSION = 'time-bank-v5' as const;
+export type TimeBankAlgorithmVersion = 'time-bank-v3' | 'time-bank-v4' | typeof TIME_BANK_ALGORITHM_VERSION;
 /** Saved calculations remain immutable and readable after an implementation update. */
 export function isReadableTimeBankAlgorithmVersion(value: unknown): value is TimeBankAlgorithmVersion {
-  return value === 'time-bank-v3' || value === TIME_BANK_ALGORITHM_VERSION;
+  return value === 'time-bank-v3' || value === 'time-bank-v4' || value === TIME_BANK_ALGORITHM_VERSION;
 }
 export const MARKING_TOLERANCE_LIMIT = 5;
 

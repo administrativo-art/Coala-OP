@@ -218,6 +218,10 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
     const manualOrder = minutes(doc.get('manualOrder'));
     const manualMode = doc.get('manualDay.mode');
     const manualWorkMinutes = minutes(doc.get('manualDay.expectedWorkMinutes'));
+    const dayRules = policyRulesOn(String(doc.get('date')));
+    // Política com tolerâncias manda no dia; sem ela, vale a tolerância da versão da jornada.
+    const toleranceMinutes = dayRules?.tolerances.markingMinutes
+      ?? toleranceByJourney.get(text(doc.get('journeyResolution.journeyId')) ?? '') ?? null;
     return {
       ...(manualOrder != null && (manualMode === 'fixed' || manualMode === 'flexible')
         ? { manualOrder, manualMode, ...(manualMode === 'flexible' && manualWorkMinutes != null ? { manualWorkMinutes } : {}) }
@@ -229,7 +233,9 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       overnight: doc.get('overnight') === true,
       ...(nightShiftEnabled() && doc.get('type') !== 'day_off' && crossesMidnight(doc.get('overnight'), text(doc.get('startTime')), text(doc.get('endTime')))
         ? { workDateRule: true } : {}),
-      ...(nightToleranceEnabled() && doc.get('type') !== 'day_off' && text(doc.get('endTime')) === '22:00' ? { nightToleranceRule: true } : {}),
+      // Sem tolerância a regra não muda minuto algum: o turno fica sem a marca e as liberações de alerta dele continuam válidas.
+      ...(nightToleranceEnabled() && doc.get('type') !== 'day_off' && text(doc.get('endTime')) === '22:00' && (toleranceMinutes || dayRules)
+        ? { nightToleranceRule: true } : {}),
       unitId,
       unitName: unitId ? unitNameById.get(unitId) ?? null : null,
       assignmentKind: doc.get('assignmentKind') === 'external_coverage' ? 'external_coverage' : 'regular',
@@ -252,9 +258,7 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       breakSplit: definition?.get('breakSplit') === 'multiple' && breakType !== 'fixed' ? 'multiple' : 'single',
       breakPauseCount: minutes(definition?.get('breakPauseCount')),
       breakMinPauseMinutes: minutes(definition?.get('breakMinPauseMinutes')),
-      // Política com tolerâncias manda no dia; sem ela, vale a tolerância da versão da jornada.
-      toleranceMinutes: policyRulesOn(String(doc.get('date')))?.tolerances.markingMinutes
-        ?? toleranceByJourney.get(text(doc.get('journeyResolution.journeyId')) ?? '') ?? null,
+      toleranceMinutes,
       ...(policyRulesOn(String(doc.get('date'))) ? {
         policyTolerances: {
           markingMinutes: policyRulesOn(String(doc.get('date')))!.tolerances.markingMinutes,

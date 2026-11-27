@@ -70,9 +70,10 @@ test('deployed daily scheduler stays inert without release and does not read its
   assert.equal(effects, 0);
 }));
 
-test('stored v3 and v4 calculations are readable while unknown algorithms fail closed', () => {
+test('stored v3, v4 and v5 calculations are readable while unknown algorithms fail closed', () => {
   assert.equal(isReadableTimeBankAlgorithmVersion('time-bank-v3'), true);
   assert.equal(isReadableTimeBankAlgorithmVersion('time-bank-v4'), true);
+  assert.equal(isReadableTimeBankAlgorithmVersion('time-bank-v5'), true);
   for (const value of ['time-bank-v2', 'time-bank-v999', null, undefined]) assert.equal(isReadableTimeBankAlgorithmVersion(value), false);
 });
 
