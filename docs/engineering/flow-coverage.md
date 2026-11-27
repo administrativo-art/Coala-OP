@@ -71,7 +71,7 @@ Classificação atual: **174/174 páginas** — 126 ativas, 6 de navegação, 31
 
 | Grupo | Páginas associadas | Estado | Documento profundo |
 | --- | ---: | --- | --- |
-| `assets` | 1 | Traçado | [Cadastro e movimentação](flows/assets.md) — percurso complementado; verificação integrada pendente |
+| `assets` | 1 | Traçado | [Cadastro, manutenção e histórico](flows/assets.md) — agendamento, registro realizado, peças e consolidação por vínculos cobertos por testes dirigidos; verificação integrada pendente |
 | `card-statements` | 2 | Traçado | [Prévia, importação e fechamento](flows/card-statements.md) — projeção por compra/parcela coberta localmente; verificação integrada pendente |
 | `cash-closures` | 6 | Traçado | [Sincronização PDV e contagem](flows/cash-closures.md) — classificação/gate/UI implementados; integração e HTTP autenticado em emulador aprovados; não certifica todos os depósitos nem UI no navegador |
 | `cash-deposits` | 1 | Traçado | [Lote, cobrança Inter e conciliação](flows/cash-deposits.md) — percurso complementado; verificação integrada pendente |

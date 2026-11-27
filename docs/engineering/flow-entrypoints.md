@@ -8,7 +8,7 @@ Grupos com página ativa: **59**. Atualize com `python3 scripts/generate-flow-en
 
 Páginas: [`src/app/dashboard/assets/page.tsx`](../../src/app/dashboard/assets/page.tsx).
 
-Arquivos locais percorridos: 35.
+Arquivos locais percorridos: 37.
 
 Chamadas candidatas encontradas:
 
@@ -709,7 +709,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/assets/page.tsx`](../../src/app/dashboard/financial/assets/page.tsx).
 
-Arquivos locais percorridos: 36.
+Arquivos locais percorridos: 38.
 
 Chamadas candidatas encontradas:
 

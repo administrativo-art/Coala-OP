@@ -81,7 +81,9 @@ const child = spawn(
     "firebase.e2e.json",
     "--only",
     "auth,firestore",
-    process.argv.includes('--time-closure-record')
+    process.argv.includes('--asset-maintenance')
+      ? 'npm run test:e2e:playwright -- tests/e2e/assets/maintenance.spec.ts'
+      : process.argv.includes('--time-closure-record')
       ? 'npm run test:e2e:playwright -- tests/e2e/hr/time-closure-record.spec.ts'
       : process.argv.includes('--point')
       ? 'npm run test:e2e:playwright -- tests/e2e/hr/time-recording.spec.ts'

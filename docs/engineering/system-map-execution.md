@@ -305,3 +305,13 @@ Nova consulta auditada e painel de localização na candidata local, com permiss
 
 
 26/11/2026 — levantamento de produtor deve distinguir arquivo persistido de localização no Acervo: generatedDocuments, editorDocuments, recebidos, fontes contextuais e anexos admissionais possuem leitores próprios. Anexos públicos só entram após conclusão com final assinado; não expor bearer URL nem inferir envio confirmado de objeto avulso. Cancelamento admissional definitivo usa escopos privados, lease e reconciliação de objetos tardios.
+
+
+27/11/2026 — Patrimônio: agendamento separado do registro de serviço realizado,
+peças opcionais, conclusão vinculada por versão e histórico com ordem/documento
+reunidos por referências verificadas. Datas civis de serviço e timestamps do
+registro permanecem distintos, assim como seus atores. Testes dirigidos de
+contrato, persistência em memória, paginação, payload e apresentação; integração
+com Firestore real e validação visual pendentes. Ver [Patrimônio](flows/assets.md).
+
+Na revisão pré-publicação de manutenção, o leitor de vínculos passou a receber a referência de coleção já classificada. O inventário pessoal registra criador, concluidor e responsável usuário da ocorrência por ID e namespace explícitos, com assets.view + assets.viewHistory e workspace exato. Consultas reutilizam paginação e limites do coletor existente, sob demanda; nenhum listener ou job foi adicionado. E2E local permanente cobre o registro e conclusão com peças e descoberta por pessoa.

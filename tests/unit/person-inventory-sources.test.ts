@@ -223,3 +223,20 @@ test('DP settings inventory preserves subject, actor and responsibility namespac
       index.collectionGroup === source.collection && index.queryScope === 'COLLECTION' && JSON.stringify(index.fields) === JSON.stringify(fields)), `missing ${source.id}/${tenantField} index`);
   }
 });
+
+test('manutenção separa atores e responsável e recusa terceiros ou namespace legado', () => {
+  const actor = { isDefaultAdmin: false, workspace_id: 'coala', permissions: { assets: { view: true, viewHistory: true } }, userDoc: {} } as Parameters<typeof canViewPersonRecord>[0];
+  for (const [id, key, role] of [['creators', 'createdBy', 'actor'], ['completers', 'completedBy', 'actor'], ['assignees', 'assignee', 'participant']]) {
+    const source = sourceById(`asset-maintenance-${id}`)!;
+    assert.equal(source.role, role);
+    assert.equal(source.namespace, 'main.users');
+    assert.equal(source.collection, 'assetMaintenanceOccurrences');
+    assert.equal(source.field, `${key}.${key === 'assignee' ? 'id' : 'userId'}`);
+    const person = { namespace: 'main.users', type: 'user', id: 'pessoa', userId: 'pessoa' };
+    assert.equal(canViewPersonRecord(actor, source, { workspaceId: 'coala', [key]: person }), true);
+    assert.equal(canViewPersonRecord(actor, source, { workspaceId: 'outro', [key]: person }), false);
+    assert.equal(canViewPersonRecord(actor, source, { workspaceId: 'coala', [key]: { ...person, namespace: undefined } }), false);
+    assert.equal(canViewPersonRecord({ ...actor, permissions: { assets: { view: true, viewHistory: false } } } as typeof actor, source, { workspaceId: 'coala', [key]: person }), false);
+    if (key === 'assignee') assert.equal(canViewPersonRecord(actor, source, { workspaceId: 'coala', [key]: { ...person, type: 'third_party' } }), false);
+  }
+});
