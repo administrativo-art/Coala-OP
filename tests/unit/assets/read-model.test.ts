@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { isGroupedMaintenanceChild, linkedMaintenanceId, projectHistoryMaintenance } from "../../../src/features/assets/history-maintenance";
 import { mergeHistoryPages } from "../../../src/features/assets/history-pagination";
 import { purchaseAcquisitionRelationError } from "../../../src/features/assets/purchase-acquisition";
 
@@ -55,4 +56,63 @@ test("aquisição rejeita escopo e relações cruzadas", () => {
   assert.equal(purchaseAcquisitionRelationError(identity, { ...valid, receiptWorkspaceId: "outro" }), "PURCHASE_ACQUISITION_SCOPE");
   assert.equal(purchaseAcquisitionRelationError(identity, { ...valid, receiptPurchaseOrderId: "outro" }), "PURCHASE_ACQUISITION_RELATION");
   assert.equal(purchaseAcquisitionRelationError(identity, { ...valid, orderItemExists: false }), "PURCHASE_ACQUISITION_NOT_FOUND");
+});
+
+test("merge consome filhos ocultos e usa cursor para alcançar a ocorrência em outra página", () => {
+  const newest = { source: "document", id: "ordem", at: "2026-11-26", type: "document", description: "", hidden: true };
+  const older = { source: "movement", id: "movimento", at: "2026-11-25", type: "MANUTENCAO_ORDEM", description: "", hidden: true };
+  const root = { source: "maintenance", id: "ocorrencia", at: "2026-11-22", type: "manual", description: "Troca" };
+  const independent = { source: "audit", id: "auditoria", at: "2026-11-24", type: "audit", description: "Troca" };
+  const first = mergeHistoryPages([{ source: "document", rows: [newest], hasMore: true }, { source: "maintenance", rows: [root] }], 1);
+  assert.deepEqual(first.items, []);
+  assert.deepEqual(first.sources, { document: { at: newest.at, id: newest.id } });
+  assert.equal(first.hasMore, true);
+  const second = mergeHistoryPages([
+    { source: "movement", rows: [older] }, { source: "audit", rows: [independent] }, { source: "maintenance", rows: [root] },
+  ], 1, first.sources);
+  assert.deepEqual(second.items, [independent]);
+  assert.deepEqual(second.sources.movement, { at: older.at, id: older.id });
+  assert.equal(second.sources.maintenance, undefined);
+  assert.equal(second.hasMore, true);
+  const third = mergeHistoryPages([{ source: "maintenance", rows: [root] }], 1, second.sources);
+  assert.deepEqual(third.items, [root]);
+  assert.deepEqual(third.sources.maintenance, { at: root.at, id: root.id });
+  assert.equal(third.hasMore, false);
+});
+
+test("consolidação exige vínculos exatos e mantém auditorias, órfãos e registros legados independentes", () => {
+  const scope = { workspaceId: "coala", assetId: "bem" };
+  const rootId = "ocorrencia";
+  const documentId = "ordem";
+  const root = {
+    ...scope, createdAt: "2026-11-24", description: "Troca", orderDocumentId: documentId,
+    performedOn: "2026-11-22", status: "completed", assignee: { nameSnapshot: "Oficina" },
+    createdBy: { nameSnapshot: "Agendador", id: "agendador-id" },
+    completedBy: { nameSnapshot: "Operadora", userId: "operadora-id" }, components: ["Rolamento"],
+  };
+  const order = {
+    workspaceId: "coala", sourceAssetId: "bem", sourceMaintenanceOccurrenceId: rootId,
+    protocol: "CS-MNT", pdfStoragePath: "privado/ordem.pdf", description: "Troca",
+  };
+  const movement = { ...scope, type: "MANUTENCAO_ORDEM", source: { type: "maintenance", id: rootId }, description: "Troca" };
+  assert.equal(linkedMaintenanceId("movement", movement), rootId);
+  assert.equal(isGroupedMaintenanceChild(scope, "movement", "movimento", movement, root), true);
+  assert.equal(isGroupedMaintenanceChild(scope, "document", documentId, order, root), true);
+  assert.equal(isGroupedMaintenanceChild(scope, "document", "outro-documento", order, root), false);
+  assert.equal(isGroupedMaintenanceChild(scope, "document", documentId, { ...order, sourceAssetId: "outro" }, root), false);
+  assert.equal(isGroupedMaintenanceChild(scope, "movement", "edicao", { ...movement, type: "EDICAO" }, root), false);
+  assert.equal(isGroupedMaintenanceChild(scope, "audit", "auditoria", movement, root), false);
+  assert.equal(isGroupedMaintenanceChild(scope, "movement", "movimento", { ...movement, source: null }, root), false);
+  assert.equal(isGroupedMaintenanceChild(scope, "movement", "movimento", movement, undefined), false);
+  assert.equal(isGroupedMaintenanceChild(scope, "movement", "movimento", movement, { ...root, workspaceId: "outro" }), false);
+  const projected = projectHistoryMaintenance(scope, rootId, root, order);
+  assert.equal(projected.performedOn, "2026-11-22");
+  assert.equal(projected.registeredByLabel, "Agendador");
+  assert.equal(projected.completedByLabel, "Operadora");
+  const legacyProjection = projectHistoryMaintenance(scope, rootId, { ...root, createdBy: undefined }, order);
+  assert.equal(legacyProjection.registeredByLabel, null);
+  assert.equal(legacyProjection.completedByLabel, "Operadora");
+  assert.deepEqual(projected.components, ["Rolamento"]);
+  assert.deepEqual(projected.order, { documentId, protocol: "CS-MNT", href: "/api/assets/bem/maintenance-occurrences/ocorrencia/order" });
+  assert.equal(projectHistoryMaintenance(scope, "occurrence-diferente", root, order).order, null);
 });

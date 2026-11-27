@@ -12,7 +12,7 @@ import { useCompanySettings } from '@/hooks/use-company-settings';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useChannels } from '@/hooks/use-channels';
 import { useToast } from '@/hooks/use-toast';
-import { buildPriceOverrideId, calculateSimulationMetrics } from '@/lib/pricing-context';
+import { buildPriceOverrideId, calculateAutomaticChannelPrice, calculateSimulationMetrics } from '@/lib/pricing-context';
 import { convertValue } from '@/lib/conversion';
 import { getPricingCommercialStatus } from '@/lib/pricing-insights';
 
@@ -30,6 +30,21 @@ import { ProductSheetTab } from './product-sheet-tab';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
+import { InfoPopover } from '@/components/ui/info-popover';
+
+function ChannelRoundingInfo() {
+  return (
+    <InfoPopover title="Arredondamento do preço do canal">
+      <p>O preço calculado pela regra do canal fica em reais inteiros. Primeiro, o resultado é considerado com duas casas decimais.</p>
+      <p>Até R$ 0,39 nos centavos, arredonda para baixo. A partir de R$ 0,40, inclusive, arredonda para cima.</p>
+      <ul className="list-disc space-y-1 pl-4">
+        <li>R$ 30,39 → R$ 30,00</li>
+        <li>R$ 30,40 → R$ 31,00</li>
+      </ul>
+      <p>Preços cadastrados manualmente mantêm o valor informado.</p>
+    </InfoPopover>
+  );
+}
 
 const simulationSchema = z.object({
   name: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
@@ -329,7 +344,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
     if (!editingChannel?.defaultPriceRule || editingChannel.defaultPriceRule.mode !== 'markup') {
       return null;
     }
-    return editingChannelRuleBasePrice * (1 + editingChannel.defaultPriceRule.value);
+    return calculateAutomaticChannelPrice(editingChannelRuleBasePrice, editingChannel.defaultPriceRule.value);
   }, [editingChannel, editingChannelRuleBasePrice]);
   const editingHasManualOverride = useMemo(() => {
     if (!editingOverride) return false;
@@ -342,7 +357,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
     'override:unit+channel': 'Preço específico',
     'override:unit': 'Preço da unidade',
     'override:channel': 'Preço do canal',
-    'channel-default-rule': 'Regra do canal',
+    'channel-default-rule': 'Regra do canal · arredondado',
     'global': 'Preço global',
     'unit-disabled': 'Unidade desabilitada',
     'channel-inactive': 'Canal inativo',
@@ -633,7 +648,10 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
           <ScrollArea className="flex-1 bg-ds-warm p-6">
             <div className="space-y-4">
               <div>
-                <h4 className="text-sm font-semibold text-ds-ink">Preços por canal de venda</h4>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-semibold text-ds-ink">Preços por canal de venda</h4>
+                  <ChannelRoundingInfo />
+                </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   O balcão vem da definição por unidade. Use esta etapa para cadastrar preços dos demais canais.
                 </p>
@@ -738,7 +756,10 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
             </div>
             {editingChannelRulePrice !== null && (
               <div className="rounded-lg border p-3">
-                <p className="text-sm font-medium">Regra padrão do canal</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium">Regra padrão do canal</p>
+                  <ChannelRoundingInfo />
+                </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   Regra padrão: {formatCurrency(editingChannelRulePrice)}. Você está em {overridePriceInput.trim() ? overridePriceInput : 'herança'}.
                 </p>

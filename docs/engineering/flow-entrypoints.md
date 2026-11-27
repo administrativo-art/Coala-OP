@@ -8,7 +8,7 @@ Grupos com página ativa: **59**. Atualize com `python3 scripts/generate-flow-en
 
 Páginas: [`src/app/dashboard/assets/page.tsx`](../../src/app/dashboard/assets/page.tsx).
 
-Arquivos locais percorridos: 35.
+Arquivos locais percorridos: 37.
 
 Chamadas candidatas encontradas:
 
@@ -709,7 +709,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/assets/page.tsx`](../../src/app/dashboard/financial/assets/page.tsx).
 
-Arquivos locais percorridos: 36.
+Arquivos locais percorridos: 38.
 
 Chamadas candidatas encontradas:
 
@@ -1396,7 +1396,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/pricing/cost-analysis/page.tsx`](../../src/app/dashboard/pricing/cost-analysis/page.tsx), [`src/app/dashboard/pricing/price-comparison/page.tsx`](../../src/app/dashboard/pricing/price-comparison/page.tsx).
 
-Arquivos locais percorridos: 81.
+Arquivos locais percorridos: 82.
 
 Chamadas candidatas encontradas:
 
@@ -2044,7 +2044,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/expiry/page.tsx`](../../src/app/dashboard/expiry/page.tsx), [`src/app/dashboard/inventory-control/page.tsx`](../../src/app/dashboard/inventory-control/page.tsx), [`src/app/dashboard/stock/inventory-control/page.tsx`](../../src/app/dashboard/stock/inventory-control/page.tsx), [`src/app/dashboard/stock/transfer/page.tsx`](../../src/app/dashboard/stock/transfer/page.tsx), [`src/app/dashboard/stock/write-down/page.tsx`](../../src/app/dashboard/stock/write-down/page.tsx).
 
-Arquivos locais percorridos: 58.
+Arquivos locais percorridos: 60.
 
 Chamadas candidatas encontradas:
 
