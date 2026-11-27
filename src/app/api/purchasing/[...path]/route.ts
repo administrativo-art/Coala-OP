@@ -1,3 +1,5 @@
+import { canReceiveUntrackedStock, incompatibleUntrackedStockMessage, missingDatedStockLotNumberMessage, stockLotNumber, untrackedStockLotId } from '@/lib/stock-lot-identity';
+import type { LotEntry } from '@/types';
 import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { addMonths } from 'date-fns';
@@ -2184,6 +2186,12 @@ async function handlePost(request: NextRequest, userContext: ServerUserContext, 
 
   if (resource === 'receipts' && id && child === 'confirm-stock-entry') {
     const batch = dbAdmin.batch();
+    const stockLots = dbAdmin.collection('lots');
+    const untrackedEntries = new Map<string, {
+      identity: { productId: string; kioskId: string; lotNumber: string; expiryDate: string | null };
+      quantity: number;
+      productName: string;
+    }>();
     const receiptRef = dbAdmin.collection('purchase_receipts').doc(id);
     const receiptSnap = await receiptRef.get();
     if (!receiptSnap.exists) return jsonError('Recebimento não encontrado.', 404);
@@ -2456,6 +2464,10 @@ async function handlePost(request: NextRequest, userContext: ServerUserContext, 
             );
             if (!stockConversion.ok) return jsonError(stockConversion.error || 'Erro na conversão de estoque.');
 
+            if (entryType !== 'uniform' && lot.expiryDate && !String(lot.lotCode ?? '').trim()) {
+              return jsonError(missingDatedStockLotNumberMessage);
+            }
+
             const lotRef = receiptRef.collection('items').doc(item.receiptItemId).collection('lots').doc();
             batch.set(lotRef, {
               purchaseReceiptItemId: item.receiptItemId,
@@ -2501,6 +2513,8 @@ async function handlePost(request: NextRequest, userContext: ServerUserContext, 
               },
             });
 
+            const identity = { productId: item.productId, kioskId: destinationKioskId, lotNumber: lot.lotCode, expiryDate: lot.expiryDate ?? null };
+            const untrackedId = entryType === 'uniform' ? null : untrackedStockLotId(identity);
             const lotKey = entryType === 'uniform'
               ? uniformLotId({
                   productId: item.productId,
@@ -2508,10 +2522,15 @@ async function handlePost(request: NextRequest, userContext: ServerUserContext, 
                   status: 'disponivel',
                   lotNumber: lot.lotCode,
                 })
-              : `${item.productId}_${destinationKioskId}_${lot.lotCode}_${lot.expiryDate ?? 'noval'}`;
-            const stockLotRef = dbAdmin.collection('lots').doc(lotKey);
-            batch.set(
-              stockLotRef,
+              : untrackedId ?? `${item.productId}_${destinationKioskId}_${lot.lotCode}_${lot.expiryDate ?? 'noval'}`;
+            if (untrackedId) {
+              untrackedEntries.set(untrackedId, {
+                identity,
+                quantity: (untrackedEntries.get(untrackedId)?.quantity ?? 0) + stockConversion.stockQuantity,
+                productName: item.productName ?? item.baseItemId,
+              });
+            } else batch.set(
+              stockLots.doc(lotKey),
               {
                 workspaceId: WORKSPACE_ID,
                 productId: item.productId,
@@ -2619,7 +2638,41 @@ async function handlePost(request: NextRequest, userContext: ServerUserContext, 
       });
     });
 
-    await batch.commit();
+    if (untrackedEntries.size) {
+      const targets = await dbAdmin.getAll(...[...untrackedEntries.keys()].map(lotId => stockLots.doc(lotId)));
+      for (const target of targets) {
+        const entry = untrackedEntries.get(target.id)!;
+        if (target.exists && !canReceiveUntrackedStock(target.data() as LotEntry, entry.identity)) {
+          return jsonError(incompatibleUntrackedStockMessage, 409);
+        }
+
+        const updatedAt = Timestamp.now();
+        if (target.updateTime) {
+          batch.update(target.ref, { quantity: FieldValue.increment(entry.quantity), updatedAt }, { lastUpdateTime: target.updateTime });
+        } else {
+          batch.create(target.ref, {
+            ...entry.identity,
+            workspaceId: WORKSPACE_ID,
+            productName: entry.productName,
+            lotNumber: stockLotNumber(entry.identity),
+            expiryDate: null,
+            quantity: entry.quantity,
+            updatedAt,
+          });
+        }
+      }
+    }
+
+    try {
+      await batch.commit();
+    } catch (error) {
+      // A changed or newly created lot invalidates the entire receipt batch.
+      if (untrackedEntries.size && typeof error === 'object' && error && 'code' in error &&
+          (error.code === 6 || error.code === 9)) {
+        return jsonError('O estoque mudou durante o recebimento. Atualize a tela e tente novamente.', 409);
+      }
+      throw error;
+    }
     return NextResponse.json({ ok: true, status: finalStatus });
   }
 

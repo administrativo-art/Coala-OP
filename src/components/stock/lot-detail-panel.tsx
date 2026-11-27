@@ -8,6 +8,7 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useMovementHistory } from '@/hooks/use-movement-history';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { stockLotLabel } from '@/lib/stock-lot-identity';
 import { type LotEntry, type MovementRecord, type MovementType, type Product } from '@/types';
 import {
   WRITE_DOWN_REASONS,
@@ -44,6 +45,7 @@ interface LotDetailPanelProps {
   locationName?: string | null;
   reservation?: LotReservation;
   onClose: () => void;
+  onBack?: () => void;
   onEdit: (lotId: string) => void;
   onMove: (lotId: string) => void;
   onDelete: (lotId: string) => Promise<boolean>;
@@ -57,6 +59,7 @@ export function LotDetailPanel({
   locationName,
   reservation,
   onClose,
+  onBack,
   onEdit,
   onMove,
   onDelete,
@@ -180,13 +183,13 @@ export function LotDetailPanel({
       <div className="fixed inset-0 z-50 bg-[#15151c]/30" onClick={onClose} aria-hidden />
       <aside
         role="dialog"
-        aria-label={`Lote ${lot.lotNumber}`}
+        aria-label={stockLotLabel(lot)}
         className="fixed bottom-0 right-0 top-0 z-51 flex w-[460px] max-w-full flex-col bg-[#fffdf9] shadow-[-24px_0_60px_rgba(0,0,0,.18)]"
       >
         <div className="flex flex-col gap-3.5 bg-[#15151c] px-6 pb-[22px] pt-5 text-[#f3f2ee]">
           <div className="flex items-center gap-2">
             <span className="text-[10.5px] font-extrabold uppercase tracking-[.16em] text-[#f08bb1]">Lote</span>
-            <span className="font-mono text-[12.5px] font-bold">{lot.lotNumber}</span>
+            <span className="font-mono text-[12.5px] font-bold">{stockLotLabel(lot)}</span>
             <span className={status.pillClass}>{status.text}</span>
             <span className="flex-1" />
             <button
@@ -227,6 +230,7 @@ export function LotDetailPanel({
         </div>
 
         <div className="flex flex-1 flex-col gap-5 overflow-auto px-6 py-5">
+          {onBack && <button type="button" disabled={saving || deleting} onClick={onBack} className="text-left text-sm font-bold text-ds-accent-ink disabled:opacity-50">← Voltar ao saldo reunido</button>}
           <div className="grid grid-cols-2 gap-x-[18px] gap-y-3.5">
             <Fact label="Status"><span className={status.pillClass}>{status.text}</span></Fact>
             <Fact label="Validade"><span className="font-mono text-[13px] font-semibold">{expiryLabel}</span></Fact>

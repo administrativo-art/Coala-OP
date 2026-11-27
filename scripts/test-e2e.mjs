@@ -109,6 +109,8 @@ const child = spawn(
       ? 'npm run test:e2e:playwright -- tests/e2e/documents/archive.spec.ts'
       : process.argv.includes('--vacation-documents')
       ? 'npm run test:e2e:playwright -- tests/e2e/hr/vacations.spec.ts --grep "descarte exige motivo"'
+      : process.argv.includes('--stock-untracked')
+      ? 'npm run test:e2e:playwright -- tests/e2e/stock/untracked-lots.spec.ts'
       : "npm run test:e2e:playwright",
   ],
   { env, shell: process.platform === "win32", stdio: "inherit" },
