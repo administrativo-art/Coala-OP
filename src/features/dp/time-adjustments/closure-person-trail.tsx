@@ -5,13 +5,15 @@ import type { User as FirebaseUser } from "firebase/auth";
 import { Check, Lock } from "lucide-react";
 
 import { StatusPill } from "@/components/ui/status-pill";
-import { MyTimeRecordingPage, type TimeRecordingMonthSummary } from "@/features/dp/rep-p/my-time-recording-page";
+import type { TimeRecordingMonthSummary } from "@/features/dp/rep-p/my-time-recording-page";
 import { REASON_LABELS, TimeBankCard, type TimeBankStatementResponse } from "@/features/dp/time-bank/time-bank-card";
 import type { BankStatementLine } from "@/features/dp/time-bank/core";
 import { cn } from "@/lib/utils";
 
 import type { PayrollPersonStatus } from "../time-bank/payroll-readiness";
 import type { ClosurePerson } from "./closure-core";
+import { ClosurePersonRecord } from "./closure-person-record";
+import type { PersonServerAlerts } from "./closure-person-record-model";
 import { pendingOfPerson } from "./closure-year-overview";
 
 type StepState = "done" | "current" | "locked";
@@ -36,7 +38,7 @@ function destinationOf(line: BankStatementLine["line"]): { label: string; varian
  * Trilha de fechamento de uma pessoa: cada etapa só abre quando a anterior termina, e a tela abre na primeira etapa
  * ainda não concluída. A situação das etapas vem da consulta do ponto e do extrato do banco de horas do mês.
  */
-export function ClosurePersonTrail({ firebaseUser, competence, person, closed, payrollStatus, onBankUpdated, canManage, requests, closing }: {
+export function ClosurePersonTrail({ firebaseUser, competence, person, closed, payrollStatus, onBankUpdated, canManage, alerts, onDecided, requests, closing }: {
   firebaseUser: FirebaseUser | null;
   competence: string;
   person: ClosurePerson;
@@ -44,6 +46,9 @@ export function ClosurePersonTrail({ firebaseUser, competence, person, closed, p
   payrollStatus?: PayrollPersonStatus;
   onBankUpdated: () => void;
   canManage: boolean;
+  /** Alertas apontados pelo servidor; `null` quando ele não informou. */
+  alerts: PersonServerAlerts;
+  onDecided: () => void;
   /** Solicitações do mês (a tratar e finalizadas), exibidas no saneamento. */
   requests: ReactNode;
   /** Ação de fechamento da etapa final. */
@@ -64,7 +69,7 @@ export function ClosurePersonTrail({ firebaseUser, competence, person, closed, p
 
   const steps: Step[] = [
     { title: "Saneamento da folha", state: sanitized ? "done" : "current",
-      status: closed ? "Ponto fechado" : sanitized ? "Sem alerta grave nem pedido aberto" : !summary?.loaded ? "Conferindo…" : `${issues} ${issues === 1 ? "pendência" : "pendências"}` },
+      status: closed ? "Ponto fechado" : sanitized ? "Sem pedido nem alerta que trave" : !summary?.loaded ? "Conferindo…" : `${issues} ${issues === 1 ? "pendência" : "pendências"}` },
     { title: "Banco de horas e extras", state: bankDone ? "done" : sanitized ? "current" : "locked",
       status: closed ? payrollStatus?.reason ?? "Consultando apuração" : !sanitized ? "Depois do saneamento" : bankDone ? "Destinos definidos (prévia)" : bank ? `${toDecide} a decidir` : "Lendo extrato…" },
     { title: "Resumo do colaborador", state: closed && bankDone ? "done" : bankDone ? "current" : "locked",
@@ -108,7 +113,7 @@ export function ClosurePersonTrail({ firebaseUser, competence, person, closed, p
 
       {/* As duas primeiras etapas ficam montadas para alimentar a situação da trilha; só a ativa aparece. */}
       <section className={cn("space-y-4", active !== 0 && "hidden")}>
-        <MyTimeRecordingPage embedded employeeUid={person.uid} month={competence} onSummary={onSummary} />
+        <ClosurePersonRecord firebaseUser={firebaseUser} competence={competence} person={person} alerts={alerts} onSummary={onSummary} onDecided={onDecided} />
         <div className="space-y-1">
           <h4 className="text-sm font-black text-ds-ink">Solicitações do mês</h4>
           <p className="text-xs text-ds-ink-muted">Pedidos a tratar e já finalizados; revise também os finalizados.</p>
