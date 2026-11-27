@@ -8,6 +8,9 @@ import { fiscalArtifactStore, persistFiscalArtifactPair,
   type FiscalArtifactStore, type PersistedFiscalArtifacts } from '@/features/dp/rep-p/fiscal-artifact-storage.server';
 import { bankMonthForAej, bankMovementsForAej } from '@/features/dp/time-bank/service.server';
 import { bankLinesWithMovements, overnightWorkDate, type BankManualMovement } from '@/features/dp/time-bank/core';
+import { attributeMarkings, markingReadRange } from '@/features/dp/time-bank/work-date';
+import { readWorkDateShifts } from '@/features/dp/time-bank/work-date.server';
+import { nightShiftEnabled } from '@/features/dp/time-config/rollout.server';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
@@ -79,7 +82,10 @@ export async function exportAej(context: ServerUserContext, input: AejExportInpu
     .map((competence) => deps.hrDb.collection(CLOSURES).doc(closureKey(context.workspace_id, `${competence}-01`)))) : [];
   const bankCompetences = [...contextCompetences.filter((_, index) => contextClosures[index].get('status') === 'closed'), ...competences];
 
-  const arp = await deps.readArp(context.workspace_id, input.establishmentId, input.startDate, input.endDate);
+  // Com o turno noturno ligado, a saída do último dia do período está no dia seguinte.
+  const nightShift = nightShiftEnabled();
+  const arpRange = nightShift ? markingReadRange(input.startDate, input.endDate) : { start: input.startDate, end: input.endDate };
+  const arp = await deps.readArp(context.workspace_id, input.establishmentId, arpRange.start, arpRange.end);
   // O registro 08 usa a razão social fixa da desenvolvedora: só vale com o CNPJ dela no perfil fiscal.
   if (arp.profile.developerCnpj.replace(/\D/g, '') !== REP_P_DEVELOPER_CNPJ) throw fail('PTRP_AEJ_DEVELOPER_MISMATCH', 'O perfil fiscal aponta outra desenvolvedora; confira antes de gerar o AEJ.', 'CONFLICT');
   const people = new Map(arp.people.map((person) => [person.cpf, person]));
@@ -97,7 +103,19 @@ export async function exportAej(context: ServerUserContext, input: AejExportInpu
     if (!identity) throw fail('PTRP_AEJ_IDENTITY_UNRESOLVED', 'Há inclusão aprovada para pessoa sem CPF e nome oficiais no RH; complete o cadastro antes de gerar.', 'CONFLICT');
     people.set(identity.cpf, { cpf: identity.cpf, uid, name: identity.name });
   }
-  const persons = [...people.values()];
+  // Batidas de cada pessoa já no dia do turno. Quem só aparece no dia lido a mais fica fora do arquivo.
+  const datedByCpf = new Map<string, typeof arp.markings>();
+  if (nightShift) await Promise.all([...people.values()].map(async (person) => {
+    const own = arp.markings.filter((item) => item.employeeCpf === person.cpf);
+    datedByCpf.set(person.cpf, own.length ? attributeMarkings(own, await readWorkDateShifts(context.workspace_id, person.uid,
+      input.startDate, input.endDate, { mainDb: deps.mainDb, hrDb: deps.hrDb }), input.startDate, input.endDate) : []);
+  }));
+  const onlyExtraDay = (cpf: string) => {
+    const own = arp.markings.filter((item) => item.employeeCpf === cpf);
+    return own.length > 0 && own.every((item) => item.workDate > input.endDate) && !datedByCpf.get(cpf)?.length;
+  };
+  const persons = [...people.values()].filter((person) => !nightShift || !onlyExtraDay(person.cpf)
+    || active.some((item) => item.type === 'inclusion' && item.employeeUid === person.uid));
 
   const users = persons.length ? await deps.mainDb.getAll(...persons.map((person) => deps.mainDb.collection('users').doc(person.uid))) : [];
   const employees: AejEmployee[] = await Promise.all(persons.map(async (person, index) => {
@@ -134,9 +152,9 @@ export async function exportAej(context: ServerUserContext, input: AejExportInpu
     ];
     return {
       cpf: person.cpf, name: person.name, shifts, absences, pendingDays: bankDays.filter((day) => day.issues.includes('MISSING_DAY')).map((day) => day.date),
-      markings: arp.markings.filter((item) => item.employeeCpf === person.cpf)
-        .map((item) => ({ workDate: overnightWorkDate(item.workDate, item.markedAt, shifts), markedAt: item.markedAt,
-          nsr: item.nsr, discardReason: discards.get(item.receiptId) ?? null })),
+      markings: (datedByCpf.get(person.cpf) ?? arp.markings.filter((item) => item.employeeCpf === person.cpf)
+        .map((item) => ({ ...item, workDate: overnightWorkDate(item.workDate, item.markedAt, shifts) })))
+        .map((item) => ({ workDate: item.workDate, markedAt: item.markedAt, nsr: item.nsr, discardReason: discards.get(item.receiptId) ?? null })),
       inclusions: active.filter((item) => item.type === 'inclusion' && item.employeeUid === person.uid && item.markedAt)
         .map((item) => ({ workDate: String(item.workDate), markedAt: String(item.markedAt), reason: String(item.motivo) })),
     };

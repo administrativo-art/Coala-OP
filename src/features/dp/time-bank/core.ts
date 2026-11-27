@@ -34,7 +34,7 @@ export const MARKING_TOLERANCE_LIMIT = 5;
 export type BankJourney = { cycleLengthDays: number; validFrom: string; days: Array<{ dayIndex: number; plannedMinutes: number }>;
   weeklyRest?: { placement: 'fixed_cycle' | 'schedule' } | null };
 export type BankShift = {
-  type: 'work' | 'day_off'; startTime: string | null; endTime: string | null; overnight: boolean;
+  type: 'work' | 'day_off'; startTime: string | null; endTime: string | null; workDateRule?: boolean; overnight: boolean;
   /** Duração líquida prevista do turno (sem o intervalo). */
   plannedMinutes: number | null;
   referenceMinutes: number | null; toleranceMinutes: number | null; journeyId: string | null;
@@ -162,7 +162,7 @@ function pausesOf(markings: string[]) {
 }
 
 /** Cobertura que de fato estende o dia: mesma condição do Registro de ponto. */
-const isCoverageShift = (shift: BankShift) => shift.coverage === true && !shift.overnight && Boolean(shift.referenceMinutes)
+const isCoverageShift = (shift: BankShift) => shift.coverage === true && !shift.overnight && !shift.workDateRule && Boolean(shift.referenceMinutes)
   && shift.plannedMinutes !== null && shift.referenceMinutes! > shift.plannedMinutes;
 
 /**
@@ -175,7 +175,7 @@ function applyIntrajornada(day: BankDay, input: BankDayInput, markings: string[]
   const assessment = assessBreak({
     workedMinutes: pairedMinutes(markings), pauses: pausesOf(markings), plannedWorkMinutes: shift.plannedMinutes,
     scheduledBreakMinutes: shift.breakMinutes ?? 0, coverage: isCoverageShift(shift), split: shift.breakSplit,
-    minPauseMinutes: shift.breakMinPauseMinutes, unsupported: shift.overnight || shift.manual === true, tolerances: policy.tolerances,
+    minPauseMinutes: shift.breakMinPauseMinutes, unsupported: shift.overnight || shift.workDateRule === true || shift.manual === true, tolerances: policy.tolerances,
   });
   if (assessment.status === 'ok') return;
   const blocked = day.issues.some((value) => value !== 'NIGHT_SHIFT' && value !== 'TIME_BANK_DISABLED');
@@ -259,12 +259,14 @@ function computeWorkedTimeDay(input: BankDayInput): BankDay {
   const policyTolerances = policy?.tolerances;
   const tolerance = Math.min(shift!.toleranceMinutes ?? 0, 2 * MARKING_TOLERANCE_LIMIT);
   if (markings.length && shift!.startTime && shift!.endTime && (policyTolerances || tolerance > 0)) {
-    const early = clockMinutes(shift!.startTime) - localMinutes(markings[0]);
+    // Turno que passa da meia-noite: 00:02 contra um fim às 23:59 são 3 minutos, não quase um dia.
+    const nearest = (minutes: number) => shift!.workDateRule ? ((minutes + 720) % 1440 + 1440) % 1440 - 720 : minutes;
+    const early = nearest(clockMinutes(shift!.startTime) - localMinutes(markings[0]));
     // Na cobertura, ficar até completar a carga é esperado: a tolerância da saída compara com o limite de extensão.
-    const coverageEnd = shift!.coverage && !shift!.overnight && shift!.referenceMinutes && shift!.plannedMinutes !== null
+    const coverageEnd = shift!.coverage && !shift!.overnight && !shift!.workDateRule && shift!.referenceMinutes && shift!.plannedMinutes !== null
       && shift!.referenceMinutes > shift!.plannedMinutes
       ? clockMinutes(shift!.startTime) + shift!.referenceMinutes + COVERAGE_BREAK_MINUTES : null;
-    const late = localMinutes(markings[markings.length - 1]) - (coverageEnd ?? clockMinutes(shift!.endTime));
+    const late = nearest(localMinutes(markings[markings.length - 1]) - (coverageEnd ?? clockMinutes(shift!.endTime)));
     if (policyTolerances) {
       const absorbed = absorbedEdgeMinutes([early, late], policyTolerances);
       considered = worked - absorbed.minutes;

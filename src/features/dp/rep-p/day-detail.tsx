@@ -17,7 +17,7 @@ import { useAuth } from "@/hooks/use-auth";
 
 import { absenceStatus, adjustmentStateOf, balanceOf, durationLabel, incidentFact, INCIDENTS, MarkingClassificationEditor,
   type ClassificationActions, type ReceiptActions } from "./day-list";
-import { fiscalClock, INCIDENT_SEVERITY, minutesOf, plannedBreakMinutesOf, toleranceOf, type DayMarking, type DayView } from "./day-model";
+import { fiscalClock, INCIDENT_SEVERITY, minutesSince, plannedBreakMinutesOf, toleranceOf, type DayMarking, type DayView } from "./day-model";
 import { ReviewRequestSection } from "./review-request-section";
 import { ReceiptPill } from "./marking-ui";
 import { expectedPunchesOf, MARKING_PURPOSES, nextMarkingOf, PurposeDot, purposeLabel, suggestedLabel, type MarkingPurpose } from "./record-strip";
@@ -380,8 +380,8 @@ export function DayDetailPanel({ day, days, today, unitNames, receipts, classifi
               const marking = effective[index];
               const following = effective[index + 1];
               const kind = index % 2 === 0 ? "work" as const : "break" as const;
-              const gap = marking && following ? minutesOf(fiscalClock(following.markedAt)) - minutesOf(fiscalClock(marking.markedAt))
-                : marking && !following && isToday && kind === "work" ? nowMinutes - minutesOf(fiscalClock(marking.markedAt)) : null;
+              const gap = marking && following ? minutesSince(day.date, following.markedAt) - minutesSince(day.date, marking.markedAt)
+                : marking && !following && isToday && kind === "work" ? nowMinutes - minutesSince(day.date, marking.markedAt) : null;
               const plannedPurpose = MARKING_PURPOSES[Math.min(index, 3)]?.[0] as MarkingPurpose | undefined;
               return (
                 <Fragment key={marking?.receiptId ?? `slot-${index}`}>

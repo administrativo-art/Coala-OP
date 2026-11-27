@@ -7,6 +7,9 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { repPDbAdmin } from '@/lib/firebase-rep-p-admin';
 import { isBrazilTimeZone } from '@/features/dp/rep-p/time-zones';
+import { attributeWorkDate, markingReadRange } from '@/features/dp/time-bank/work-date';
+import { readWorkDateShifts } from '@/features/dp/time-bank/work-date.server';
+import { nightShiftEnabled } from '@/features/dp/time-config/rollout.server';
 import { readOfficialScheduleShifts, type OfficialShift } from '@/features/dp/schedules/official-revision.server';
 import { hasPublishedScheduleVersion, scheduleShiftFingerprint } from '@/lib/dp-schedule-publication';
 import { prepareActiveRevisionOperationalChanges, readActiveRevisionShift } from '@/features/dp/schedules/operational-overlay.server';
@@ -239,9 +242,24 @@ function snapshotShifts(rows: Array<{ shift: OfficialShift; schedule: FirebaseFi
     shift: { ...shift } as Record<string, unknown> }));
 }
 
-async function hasMarking(deps: Dependencies, workspaceId: string, uid: string, date: string) {
-  return !(await deps.repDb.collection(RECEIPTS).where('workspaceId', '==', workspaceId)
-    .where('employeeId', '==', uid).where('recordedDate', '==', date).limit(1).get()).empty;
+async function hasMarking(deps: Dependencies, workspaceId: string, uid: string, date: string, startTimes: string[]) {
+  const base = deps.repDb.collection(RECEIPTS).where('workspaceId', '==', workspaceId).where('employeeId', '==', uid);
+  if (!nightShiftEnabled()) return !(await base.where('recordedDate', '==', date).limit(1).get()).empty;
+  // A saída depois da meia-noite conta para o dia do turno; a que é da véspera não conta para este dia.
+  const range = markingReadRange(date, date);
+  const rows = await base.where('recordedDate', '>=', range.start).where('recordedDate', '<=', range.end).orderBy('recordedDate').limit(101).get();
+  if (rows.empty) return false;
+  if (rows.size > 100) return true;
+  // Batida do próprio dia a partir do início do turno é sempre dele: no dia comum, a rotina não precisa reler a escala.
+  const firstStart = [...startTimes].sort()[0];
+  if (firstStart && rows.docs.some((doc) => doc.get('recordedDate') === date
+    && String(doc.get('snapshot.markedAt') ?? '').slice(11, 16) >= firstStart)) return true;
+  const shifts = await readWorkDateShifts(workspaceId, uid, date, date, { mainDb: deps.mainDb, hrDb: deps.hrDb });
+  return rows.docs.some((doc) => {
+    const markedAt = String(doc.get('snapshot.markedAt') ?? '');
+    // Sem horário para conferir, vale a data registrada: na dúvida não se lança falta.
+    return markedAt ? attributeWorkDate(String(doc.get('recordedDate')), markedAt, shifts) === date : doc.get('recordedDate') === date;
+  });
 }
 
 async function blockingRequests(deps: Dependencies, workspaceId: string, uid: string, date: string) {
@@ -332,7 +350,8 @@ export async function registerOverdueAutomaticAbsences(workspaceId: string, opti
       continue;
     }
     const [marking, blockers, closure] = await Promise.all([
-      hasMarking(deps, workspaceId, uid, date), blockingRequests(deps, workspaceId, uid, date),
+      hasMarking(deps, workspaceId, uid, date, sameDayShifts.map(({ shift: candidate }) => String(candidate.startTime))),
+      blockingRequests(deps, workspaceId, uid, date),
       deps.hrDb.collection(CLOSURES).doc(closureKey(workspaceId, date)).get(),
     ]);
     if (marking) { stats.withMarking += 1; continue; }

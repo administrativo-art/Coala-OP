@@ -10,6 +10,9 @@ import { configuredRepPClock } from '@/features/dp/rep-p/hlb-ntp-clock.server';
 import { readOwnRepPReceiptForAdjustment, REP_P_PILOT_DAY_GUARDS, repPEstablishmentForEmployer,
   repPPilotDayGuardId } from '@/features/dp/rep-p/service.server';
 import { repPMarkingTimeZone } from '@/features/dp/rep-p/time-zones';
+import { attributeWorkDate, civilDateForWorkDate, markingReadRange } from '@/features/dp/time-bank/work-date';
+import { readWorkDateShifts } from '@/features/dp/time-bank/work-date.server';
+import { nightShiftEnabled } from '@/features/dp/time-config/rollout.server';
 import { repPOfficialMarkingEnabled, repPOfficialStartDate, repPPilotWorkDateAllowed } from '@/features/dp/rep-p/runtime-config';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
@@ -344,11 +347,18 @@ export async function createOwnAdjustment(context: ServerUserContext, input: Com
   if (reference.status !== 'matched') throw fail('PTRP_EMPLOYMENT_UNRESOLVED', 'Não há vínculo válido para a data do ajuste.');
 
   const establishment = await repPEstablishmentForEmployer(context.workspace_id, reference.period.employer.cnpj, { repDb: deps.repDb });
+  // Só com o turno noturno ligado há leitura de escala; desligado, o pedido vale para a data civil, como sempre.
+  const workDateShifts = nightShiftEnabled()
+    ? await readWorkDateShifts(context.workspace_id, context.decoded.uid, input.workDate, input.workDate,
+      { mainDb: deps.mainDb, hrDb: deps.hrDb })
+    : null;
   const operations: AdjustmentOperationRecord[] = [];
   for (const item of requestedOperations) {
     let target: AdjustmentOperationRecord['target'] = null;
     if ('targetReceiptId' in item && item.targetReceiptId) {
-      target = await readOwnRepPReceiptForAdjustment(context, item.targetReceiptId, input.workDate, { repDb: deps.repDb });
+      target = await readOwnRepPReceiptForAdjustment(context, item.targetReceiptId, input.workDate, { repDb: deps.repDb },
+        workDateShifts ? (recordedDate, markedAt) => /^\d{4}-\d{2}-\d{2}$/.test(recordedDate)
+          && attributeWorkDate(recordedDate, markedAt, workDateShifts) === input.workDate : undefined);
       if (!target) throw fail('PTRP_ADJUSTMENT_TARGET_INVALID', 'Batida não encontrada neste dia.', 'NOT_FOUND');
     }
     let inclusion: AdjustmentOperationRecord['inclusion'] = null;
@@ -359,7 +369,11 @@ export async function createOwnAdjustment(context: ServerUserContext, input: Com
       }
       const unit = await deps.mainDb.collection('dp_units').doc(unitId).get();
       const zone = repPMarkingTimeZone(unit.get('timeZone'), establishment.timeZone ?? 'America/Fortaleza');
-      inclusion = { markedAt: zonedFiscalTimestamp(input.workDate, item.newTime, zone), executionUnitId: unitId };
+      const civilDate = workDateShifts ? civilDateForWorkDate(input.workDate, item.newTime, workDateShifts) : input.workDate;
+      if (!civilDate) {
+        throw fail('PTRP_ADJUSTMENT_OTHER_SHIFT', 'Este horário pertence ao turno de outro dia. Faça o pedido no dia em que o turno começou.');
+      }
+      inclusion = { markedAt: zonedFiscalTimestamp(civilDate, item.newTime, zone), executionUnitId: unitId };
       if (Date.parse(inclusion.markedAt.replace(/([+-]\d{2})(\d{2})$/, '$1:$2')) > Date.now()) {
         throw fail('PTRP_ADJUSTMENT_FUTURE', 'Não é possível incluir um horário que ainda não aconteceu.');
       }
@@ -479,10 +493,22 @@ export async function readAdjustmentRequestForDay(deps: DayReadDeps, adjustmentI
  * Batidas do dia da pessoa: oficiais (banco do REP-P) para o pedido oficial, do ensaio (banco coala-rh, como em
  * `readOwnPilotMarkingForAdjustment`) para a simulação, nunca as duas.
  */
-export function readDayMarkingDocuments(deps: DayReadDeps, scope: 'official' | 'pilot', workspaceId: string, employeeUid: string, workDate: string) {
+export async function readDayMarkingDocuments(deps: DayReadDeps & { mainDb: Firestore }, scope: 'official' | 'pilot', workspaceId: string,
+  employeeUid: string, workDate: string) {
   const database = scope === 'pilot' ? deps.hrDb : deps.repDb;
-  return database.collection(scope === 'pilot' ? PILOT_MARKINGS : 'repP_receipts').where('workspaceId', '==', workspaceId)
-    .where('employeeId', '==', employeeUid).where('recordedDate', '==', workDate).limit(DAY_MARKINGS_LIMIT + 1).get();
+  const base = database.collection(scope === 'pilot' ? PILOT_MARKINGS : 'repP_receipts').where('workspaceId', '==', workspaceId)
+    .where('employeeId', '==', employeeUid);
+  if (scope === 'pilot' || !nightShiftEnabled()) return base.where('recordedDate', '==', workDate).limit(DAY_MARKINGS_LIMIT + 1).get();
+  const range = markingReadRange(workDate, workDate);
+  const [snapshot, shifts] = await Promise.all([
+    base.where('recordedDate', '>=', range.start).where('recordedDate', '<=', range.end).orderBy('recordedDate').limit(DAY_MARKINGS_LIMIT + 1).get(),
+    readWorkDateShifts(workspaceId, employeeUid, workDate, workDate, { mainDb: deps.mainDb, hrDb: deps.hrDb }),
+  ]);
+  const docs = snapshot.docs.filter((document) => {
+    const markedAt = String(document.get('snapshot.markedAt') ?? document.get('markedAt') ?? '');
+    return markedAt && attributeWorkDate(String(document.get('recordedDate')), markedAt, shifts) === workDate;
+  });
+  return { docs, size: snapshot.size > DAY_MARKINGS_LIMIT ? snapshot.size : docs.length };
 }
 
 /** Tratamentos oficiais do dia. O ensaio não grava tratamento: o do ensaio é derivado dos pedidos aprovados (`pilot-treatments.ts`). */
