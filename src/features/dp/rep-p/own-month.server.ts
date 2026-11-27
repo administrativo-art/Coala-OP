@@ -14,7 +14,7 @@ import { AUTOMATIC_ABSENCES } from '@/features/dp/time-adjustments/automatic-abs
 import { adjustmentRestoresAutomaticAbsence, automaticAbsenceSuperseded } from '@/features/dp/time-adjustments/automatic-absence-core';
 
 import { policyDayRulesFor } from '@/features/dp/time-config/policy-tolerance.server';
-import { nightShiftEnabled } from '@/features/dp/time-config/rollout.server';
+import { nightShiftEnabled, nightToleranceEnabled } from '@/features/dp/time-config/rollout.server';
 import { crossesMidnight } from '@/features/dp/time-bank/work-date';
 import { repPOwnMonthSchema } from './schemas';
 import { isBrazilTimeZone } from './time-zones';
@@ -30,6 +30,8 @@ export type RepPOwnScheduledShift = {
   overnight: boolean;
   /** Só com o turno noturno ligado, em turno que passa da meia-noite. */
   workDateRule?: boolean;
+  /** Só com a regra das 22h ligada, em turno que termina nesse horário. */
+  nightToleranceRule?: boolean;
   manualOrder?: number;
   manualMode?: 'fixed' | 'flexible';
   manualWorkMinutes?: number;
@@ -227,6 +229,7 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       overnight: doc.get('overnight') === true,
       ...(nightShiftEnabled() && doc.get('type') !== 'day_off' && crossesMidnight(doc.get('overnight'), text(doc.get('startTime')), text(doc.get('endTime')))
         ? { workDateRule: true } : {}),
+      ...(nightToleranceEnabled() && doc.get('type') !== 'day_off' && text(doc.get('endTime')) === '22:00' ? { nightToleranceRule: true } : {}),
       unitId,
       unitName: unitId ? unitNameById.get(unitId) ?? null : null,
       assignmentKind: doc.get('assignmentKind') === 'external_coverage' ? 'external_coverage' : 'regular',

@@ -204,6 +204,7 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
       endTime: last ? (last.manualMode === 'fixed' ? last.endTime : null) : raw.endTime,
       overnight: raw.overnight,
       ...(raw.workDateRule ? { workDateRule: true } : {}),
+      ...(raw.nightToleranceRule ? { nightToleranceRule: true } : {}),
       plannedMinutes: pieces.length ? pieces.reduce((total, item) => total + (plannedMinutesOf(item) ?? 0), 0) : plannedMinutesOf(raw),
       referenceMinutes: raw.referenceMinutes, toleranceMinutes: raw.toleranceMinutes, journeyId: raw.journeyId,
       // Dia manual tem pausas próprias: o intervalo previsto do turno não se aplica.
