@@ -17,6 +17,11 @@ export function nightShiftEnabled() {
   return process.env.DP_TIME_NIGHT_SHIFT_ENABLED?.trim() === 'true';
 }
 
+/** Turno que termina às 22h: saída dentro da tolerância não gera minuto noturno. Muda número usado na folha. */
+export function nightToleranceEnabled() {
+  return process.env.DP_TIME_NIGHT_TOLERANCE_ENABLED?.trim() === 'true';
+}
+
 export function activeOvertimePolicy(policy: DPOvertimePolicy): DPOvertimePolicy {
   if (policyRulesEnabled()) return policy;
   const legacy = { ...policy };
