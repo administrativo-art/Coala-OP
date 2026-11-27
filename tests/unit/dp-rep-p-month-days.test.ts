@@ -71,6 +71,9 @@ describe('Contrato central do dia', () => {
       1: 'f9b5f6e6ab3077ef37c10fccb6ceeb467bbba9d2b60e2a8965eb67fd07e4f5f2',
       // 2: tolerância só no início e fim, entrada após/saída antes do previsto, política de cobertura.
       2: 'c2f713879a8cbca80cc75c707bec9152d03b1c6ff3854a041a00c0f94e4b6c59',
+      // 3: minutos noturnos do turno que termina às 22h. A referência não tem esse turno, por isso a impressão repete a 2;
+      // a regra nova é coberta em dp-night-tolerance.test.ts.
+      3: 'c2f713879a8cbca80cc75c707bec9152d03b1c6ff3854a041a00c0f94e4b6c59',
     };
     const actual = createHash('sha256').update(JSON.stringify(assembleMonthDays(input).days)).digest('hex');
     assert.equal(actual, fingerprints[DAY_ALGORITHM_VERSION],

@@ -369,10 +369,12 @@ A proteção do contrato legado para turnos comuns não elimina a conferência a
 - **Decisão jurídica/contábil pendente:** o AEJ por jornada cita NSR que está no AFD da competência seguinte, e o espelho mostra o horário do dia seguinte sem indicar a data.
 - **Minutos noturnos do turno que termina às 22h:** ver a seção seguinte.
 
-## Turno que termina às 22h e minutos noturnos (27/11/2026, programado e desligado)
+## Turno que termina às 22h e minutos noturnos (ligada em 27/11/2026)
 
 - **Regra decidida:** só no turno cujo fim previsto é 22:00, se a tolerância absorve a saída, os minutos depois das 22h não são noturnos; passou dela, contam todos (tolerância 5: 22:05 = 0; 22:08 = 8). Sem parecer jurídico anexado.
 - **Qual tolerância:** a mesma conta do saldo do banco (`edgeTolerance` em [`core.ts`](../../../src/features/dp/time-bank/core.ts)). Sem política, 5 min por ponta e a soma de entrada e saída até a tolerância da jornada (no máximo 10); com política, as tolerâncias dela. Exemplo: tolerância 5, entrada 3 min fora e saída 22:03 soma 6, e os 3 minutos noturnos contam. A tela usa a mesma função.
 - **Sem mudança:** cobertura que estende o dia, dia manual em trechos e turno que não termina exatamente às 22:00. O AEJ não é afetado. O Coala Go exibe o total do servidor.
-- **Chave:** `DP_TIME_NIGHT_TOLERANCE_ENABLED`, `false` no `apphosting.yaml`. O total noturno segue para o banco de horas, o fechamento do portal e a conferência do contracheque.
-- **Antes de ligar:** decidir a competência (ligar antes de fechar um mês muda o total dele; apuração já gravada não é recalculada); dia que zera o noturno perde a pendência `NIGHT_SHIFT`; liberações de alerta de dias com turno até 22:00 deixam de valer, porque o turno passa a levar a marca da regra; subir a versão do banco (`time-bank-v5`, mantendo v3 e v4 legíveis) e `DAY_ALGORITHM_VERSION`.
+- **Chave:** `DP_TIME_NIGHT_TOLERANCE_ENABLED`, `true` no `apphosting.yaml`, ligada a pedido do usuário, sem parecer jurídico anexado. O total noturno segue para o banco de horas, o fechamento do portal e a conferência do contracheque.
+- **Só com tolerância:** o turno recebe a regra quando a jornada dele tem tolerância maior que zero (ou, com `DP_TIME_POLICY_RULES_ENABLED`, quando há política com tolerâncias no dia). Sem tolerância, nada muda no turno, e as liberações de alerta continuam valendo.
+- **Alcance:** não há data de início. A regra vale para todo mês ainda não apurado, ou apurado de novo, nos turnos com tolerância; apuração já gravada não é recalculada. Pela leitura de 25/11/2026, a jornada 44h (até 30/11) não tinha tolerância e a 40h (desde 01/12) tem 5 min; se a jornada de novembro ganhar tolerância, a regra passa a valer nele.
+- **Efeitos:** dia que zera o noturno perde a pendência `NIGHT_SHIFT`; liberação de alerta de dia com turno marcado deixa de valer. As versões subiram para `time-bank-v5` (v3 e v4 continuam legíveis) e `DAY_ALGORITHM_VERSION` 3.

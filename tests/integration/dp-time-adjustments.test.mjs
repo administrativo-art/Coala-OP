@@ -591,3 +591,31 @@ test('turno que passa da meia-noite: o AEJ lê o dia seguinte e não inclui quem
   assert.deepEqual(asked.at(-1), ['2025-04-01', '2025-04-30']);
   assert.equal(legacy.filter((line) => line.startsWith('05|')).length, 1);
 });
+
+test('turno que termina às 22h: só leva a regra noturna com a chave ligada e tolerância na jornada', async (t) => {
+  const previous = process.env.DP_TIME_NIGHT_TOLERANCE_ENABLED;
+  t.after(() => { if (previous === undefined) delete process.env.DP_TIME_NIGHT_TOLERANCE_ENABLED; else process.env.DP_TIME_NIGHT_TOLERANCE_ENABLED = previous; });
+  const { readRepPMonthOfPerson } = await import('../../src/features/dp/rep-p/own-month.server.ts');
+  const prefix = `night22-${randomUUID().slice(0, 6)}`;
+  const uid = `${prefix}-employee`;
+  const schedule = dbAdmin.collection('dp_schedules').doc(`${prefix}-schedule`);
+  const shift = (day, journeyId, endTime = '22:00') => schedule.collection('shifts').doc(`${prefix}-${day}`).set({ scheduleId: schedule.id, userId: uid,
+    unitId: `${prefix}-unit`, type: 'work', date: `2025-05-${day}`, startTime: '14:00', endTime,
+    ...(journeyId ? { journeyResolution: { journeyId: `${prefix}-${journeyId}` } } : {}) });
+  await Promise.all([
+    dbAdmin.collection('users').doc(uid).set({ isActive: true }),
+    dbAdmin.collection('dp_journeys').doc(`${prefix}-with`).set({ toleranceMinutes: 5 }),
+    dbAdmin.collection('dp_journeys').doc(`${prefix}-zero`).set({ toleranceMinutes: 0 }),
+    dbAdmin.collection('dp_journeys').doc(`${prefix}-absent`).set({}),
+    schedule.set({ year: 2025, month: 5, unitId: `${prefix}-unit`, publicationStatus: 'published', publicationVersion: 1, createdAt: new Date('2025-04-20T12:00:00Z') }),
+    shift('05', 'with'), shift('06', 'zero'), shift('07', 'absent'), shift('08', null), shift('09', 'with', '21:00'),
+  ]);
+  const marked = async () => (await readRepPMonthOfPerson([uid], '2025-05', { db: dbAdmin })).shifts
+    .filter((item) => item.nightToleranceRule).map((item) => item.date);
+
+  process.env.DP_TIME_NIGHT_TOLERANCE_ENABLED = 'false';
+  assert.deepEqual(await marked(), []);
+  process.env.DP_TIME_NIGHT_TOLERANCE_ENABLED = 'true';
+  assert.deepEqual(await marked(), ['2025-05-05']);
+});
+
