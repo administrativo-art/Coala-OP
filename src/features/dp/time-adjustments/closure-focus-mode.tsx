@@ -21,6 +21,7 @@ import { REASON_LABELS } from "@/features/dp/time-bank/time-bank-card";
 import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
 import { cn } from "@/lib/utils";
 
+import { dayNeedsTreatment } from "./closure-person-record-model";
 import { ADJUSTMENT_KIND_LABELS, ADJUSTMENT_STATUS_LABELS, type AdjustmentView } from "./types";
 
 const WEEKDAYS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
@@ -29,13 +30,7 @@ const dateBR = (value: string) => value.slice(0, 10).split("-").reverse().join("
 const whenBR = (value: string | null | undefined) => value ? `${dateBR(value)} às ${new Date(value).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "—";
 const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to.slice(0, 10)}T12:00:00Z`) - Date.parse(`${from.slice(0, 10)}T12:00:00Z`)) / 86_400_000);
 
-/** Dia que pede ação do DP no saneamento: alerta, ajuste em análise ou ausência ainda sem decisão. */
-export function dayNeedsTreatment(day: DayView, adjustments: AdjustmentView[], today: string) {
-  if (day.date >= today) return false;
-  return day.incidents.length > 0
-    || adjustments.some((item) => item.workDate === day.date && item.status === "in_review")
-    || Boolean(day.absence && OPEN_ABSENCE.includes(day.absence.status));
-}
+export { dayNeedsTreatment };
 
 type BankLines = { policyName: string | null; lines: BankStatementLine[] } | null;
 
@@ -59,10 +54,12 @@ export function absenceCoverage(dayAbsence: DayView["absence"], request: { unit:
  * O ponto é de uso exclusivo do colaborador: aqui o DP só decide pedidos feitos por ele (ajuste e ausência) e consulta
  * batidas e política; nada grava batida ou pedido em nome da pessoa. Clicar fora não fecha (Esc e "Fechar" fecham).
  */
-export function ClosureFocusMode({ open, onOpenChange, startDate, days, today, adjustments, bank, unitNames, employeeName, employeeUid, firebaseUser, onChanged }: {
+export function ClosureFocusMode({ open, onOpenChange, startDate, queueDates, days, today, adjustments, bank, unitNames, employeeName, employeeUid, firebaseUser, onChanged }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   startDate: string | null;
+  /** Fila de dias a tratar de quem abre o modal; sem ela, todos os dias que pedem ação. */
+  queueDates?: string[];
   days: DayView[];
   today: string;
   adjustments: AdjustmentView[];
@@ -73,7 +70,7 @@ export function ClosureFocusMode({ open, onOpenChange, startDate, days, today, a
   firebaseUser: FirebaseUser | null;
   onChanged: () => void;
 }) {
-  const queue = useMemo(() => days.filter((day) => dayNeedsTreatment(day, adjustments, today)).map((day) => day.date), [days, adjustments, today]);
+  const queue = useMemo(() => queueDates ?? days.filter((day) => dayNeedsTreatment(day, adjustments, today)).map((day) => day.date), [queueDates, days, adjustments, today]);
   const [date, setDate] = useState<string | null>(startDate);
   useEffect(() => { if (open) setDate(startDate ?? queue[0] ?? null); }, [open, startDate]); // eslint-disable-line react-hooks/exhaustive-deps
   const day = days.find((item) => item.date === date) ?? null;

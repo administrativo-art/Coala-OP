@@ -186,3 +186,43 @@ A busca das nove fontes administrativas filtra `workspaceId == sessão OR worksp
 Enquanto `DP_TIME_POLICY_RULES_ENABLED` estiver desligado, os avisos visuais de intervalo sem margem não introduzem novos bloqueios no fechamento/folha. O fechamento preserva o critério anterior de pausa abaixo do previsto menos a tolerância da jornada, incluindo o mínimo de pausa adicional já existente; ausências de intervalo e demais ocorrências continuam bloqueadas como antes. Exemplo: pausa de59min sob previsão60min/tolerância5min segue visível como aviso, mas não cria `breakReviewDates`; pausa de50min já crítica mantém justificativa e revisão da folha. Não regravar batidas nem remover pendências históricas. Ativar o contrato novo continua condicionado à decisão auditável do DP e às validações jurídicas/contábeis.
 
 A proteção do contrato legado para turnos comuns não elimina a conferência aprovada da cobertura estendida: quando a política congelada de cobertura se aplica e o trabalho supera6h, `short_break` continua grave no fechamento mesmo com a flag de tolerâncias/intrajornada desligada. Exemplo: turno6h/intervalo15min, carga8h e trabalho efetivo7h com pausa15min exige conferência do intervalo de60min; justificativa não apaga `breakReviewDates` nem libera automaticamente a folha.
+
+## 8. Implantação das telas aprovadas (26/11/2026)
+
+Autorizada pelo programador em 26/11/2026 (“vamos implantar as telas”), sem commit nem publicação. As sete telas aprovadas foram conferidas no mesmo dia (versão publicada igual à cópia local); a observação da seção 7 de que o link não abriu vale só para aquela preparação.
+
+### 8.1 Fases
+
+| Fase | Telas | Entrega | Depende de |
+|---|---|---|---|
+| 1 | F2 | Registro do mês da pessoa, lateral com organização e pendências, abertura direta no mês aberto | dados existentes |
+| 2 | G, G2 | Modal do dia com escolha da hora extra e intervalo curto | gravar a decisão por dia; revisão de ponto |
+| 3 | J | Etapa 2: revisão de banco e extras | decisões da fase 2 |
+| 4 | H, K | Escolha e fechamento por organização | fechamento deixa de ser de todas as organizações |
+| 5 | I2 | Etapas por pessoa depois do fechamento | fase 4 |
+
+Falta desenhar a decisão do DP para os casos de intervalo que o sistema não resolve (seção 6).
+
+### 8.2 Fase 1: elementos da tela F2
+
+| Elemento | Origem verificada | Situação |
+|---|---|---|
+| Organização na lateral, com troca | `useOrganizationOf` (`closure-year-overview.tsx`) | existe; é filtro, o fechamento continua de todas |
+| Pedidos (P) | `pendingOfPerson`, resposta de `GET closures` | existe |
+| Faltas automáticas (F) | `ClosureAbsence.automatic` | existe; **não há decisão do DP** sobre a falta |
+| Alertas que travam (A) | `GET closures?alerts=1` (`previewClosureAlerts`) | existe só com o mês terminado; antes disso a tela mostra “a conferir”, sem afirmar que trava |
+| Cartões, calendário, tabela | `POST employees/[uid]` (contrato central do dia) | derivado |
+| Horas do mês | dias do contrato e extrato do banco já lido pela trilha | derivado; prévia |
+| Pedir que regularize | `DayCorrectionBatch` | existe |
+| Abrir dia | `ClosureFocusMode` | existe; o desenho novo é a fase 2 |
+| Marcar mês conferido / aviso conferido | nenhum registro existente | **adiado**: exige gravação nova |
+| Decidir falta | nenhuma ação existente | **adiado**: regra e gravação novas |
+| “Etapa 1 de 7” e fechar uma organização | trilha atual tem 4 etapas; fechamento é global | **adiado** para as fases 3 a 5 |
+
+Decisões de implementação: a abertura direta na pessoa vale só para competência aberta; competência fechada mantém a visão da organização (assinaturas, reabertura, financeiro), que no mês aberto fica no botão “Visão da organização”. A primeira pessoa é a primeira em ordem alfabética com pedido ou alerta que trava (a falta automática fica marcada, mas não é pendência, decisão após a revisão de ponto de 26/11/2026); sem nenhuma, a primeira da lista. A página de ponto do próprio colaborador não muda.
+
+### 8.3 Revisão de ponto da fase 1 (26/11/2026)
+
+Substituto do Doc Brown: não publicar com textos que afirmem mais que o servidor. Corrigido: “sem pedido nem alerta que trave” com aviso das demais conferências do fechamento; turno da noite nunca “sem ocorrência”; revisão pedida, filtros, legenda e totais da semana restaurados; fila do modal igual à do botão; falta automática fora das pendências e sem saldo; alertas antigos não são repetidos durante a releitura. Mantido: a abertura automática gera a trilha de acesso, sem indicar que foi automática (exigiria mudança no servidor).
+
+**Pendência separada, anterior a estas telas:** `buildDayView` não gera falta nem batida ímpar em turno que atravessa a meia-noite, e o fechamento usa o mesmo cálculo. Corrigir muda o que trava o fechamento e pede testes e revisão próprios. A cobertura desses turnos pela falta automática não foi verificada.
