@@ -21,6 +21,7 @@ import { REASON_LABELS } from "@/features/dp/time-bank/time-bank-card";
 import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
 import { cn } from "@/lib/utils";
 
+import { breakSummary, dayTimeline, type QueueTag } from "./closure-day-view";
 import { dayNeedsTreatment } from "./closure-person-record-model";
 import { ADJUSTMENT_KIND_LABELS, ADJUSTMENT_STATUS_LABELS, type AdjustmentView } from "./types";
 
@@ -54,12 +55,17 @@ export function absenceCoverage(dayAbsence: DayView["absence"], request: { unit:
  * O ponto é de uso exclusivo do colaborador: aqui o DP só decide pedidos feitos por ele (ajuste e ausência) e consulta
  * batidas e política; nada grava batida ou pedido em nome da pessoa. Clicar fora não fecha (Esc e "Fechar" fecham).
  */
-export function ClosureFocusMode({ open, onOpenChange, startDate, queueDates, days, today, adjustments, bank, unitNames, employeeName, employeeUid, firebaseUser, onChanged }: {
+export function ClosureFocusMode({ open, onOpenChange, startDate, queueDates, dayState, tagOf, competenceLabel, days, today, adjustments, bank, unitNames, employeeName, employeeUid, firebaseUser, onChanged }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   startDate: string | null;
   /** Fila de dias a tratar de quem abre o modal; sem ela, todos os dias que pedem ação. */
   queueDates?: string[];
+  /** Só o que o servidor ou um pedido aberto garantem: trava ou liberado. Sem resposta, nada é afirmado. */
+  dayState?: (date: string) => "blocks" | "released" | null;
+  competenceLabel?: string;
+  /** Rótulo de cada dia na fila, calculado por quem conhece a resposta do servidor. */
+  tagOf?: (date: string) => QueueTag | null;
   days: DayView[];
   today: string;
   adjustments: AdjustmentView[];
@@ -83,15 +89,31 @@ export function ClosureFocusMode({ open, onOpenChange, startDate, queueDates, da
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-(--ds-scrim)" />
         <DialogPrimitive.Content onInteractOutside={(event) => event.preventDefault()} onPointerDownOutside={(event) => event.preventDefault()}
-          className="fixed inset-4 z-50 mx-auto flex max-w-[1180px] flex-col overflow-hidden rounded-[20px] bg-ds-warm font-ds shadow-ds-side outline-hidden md:inset-8">
+          className="fixed inset-2 z-50 mx-auto flex max-w-[1240px] flex-col overflow-hidden rounded-[20px] bg-ds-warm font-ds shadow-ds-side outline-hidden md:inset-8">
           {day ? <>
-            <header className="flex flex-wrap items-center gap-3 border-b border-ds-border bg-ds-surface px-5 py-3.5">
-              <DialogPrimitive.Title className="text-lg font-black text-ds-ink">{WEEKDAYS[new Date(`${day.date}T12:00:00Z`).getUTCDay()]}, {dateBR(day.date)}</DialogPrimitive.Title>
-              <DialogPrimitive.Description className="sr-only">Tratamento do dia de {employeeName} no saneamento da folha.</DialogPrimitive.Description>
-              {day.incidents.map((incident) => <StatusPill key={incident} variant={INCIDENT_SEVERITY[incident] === "danger" ? "danger" : "warn"}>{INCIDENTS[incident].label}</StatusPill>)}
-              {day.absence ? <StatusPill variant={absenceStatus(day.absence.status, day.absence.approvedByInaction).variant}>{day.absence.typeName} · {absenceStatus(day.absence.status, day.absence.approvedByInaction).label}</StatusPill> : null}
-              <span className="ml-auto text-xs font-bold text-ds-ink-muted">{position >= 0 ? `Dia ${position + 1} de ${queue.length} a tratar` : `${queue.length} dias a tratar`}</span>
-              <DialogPrimitive.Close asChild><Button variant="ds-secondary" size="sm"><X className="h-4 w-4" aria-hidden /> Fechar</Button></DialogPrimitive.Close>
+            <header className="space-y-3 border-b border-ds-border bg-ds-surface px-5 py-3.5">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <span className="basis-full text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-ds-ink-muted">{[employeeName, competenceLabel, "tratar o dia"].filter(Boolean).join(" · ")}</span>
+                <DialogPrimitive.Title className="text-xl font-black text-ds-ink">{WEEKDAYS[new Date(`${day.date}T12:00:00Z`).getUTCDay()]}, {dateBR(day.date)}</DialogPrimitive.Title>
+                <DialogPrimitive.Description className="sr-only">Tratamento do dia de {employeeName} no saneamento da folha.</DialogPrimitive.Description>
+                {day.incidents.map((incident) => <StatusPill key={incident} variant={INCIDENT_SEVERITY[incident] === "danger" ? "danger" : "warn"}>{INCIDENTS[incident].label}</StatusPill>)}
+                {day.absence ? <StatusPill variant={absenceStatus(day.absence.status, day.absence.approvedByInaction).variant}>{day.absence.typeName} · {absenceStatus(day.absence.status, day.absence.approvedByInaction).label}</StatusPill> : null}
+                {dayState?.(day.date) === "blocks" ? <StatusPill variant="danger">Trava o fechamento</StatusPill> : null}
+                {dayState?.(day.date) === "released" ? <StatusPill variant="neutral">Liberado pelo RH</StatusPill> : null}
+                <span className="ml-auto text-xs font-bold text-ds-ink-muted">{position >= 0 ? `Dia ${position + 1} de ${queue.length} a tratar` : `${queue.length} ${queue.length === 1 ? "dia" : "dias"} a tratar`}</span>
+                <DialogPrimitive.Close asChild><Button variant="ds-secondary" size="sm"><X className="h-4 w-4" aria-hidden /> Fechar</Button></DialogPrimitive.Close>
+              </div>
+              {queue.length ? <nav aria-label="Dias a tratar" className="flex gap-1.5 overflow-x-auto pb-0.5">
+                {queue.map((item) => {
+                  const tag = tagOf?.(item) ?? null;
+                  return <button key={item} type="button" aria-current={item === day.date ? "step" : undefined} onClick={() => setDate(item)}
+                    className={cn("flex min-w-[74px] shrink-0 flex-col items-start rounded-ds-md border bg-ds-surface px-2.5 py-1.5 text-left",
+                      item === day.date ? "border-ds-ink shadow-[inset_0_0_0_1px_var(--ds-ink)]" : "border-ds-border hover:border-ds-ink-faint")}>
+                    <span className="font-ds-mono text-[12px] font-extrabold text-ds-ink">{item.slice(8, 10)}/{item.slice(5, 7)}</span>
+                    <span className={cn("text-[10.5px] font-extrabold", tag?.tone === "danger" ? "text-ds-danger" : tag?.tone === "warn" ? "text-ds-warn" : tag?.tone === "info" ? "text-ds-info" : "text-ds-ink-muted")}>{tag?.label}</span>
+                  </button>;
+                })}
+              </nav> : null}
             </header>
             <div className="flex-1 overflow-y-auto px-5 py-4">
               <FocusDay key={day.date} day={day} adjustments={adjustments.filter((item) => item.workDate === day.date)} bank={bank} unitNames={unitNames}
@@ -168,56 +190,43 @@ function FocusDay({ day, adjustments, bank, unitNames, employeeName, employeeUid
   const odd = day.markings.length % 2 === 1 || (work && day.markings.length > 0 && day.markings.length < 4);
   const lines = (bank?.lines ?? []).filter((item) => item.date === day.date);
 
+  const timeline = dayTimeline(day);
+  const pause = breakSummary(day);
+
   return (
-    <div className="space-y-5">
-      <div className="grid gap-3 rounded-ds-btn-lg border border-ds-border bg-ds-surface px-4 py-3 sm:grid-cols-4">
+    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(340px,1fr)]">
+      <Zone index={1} title="Evidências do dia">
+        <div className="space-y-3">
+      <div className="grid gap-3 rounded-ds-btn-lg border border-ds-border bg-ds-surface px-4 py-3 grid-cols-2 xl:grid-cols-4">
         {[["Escala", work ? `${work.shiftName ?? "Turno"} · ${work.startTime}–${work.endTime}` : day.shift ? "Folga" : "Sem escala", work?.unitName ?? null],
           ["Trabalhado", day.markings.length ? durationLabel(day.workedMinutes) : "—", odd ? "só períodos fechados" : day.plannedWorkMinutes ? `de ${durationLabel(day.plannedWorkMinutes)} previstos` : null],
           ["Intervalo", !odd && day.breakMinutes !== null ? durationLabel(day.breakMinutes) : "—", odd ? "indisponível: falta batida" : null],
           ["Resultado", odd || day.balanceMinutes === null ? "—" : durationLabel(day.balanceMinutes, true), odd ? "falta batida" : "prévia"]].map(([label, value, hint]) => (
           <div key={label as string} className="min-w-0">
             <span className="block text-[10.5px] font-bold text-ds-ink-muted">{label}</span>
-            <span className="block truncate font-ds-mono text-[16px] font-extrabold text-ds-ink">{value}</span>
+            <span className="block break-words font-ds-mono text-[15px] font-extrabold text-ds-ink">{value}</span>
             {hint ? <span className="block truncate text-[10.5px] font-semibold text-ds-ink-muted">{hint}</span> : null}
           </div>
         ))}
       </div>
 
-      <Zone index={1} title="O que precisa de decisão" aside={decisions ? `${decisions} ${decisions === 1 ? "item" : "itens"}` : "nenhum"}>
-        <div className="space-y-3">
-          {coveredAlerts.map((incident) => (
-            <p key={incident} className="flex gap-2 rounded-ds-md border border-dashed border-ds-border bg-ds-surface/60 px-3 py-2 text-xs text-ds-ink-2">
-              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span><strong className="text-ds-ink">{INCIDENTS[incident].label}</strong> · {incidentFact(day, incident, unitNames)} Coberto pelo pedido de ausência do dia inteiro: decida o pedido. Se ele for recusado, a pendência volta.</span>
-            </p>
-          ))}
-          {alerts.map((incident) => {
-            const { label, detail, icon: Icon } = INCIDENTS[incident];
-            const danger = INCIDENT_SEVERITY[incident] === "danger";
-            return (
-              <div key={incident} className={cn("flex gap-2.5 rounded-ds-md border px-3 py-2.5", danger ? "border-ds-trouble-border bg-ds-trouble-bg" : "border-ds-caution-border bg-ds-caution-bg")}>
-                <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", danger ? "text-ds-danger" : "text-ds-caution")} aria-hidden />
-                <div className="min-w-0 space-y-1">
-                  <p className="text-sm font-bold text-ds-ink">{label}</p>
-                  {incidentFact(day, incident, unitNames) ? <p className="text-xs font-semibold text-ds-ink-2">{incidentFact(day, incident, unitNames)}</p> : null}
-                  <p className="text-xs text-ds-ink-muted">{detail}</p>
-
-                </div>
+          {timeline ? <Card title="Linha do dia" aside={<span className="text-xs text-ds-ink-faint">{timeline.shift ? "faixa clara = turno" : day.shift?.type === "day_off" ? "folga" : "sem turno definido"}</span>}>
+            <div className="px-6 pb-2 pt-3">
+              <div className="relative h-12" role="img" aria-label={timeline.marks.length ? `Batidas às ${timeline.marks.map((mark) => mark.included ? `${mark.time} (incluída por ajuste)` : mark.time).join(", ")}` : "Sem batidas"}>
+                <div className="absolute inset-x-0 top-6 h-2.5 rounded-full bg-ds-neutral-bg" />
+                {timeline.shift ? <div className="absolute top-5 h-[18px] rounded-ds-sm border border-dashed border-ds-ink-faint" style={{ left: `${timeline.shift.left}%`, width: `${timeline.shift.width}%` }} /> : null}
+                {timeline.segments.map((segment, index) => <div key={index} className="absolute top-6 h-2.5 rounded-full bg-ds-ok" style={{ left: `${segment.left}%`, width: `${segment.width}%` }} />)}
+                {timeline.marks.map((mark, index) => <span key={mark.key} className={cn("absolute -translate-x-1/2 font-ds-mono text-[10.5px] font-bold text-ds-ink", index % 2 ? "top-10" : "top-0")} style={{ left: `${mark.left}%` }}>{mark.included ? `+${mark.time}` : mark.time}</span>)}
               </div>
-            );
-          })}
-          <DayCorrectionsPanel firebaseUser={firebaseUser} month={day.date.slice(0, 7)} employeeUid={employeeUid} workDate={day.date} adjustments={adjustments} onChanged={onChanged} />
-          {adjustments.map((adjustment) => <AdjustmentCard key={adjustment.id} adjustment={adjustment} day={day} firebaseUser={firebaseUser} onChanged={onChanged} />)}
-          {day.absence ? (
-            absence ? <AbsenceCard request={absence} firebaseUser={firebaseUser} employeeName={employeeName} onChanged={() => { void loadAbsence(); onChanged(); }} />
-              : <Card title={`Ausência · ${day.absence.typeName}`}><p className="px-4 py-3 text-sm text-ds-ink-muted">{absenceError ?? "Abrindo o pedido…"}</p></Card>
-          ) : null}
-          {!decisions && !coveredAlerts.length ? <p className="text-sm text-ds-ink-muted">Nada a decidir neste dia.</p> : null}
-        </div>
-      </Zone>
-
-      <Zone index={2} title="Evidências do dia" aside="batidas e política aplicada">
-        <div className="grid gap-3 lg:grid-cols-2">
+              <div className="mt-2 flex justify-between font-ds-mono text-[10.5px] text-ds-ink-muted">{timeline.ticks.map((tick) => <span key={tick}>{tick}</span>)}</div>
+            </div>
+          </Card> : null}
+          {pause ? <Card title="Intervalo do dia">
+            <dl className="grid grid-cols-3 gap-3 px-4 py-3">
+              {([["Previsto", durationLabel(pause.expected)], ["Feito", durationLabel(pause.done)], ["Diferença", durationLabel(pause.difference, true)]] as const).map(([label, value]) =>
+                <div key={label}><dt className="text-[10.5px] font-bold text-ds-ink-muted">{label}</dt><dd className="font-ds-mono text-[15px] font-extrabold text-ds-ink">{value}</dd></div>)}
+            </dl>
+          </Card> : null}
           <Card title="Batidas" aside={<span className="text-xs text-ds-ink-faint">{day.markings.length}{work ? ` de ${Math.max(4, day.markings.length)}` : ""}</span>}>
             <div className="space-y-2.5 px-4 py-3">
               {fullDay && !day.allMarkings.length ? <p className="text-sm text-ds-ink-muted">{coverage.approved ? "Nenhuma batida esperada: o dia inteiro está coberto pela ausência aprovada." : "Sem batidas. O dia inteiro está no pedido de ausência ainda sem decisão: se ele for recusado, as batidas da escala voltam a ser cobradas."}</p>
@@ -250,6 +259,40 @@ function FocusDay({ day, adjustments, bank, unitNames, employeeName, employeeUid
           </Card>
         </div>
       </Zone>
+
+      <Zone index={2} title="Decisão do DP" aside={decisions ? `${decisions} ${decisions === 1 ? "item" : "itens"}` : "nenhum"}>
+        <div className="space-y-3">
+          {coveredAlerts.map((incident) => (
+            <p key={incident} className="flex gap-2 rounded-ds-md border border-dashed border-ds-border bg-ds-surface/60 px-3 py-2 text-xs text-ds-ink-2">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span><strong className="text-ds-ink">{INCIDENTS[incident].label}</strong> · {incidentFact(day, incident, unitNames)} Coberto pelo pedido de ausência do dia inteiro: decida o pedido. Se ele for recusado, a pendência volta.</span>
+            </p>
+          ))}
+          {alerts.map((incident) => {
+            const { label, detail, icon: Icon } = INCIDENTS[incident];
+            const danger = INCIDENT_SEVERITY[incident] === "danger";
+            return (
+              <div key={incident} className={cn("flex gap-2.5 rounded-ds-md border px-3 py-2.5", danger ? "border-ds-trouble-border bg-ds-trouble-bg" : "border-ds-caution-border bg-ds-caution-bg")}>
+                <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", danger ? "text-ds-danger" : "text-ds-caution")} aria-hidden />
+                <div className="min-w-0 space-y-1">
+                  <p className="text-sm font-bold text-ds-ink">{label}</p>
+                  {incidentFact(day, incident, unitNames) ? <p className="text-xs font-semibold text-ds-ink-2">{incidentFact(day, incident, unitNames)}</p> : null}
+                  <p className="text-xs text-ds-ink-muted">{detail}</p>
+
+                </div>
+              </div>
+            );
+          })}
+          <DayCorrectionsPanel firebaseUser={firebaseUser} month={day.date.slice(0, 7)} employeeUid={employeeUid} workDate={day.date} adjustments={adjustments} onChanged={onChanged} />
+          {adjustments.map((adjustment) => <AdjustmentCard key={adjustment.id} adjustment={adjustment} day={day} firebaseUser={firebaseUser} onChanged={onChanged} />)}
+          {day.absence ? (
+            absence ? <AbsenceCard request={absence} firebaseUser={firebaseUser} employeeName={employeeName} onChanged={() => { void loadAbsence(); onChanged(); }} />
+              : <Card title={`Ausência · ${day.absence.typeName}`}><p className="px-4 py-3 text-sm text-ds-ink-muted">{absenceError ?? "Abrindo o pedido…"}</p></Card>
+          ) : null}
+          {!decisions && !coveredAlerts.length ? <p className="text-sm text-ds-ink-muted">Nada a decidir neste dia.</p> : null}
+        </div>
+      </Zone>
+
     </div>
   );
 }
@@ -293,7 +336,7 @@ function AdjustmentCard({ adjustment, day, firebaseUser, onChanged }: { adjustme
   return (
     <Card title={`Pedido de ajuste · ${ADJUSTMENT_KIND_LABELS[adjustment.kind].title}`}
       aside={<StatusPill variant={inReview ? "info" : adjustment.status === "approved" ? "ok" : "neutral"}>{ADJUSTMENT_STATUS_LABELS[adjustment.status]}</StatusPill>}>
-      <div className="grid gap-0 md:grid-cols-2">
+      <div className="grid gap-0">
         <div className="space-y-3 px-4 py-3">
           <div className="space-y-1.5 text-xs">
             <p className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-ds-ink-faint">Antigo × novo</p>
@@ -313,7 +356,7 @@ function AdjustmentCard({ adjustment, day, firebaseUser, onChanged }: { adjustme
             <span className="rounded-full bg-ds-neutral-bg px-2.5 py-0.5">{late <= 0 ? "No mesmo dia" : `${late} ${late === 1 ? "dia" : "dias"} depois`}</span>
           </div>
         </div>
-        <div className="space-y-2.5 border-t border-ds-divider bg-ds-warm/40 px-4 py-3 md:border-l md:border-t-0">
+        <div className="space-y-2.5 border-t border-ds-divider bg-ds-warm/40 px-4 py-3">
           {inReview ? <>
             <Textarea value={reason} onChange={(event) => { setReason(event.target.value); setError(null); }} maxLength={1000} placeholder="Justificativa da decisão (mínimo de 10 caracteres)" className="min-h-20" />
             {error ? <p role="alert" className="text-xs font-semibold text-ds-danger">{error}</p> : null}
@@ -383,7 +426,7 @@ function AbsenceCard({ request, firebaseUser, employeeName, onChanged }: { reque
 
   return (
     <Card title={`Ausência · ${request.typeName}`} aside={<StatusPill variant={status.variant}>{status.label}</StatusPill>}>
-      <div className="grid gap-0 md:grid-cols-2">
+      <div className="grid gap-0">
         <div className="space-y-3 px-4 py-3">
           <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[13px]">
             <dt className="font-semibold text-ds-ink-muted">Para o período</dt><dd className="font-semibold text-ds-ink">{period}{hours} · {request.quantity} {request.unit === "hour" ? "h" : request.quantity === 1 ? "dia" : "dias"}</dd>
@@ -411,7 +454,7 @@ function AbsenceCard({ request, firebaseUser, employeeName, onChanged }: { reque
             </ol>
           </div>
         </div>
-        <div className="space-y-2.5 border-t border-ds-divider bg-ds-warm/40 px-4 py-3 md:border-l md:border-t-0">
+        <div className="space-y-2.5 border-t border-ds-divider bg-ds-warm/40 px-4 py-3">
           <p className="text-xs text-ds-ink-2">Prazo, comprovante e limite do tipo foram conferidos pelo sistema no envio{request.tacitApprovalDays ? `; sem análise em ${request.tacitApprovalDays} dias, a etapa é aprovada automaticamente` : ""}.</p>
           {request.canReview ? <>
             <Textarea value={reason} onChange={(event) => { setReason(event.target.value); setError(null); attempt.current = null; }} maxLength={1000} className="min-h-20"
