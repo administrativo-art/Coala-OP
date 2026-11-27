@@ -9,9 +9,9 @@ import { alertLabels, type ReviewableAlert } from "./closure-alerts";
 
 type Review = { expectedVersion: number; alerts: ReviewableAlert[]; pendingOutsideScope: number };
 
-export function ClosureAlertsPanel({ firebaseUser, competence, expectedVersion, closed, nameOf, busy, onClose, onCancel }: {
+export function ClosureAlertsPanel({ firebaseUser, competence, expectedVersion, closed, nameOf, busy, onClose, onCancel, onReleased }: {
   firebaseUser: User | null; competence: string; expectedVersion: number; closed: boolean;
-  nameOf: (uid: string) => string; busy: boolean; onClose: () => Promise<void>; onCancel: () => void;
+  nameOf: (uid: string) => string; busy: boolean; onClose: () => Promise<void>; onCancel: () => void; onReleased?: () => void;
 }) {
   const [result, setResult] = useState<Review | null>(null);
   const [error, setError] = useState("");
@@ -38,6 +38,7 @@ export function ClosureAlertsPanel({ firebaseUser, competence, expectedVersion, 
         method: "POST", getIdToken, json: { action: "justifyAlert", competence, expectedVersion,
           employeeUid: item.employeeUid, fingerprint: item.fingerprint, reason: reasons[item.fingerprint].trim() },
       });
+      onReleased?.();
       setResult((current) => current && { ...current, alerts: current.alerts.map((old) => old.fingerprint === item.fingerprint ? { ...old, decision } : old) });
     } catch (cause) { setError(errorMessageOf(cause, "Falha ao justificar o alerta.")); }
     finally { setSaving(false); }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User as FirebaseUser } from "firebase/auth";
 
 import { cn } from "@/lib/utils";
@@ -23,6 +23,7 @@ import { MirrorCard } from "./mirror-card";
 import { ADJUSTMENT_KIND_LABELS, ADJUSTMENT_STATUS_LABELS } from "./types";
 import { belongsToTimeClosureRoster } from "@/lib/hr/employment-relationship";
 import { ClosurePersonTrail } from "./closure-person-trail";
+import { alertsByPerson, closureMonthEnded, firstPersonToOpen, hasSomethingToTreat, type ClosurePersonFlags, type ServerAlertsResponse } from "./closure-person-record-model";
 import { ClosureSidebar, type ClosureSidebarGroup } from "./closure-sidebar";
 import { ClosureYearOverview, competenceLabel, pendingOfPerson, useOrganizationOf, NO_ORGANIZATION } from "./closure-year-overview";
 
@@ -56,7 +57,7 @@ function previousCompetence() {
 
 /** Fechamento do ponto por competência: declaração por pessoa, bloqueio com pedido pendente, versão e reabertura. */
 
-export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUser: FirebaseUser | null; people: Array<{ id: string; username?: string; employmentRelationshipType?: string | null; unitId?: string | null; employerUnitId?: string | null }> }) {
+export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUser: FirebaseUser | null; people: Array<{ id: string; username?: string; jobRoleName?: string; employmentRelationshipType?: string | null; unitId?: string | null; employerUnitId?: string | null }> }) {
   const [competence, setCompetence] = useState(previousCompetence);
   // Visão geral do ano (cards por mês) até o usuário abrir uma competência.
   const [detailOpen, setDetailOpen] = useState(false);
@@ -76,6 +77,8 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
   const [packagesKey, setPackagesKey] = useState(0);
   const [summary, setSummary] = useState<ClosingSummary | null>(null);
   const summaryRequest = useRef(0);
+  const releasedInPanel = useRef(false);
+  const [openedFor, setOpenedFor] = useState<string | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [confirmFinalize, setConfirmFinalize] = useState(false);
@@ -107,6 +110,29 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
     }
   }, [competence, detailOpen, request]);
   useEffect(() => { void load(); }, [load]);
+
+  // Alertas que travam, calculados pelo servidor. Só existem com o mês terminado e aberto; uma leitura por abertura
+  // do mês e outra depois de cada decisão num dia. Sem resposta, a tela não afirma o que trava.
+  const [alertsState, setAlertsState] = useState<{ competence: string; revision: number; response: ServerAlertsResponse | null } | null>(null);
+  const [alertsRevision, setAlertsRevision] = useState(0);
+  const openCompetence = detailOpen && data?.competence === competence && data.closure?.status !== "closed";
+  const monthEnded = closureMonthEnded(competence, new Date());
+  useEffect(() => {
+    if (!openCompetence || !monthEnded) return;
+    let active = true;
+    request<ServerAlertsResponse>(`/api/dp/time-recording/closures?competence=${competence}&alerts=1`, { fallbackError: "Não foi possível conferir os alertas." })
+      .then((response) => { if (active) setAlertsState({ competence, revision: alertsRevision, response }); })
+      .catch(() => { if (active) setAlertsState({ competence, revision: alertsRevision, response: null }); });
+    return () => { active = false; };
+  }, [openCompetence, monthEnded, competence, alertsRevision, request]);
+  const alertsSettled = !monthEnded || alertsState?.competence === competence;
+  const alertsOf = useMemo(() => alertsByPerson(openCompetence && alertsState?.competence === competence && alertsState.revision === alertsRevision ? alertsState.response : null),
+    [openCompetence, alertsState, alertsRevision, competence]);
+  const refreshAfterDecision = useCallback(() => {
+    request<ClosurePayload>(`/api/dp/time-recording/closures?competence=${competence}`, { fallbackError: "Não foi possível atualizar o fechamento." })
+      .then((value) => { setData((current) => current?.competence === value.competence ? value : current); setAlertsRevision((revision) => revision + 1); })
+      .catch((cause) => setError(errorMessageOf(cause, "Não foi possível atualizar o fechamento.")));
+  }, [competence, request]);
   const closedVersion = data?.competence === competence && data.closure?.status === "closed" ? data.closure.version : null;
   const [payroll, setPayroll] = useState<PayrollReadiness | null>(null);
   const [payrollError, setPayrollError] = useState("");
@@ -214,6 +240,14 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
 
   const closed = data?.closure?.status === "closed";
   const emptyPerson = (uid: string, name: string | null): ClosurePerson => ({ uid, name, adjustments: [], absences: [], shiftSwaps: [] });
+  const sortedTeam = [...orgTeam].sort((left, right) => (left.username ?? "").localeCompare(right.username ?? "", "pt-BR"));
+  const recordOf = (uid: string) => data?.people.find((item) => item.uid === uid);
+  const flagsOf = (uid: string): ClosurePersonFlags => {
+    const record = recordOf(uid);
+    return { requests: record ? pendingOfPerson(record) : 0, alerts: alertsOf(uid)?.filter((item) => !item.released).length ?? null,
+      automaticAbsences: record?.absences.filter((item) => item.automatic).length ?? 0 };
+  };
+  const openPerson = (uid: string) => setSelected(recordOf(uid) ?? emptyPerson(uid, orgTeam.find((item) => item.id === uid)?.username ?? null));
   const orgPeople = (data?.people ?? []).filter((person) => organizationOf(person.uid) === activeOrg);
   const orgPending = orgPeople.reduce((sum, person) => sum + pendingOfPerson(person), 0);
   const sidebarGroups: ClosureSidebarGroup[] = (() => {
@@ -224,34 +258,50 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
       })) }];
     }
     const query = sidebarQuery.trim().toLocaleLowerCase("pt-BR");
-    const members = orgTeam.filter((member) => !query || (member.username ?? "").toLocaleLowerCase("pt-BR").includes(query)).map((member) => {
+    const members = sortedTeam.filter((member) => !query || (member.username ?? "").toLocaleLowerCase("pt-BR").includes(query)).map((member) => {
       const name = member.username ?? "Sem nome";
       const record = data?.people.find((item) => item.uid === member.id);
       return { key: member.id, name, pending: record ? pendingOfPerson(record) : 0, selected: selected?.uid === member.id,
+        flags: openCompetence ? flagsOf(member.id) : undefined,
         detail: record ? `${record.adjustments.length} ajustes · ${record.absences.length} ausências · ${record.shiftSwaps.length} trocas` : "Sem pedidos no mês",
         onClick: () => setSelected(record ?? emptyPerson(member.id, name)) };
     });
     return members.length ? [{ organization: activeOrg ?? NO_ORGANIZATION, people: members }] : [];
   })();
   const sidebarTotal = sidebarGroups.reduce((sum, group) => sum + group.people.length, 0);
-  const sidebarClear = sidebarGroups.reduce((sum, group) => sum + group.people.filter((person) => !person.pending).length, 0);
+  const sidebarClear = sidebarGroups.reduce((sum, group) => sum + group.people.filter((person) => person.flags ? !hasSomethingToTreat(person.flags) : !person.pending).length, 0);
+  const alertsKnown = sortedTeam.every((member) => flagsOf(member.id).alerts !== null);
+  const orgAlertDays = openCompetence ? sortedTeam.reduce((sum, member) => sum + (flagsOf(member.id).alerts ?? 0), 0) : 0;
+  // O fechamento é de todas as organizações: alerta de qualquer uma o trava.
+  const otherAlertDays = openCompetence ? (data?.people ?? []).filter((item) => !orgTeam.some((member) => member.id === item.uid))
+    .reduce((sum, item) => sum + (alertsOf(item.uid)?.filter((alert) => !alert.released).length ?? 0), 0) : 0;
+  // Mês aberto abre direto numa pessoa, uma vez por mês e organização; "Visão da organização" volta e não reabre.
+  const autoKey = openCompetence && activeOrg && sortedTeam.length ? `${competence}/${activeOrg}` : null;
+  const opening = autoKey !== null && openedFor !== autoKey;
+  const autoTarget = opening && alertsSettled ? firstPersonToOpen(sortedTeam.map((member) => ({ uid: member.id, flags: flagsOf(member.id) }))) : null;
+  useEffect(() => {
+    if (!autoKey || !autoTarget) return;
+    setOpenedFor(autoKey);
+    // Quem já escolheu uma pessoa enquanto os alertas carregavam não é trocado.
+    const target = recordOf(autoTarget) ?? emptyPerson(autoTarget, sortedTeam.find((item) => item.id === autoTarget)?.username ?? null);
+    setSelected((current) => current ?? target);
+  }, [autoKey, autoTarget]); // eslint-disable-line react-hooks/exhaustive-deps
   const blocked = Boolean(data && (data.pending.adjustments || data.pending.absences || data.pending.shiftSwaps || data.truncated));
   return (
     <div className="flex flex-col gap-[14px] lg:flex-row lg:items-start">
     <ClosureSidebar mode={detailOpen ? "people" : "organizations"} title={detailOpen ? activeOrg ?? "Fechamento" : "Fechamento · DP"} subtitle={detailOpen ? competenceLabel(competence) : "Organizações"}
       groups={sidebarGroups} query={sidebarQuery} onQueryChange={setSidebarQuery} showBack={detailOpen}
-      onBack={() => { setDetailOpen(false); setData(null); setSelected(null); setActionError(null); setConfirming(null); }}
-      doneCount={sidebarClear} totalCount={sidebarTotal} />
+      onBack={() => { setDetailOpen(false); setData(null); setSelected(null); setActionError(null); setConfirming(null); setAlertsState(null); setOpenedFor(null); }}
+      doneCount={sidebarClear} totalCount={sidebarTotal} doneLabel={!openCompetence ? "sem pendência" : alertsKnown ? "sem pedido nem alerta que trave" : "sem pedido"}
+      organizationSwitch={detailOpen && activeOrg ? { value: activeOrg, options: orgOptions.map(([name]) => name), onChange: (value) => { setOrgName(value); setSelected(null); } } : undefined} />
     <div className="min-w-0 flex-1 space-y-3">
       {!detailOpen ? <ClosureYearOverview firebaseUser={firebaseUser} people={people} organization={activeOrg} onOpen={(value) => { setOrgName(activeOrg); setCompetence(value); setDetailOpen(true); }} /> : null}
       {detailOpen ? <div className="flex flex-wrap items-center gap-3">
-        <Button variant="ds-secondary" size="sm" onClick={() => { setDetailOpen(false); setData(null); setSelected(null); setActionError(null); setConfirming(null); }}>← Todos os meses</Button>
+        <Button variant="ds-secondary" size="sm" onClick={() => { setDetailOpen(false); setData(null); setSelected(null); setActionError(null); setConfirming(null); setAlertsState(null); setOpenedFor(null); }}>← Todos os meses</Button>
         <h2 className="text-lg font-black text-ds-ink">{competenceLabel(competence)}</h2>
-        {orgOptions.length > 1 ? <label className="text-sm">Organização <select value={activeOrg ?? ""} onChange={(event) => {
-          setOrgName(event.target.value); setSelected(null);
-        }}>{orgOptions.map(([name]) => <option key={name} value={name}>{name}</option>)}</select></label> : null}
+        {selected ? <Button variant="ds-secondary" size="sm" onClick={() => setSelected(null)}>Visão da organização</Button> : null}
         {selected && data && !closed && data.can.close && confirming !== "close" ? <Button variant="ds-secondary" disabled={blocked}
-          onClick={() => { setActionError(null); setConfirming("close"); }}>Conferir alertas da competência</Button> : null}
+          onClick={() => { setActionError(null); setConfirming("close"); }}>Conferir e fechar (todas as organizações)</Button> : null}
         {data ? <StatusPill variant={closed ? "ok" : "neutral"}>{closed ? `Fechada · versão ${data.closure!.version}` : data.closure?.reopenings.length ? "Reaberta" : "Aberta"}</StatusPill> : null}
       </div> : null}
       {detailOpen && closedVersion ? <section aria-label="Apuração para a folha" className="space-y-2 rounded-ds-card border border-ds-border bg-ds-surface p-4">
@@ -279,15 +329,21 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
       </section> : null}
       {detailOpen && data && confirming === "close" ? <ClosureAlertsPanel key={competence} firebaseUser={firebaseUser}
         competence={competence} expectedVersion={data.closure?.version ?? 0} closed={closed} nameOf={(uid) => names.get(uid) ?? uid}
-        busy={busy} onClose={() => act("close")} onCancel={() => setConfirming(null)} /> : null}
+        busy={busy} onClose={() => act("close")} onCancel={() => { setConfirming(null); if (releasedInPanel.current) { releasedInPanel.current = false; setAlertsRevision((revision) => revision + 1); } }}
+        onReleased={() => { releasedInPanel.current = true; }} /> : null}
       {detailOpen && error ? <p role="alert" className="text-sm text-ds-danger">{error}</p> : null}
       {detailOpen && !data && !error ? <p className="text-sm text-ds-ink-muted">Carregando fechamento…</p> : null}
-      {detailOpen && data && !selected ? <>
+      {detailOpen && data && !selected && opening ? <p role="status" className="text-sm text-ds-ink-muted">Abrindo a primeira pessoa com algo a tratar…</p> : null}
+      {detailOpen && data && !selected && !opening ? <>
         <p className="text-sm text-ds-ink">{orgPeople.length} {orgPeople.length === 1 ? "pessoa" : "pessoas"} em {activeOrg} · {orgPeople.reduce((sum, person) => sum + person.adjustments.length, 0)} ajustes de ponto · {orgPeople.reduce((sum, person) => sum + person.absences.length, 0)} ausências · {orgPeople.reduce((sum, person) => sum + person.shiftSwaps.length, 0)} trocas de turno.</p>
         {closed ? <p className="text-xs text-ds-ink-muted">Fechada em {whenBR(data.closure!.closedAt)} por {nameOf(data.closure!.closedBy)}. Carimbo da declaração: <span className="font-mono">{data.closure!.manifestHash?.slice(0, 16)}…</span></p> : null}
         {closed && data.closure!.changes ? <p className="text-xs text-ds-ink-muted">Em relação à versão anterior: {data.closure!.changes.added.length} itens novos, {data.closure!.changes.changed.length} alterados, {data.closure!.changes.removed.length} retirados.</p> : null}
-        <TrailStep number={1} title="Sanar pendências da folha" state={closed || (!orgPending && !blocked) ? "done" : "active"}
-          summary={closed ? "Folha declarada" : orgPending ? `${orgPending} ${orgPending === 1 ? "pedido sem decisão" : "pedidos sem decisão"} nesta organização` : blocked ? "Esta organização está em dia; há pendências em outra" : "Nenhuma pendência"}>
+        <TrailStep number={1} title="Sanar pendências da folha" state={closed ? "done" : "active"}
+          summary={closed ? "Folha declarada" : orgPending || orgAlertDays ? `${[orgPending ? `${orgPending} ${orgPending === 1 ? "pedido sem decisão" : "pedidos sem decisão"}` : null,
+            orgAlertDays ? `${orgAlertDays} ${orgAlertDays === 1 ? "dia com alerta que trava" : "dias com alerta que trava"}` : null].filter(Boolean).join(" e ")} nesta organização`
+            : blocked ? "Sem pedido aberto nesta organização; há pedidos em outra" : !alertsKnown ? "Nenhum pedido sem decisão; os alertas são conferidos no fechamento"
+              : otherAlertDays ? "Sem pedido nem alerta que trave nesta organização; há alertas em outra" : "Sem pedido nem alerta que trave"}>
+          {!closed ? <p className="text-xs text-ds-ink-muted">Ao fechar, o sistema ainda confere dias devolvidos, pedidos de classificação de batida e a escala das faltas automáticas.</p> : null}
           {!closed && (data.pending.adjustments || data.pending.absences || data.pending.shiftSwaps) ? <p role="status" className="rounded-ds-btn bg-ds-caution-bg px-3 py-2 text-xs font-semibold text-ds-caution">
             Há pedidos sem decisão no mês: {data.pending.adjustments} de ajuste, {data.pending.absences} de ausência e {data.pending.shiftSwaps} de troca de turno (todas as organizações). Decida-os antes de fechar.</p> : null}
           {!closed && data.truncated ? <p role="alert" className="text-xs font-semibold text-ds-danger">O mês tem mais pedidos do que o fechamento comporta numa vez. Fale com o desenvolvimento.</p> : null}
@@ -380,16 +436,29 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
         const person = data?.people.find((item) => item.uid === selected.uid) ?? selected;
         const pending = pendingOfPerson(person);
         return <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <h2 className="text-lg font-black text-ds-ink">{person.name ?? nameOf(person.uid)}</h2>
-            {pending ? <StatusPill variant="warn">{pending} pendente{pending > 1 ? "s" : ""}</StatusPill> : null}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-ds-card border border-ds-border bg-ds-surface px-4 py-3">
+            <div className="min-w-0">
+              <span className="block text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-ds-ink-muted">{competenceLabel(competence)} · {closed ? "competência fechada" : "competência aberta"}</span>
+              <span className="flex flex-wrap items-center gap-2">
+                <h2 className="text-xl font-black text-ds-ink">{person.name ?? nameOf(person.uid)}</h2>
+                {pending ? <StatusPill variant="warn">{pending} pendente{pending > 1 ? "s" : ""}</StatusPill> : null}
+              </span>
+              <span className="block text-sm text-ds-ink-muted">{[people.find((item) => item.id === person.uid)?.jobRoleName, activeOrg].filter(Boolean).join(" · ")}</span>
+            </div>
+            <div className="flex gap-2">
+              {([["‹ Anterior", -1], ["Próxima pessoa ›", 1]] as const).map(([label, step]) => {
+                const index = sortedTeam.findIndex((item) => item.id === person.uid);
+                const target = index < 0 ? undefined : sortedTeam[index + step];
+                return <Button key={label} variant="ds-secondary" size="sm" disabled={!target} onClick={() => target && openPerson(target.id)}>{label}</Button>;
+              })}
+            </div>
           </div>
           {person.rosterReason ? <p className="text-sm text-ds-ink-muted">{rosterReasons[person.rosterReason]}</p> : null}
-          <ClosurePersonTrail key={`${person.uid}-${bankReload}`} firebaseUser={firebaseUser} competence={competence} person={person} closed={closed} payrollStatus={currentPayroll?.people.find((item) => item.uid === person.uid)} onBankUpdated={refreshPayroll} canManage={data?.can.close ?? false}
+          <ClosurePersonTrail key={`${person.uid}-${bankReload}`} firebaseUser={firebaseUser} competence={competence} person={person} closed={closed} payrollStatus={currentPayroll?.people.find((item) => item.uid === person.uid)} onBankUpdated={refreshPayroll} canManage={data?.can.close ?? false} alerts={alertsOf(person.uid)} onDecided={refreshAfterDecision}
             requests={<>
             <div className="space-y-4">
               <PanelSection title="Ajustes de ponto">
-            {selected.adjustments.length ? selected.adjustments.map((item) => (
+            {person.adjustments.length ? person.adjustments.map((item) => (
               <div key={item.id} className="space-y-0.5 border-b border-ds-border py-2 text-sm last:border-0">
                 <p className="font-bold text-ds-ink">{dateBR(item.workDate)} · {ADJUSTMENT_KIND_LABELS[item.kind].title} · {ADJUSTMENT_STATUS_LABELS[item.status]}</p>
                 <p className="text-ds-ink">{item.original ? `Original ${timeOf(item.original.markedAt)} (NSR ${item.original.nsr})` : "Sem batida original"}{item.inclusion ? ` → incluída ${timeOf(item.inclusion.markedAt)}` : item.kind === "discard" ? " → desconsiderada" : ""}</p>
@@ -398,7 +467,7 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
               </div>)) : <p className="text-sm text-ds-ink-muted">Nenhum ajuste no mês.</p>}
           </PanelSection>
               <PanelSection title="Ausências" aside="sem motivo nem anexo">
-            {selected.absences.length ? selected.absences.map((item) => (
+            {person.absences.length ? person.absences.map((item) => (
               <div key={item.id} className="space-y-0.5 border-b border-ds-border py-2 text-sm last:border-0">
                 <p className="font-bold text-ds-ink">{item.typeName} · {ABSENCE_STATUS[item.status] ?? item.status}{item.approval === "tacit_timeout" ? " por decurso de prazo" : ""}</p>
                 <p className="text-ds-ink">{item.startDate === item.endDate ? dateBR(item.startDate) : `${dateBR(item.startDate)} a ${dateBR(item.endDate)}`}{item.startTime && item.endTime ? ` · ${item.startTime}–${item.endTime}` : ""} · {item.quantity} {item.unit === "hour" ? "h" : item.quantity === 1 ? "dia" : "dias"}</p>
@@ -406,8 +475,8 @@ export function CompetenceClosureSection({ firebaseUser, people }: { firebaseUse
               </div>)) : <p className="text-sm text-ds-ink-muted">Nenhuma ausência no mês.</p>}
           </PanelSection>
               <PanelSection title="Trocas de turno" aside="aceite autenticado">
-            {selected.shiftSwaps.length ? selected.shiftSwaps.map((item) => {
-              const requester = item.requesterUid === selected.uid;
+            {person.shiftSwaps.length ? person.shiftSwaps.map((item) => {
+              const requester = item.requesterUid === person.uid;
               const own = requester ? item.offeredShift : item.requestedShift;
               const incoming = requester ? item.requestedShift : item.offeredShift;
               const counterpart = requester ? item.targetName : item.requesterName;
