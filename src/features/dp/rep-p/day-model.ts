@@ -1,5 +1,5 @@
 import { applyTreatments } from "@/features/dp/time-adjustments/effective";
-import { pairedNightMinutes } from "@/features/dp/time-bank/core";
+import { pairedNightMinutes, toleratedNightMinutes } from "@/features/dp/time-bank/core";
 import { absorbedEdgeMinutes, assessBreak, breakToleranceFor, suppressedBreakMinutes, type BreakReviewReason } from "@/features/dp/time-config/policy-rules";
 import type { DPPolicyTolerances } from "@/types";
 
@@ -31,6 +31,8 @@ export type DayShift = {
   overnight?: boolean;
   /** Turno que passa da meia-noite com `DP_TIME_NIGHT_SHIFT_ENABLED` ligada: as batidas já vêm no dia dele. */
   workDateRule?: boolean;
+  /** Turno que termina às 22h com `DP_TIME_NIGHT_TOLERANCE_ENABLED` ligada. */
+  nightToleranceRule?: boolean;
   unitId?: string | null;
   executionUnitPolicy?: "scheduled" | "free";
   /** O detalhe só apresenta o resultado geográfico quando o turno daquele dia pediu coleta. */
@@ -223,11 +225,14 @@ export function buildDayView(input: { date: string; today: string; shift: DayShi
   const plannedWorkMinutes = manualSegments.length
     ? manualSegments.reduce((total, segment) => total + (segment.manualWorkMinutes ?? plannedWorkMinutesOf(segment) ?? 0), 0)
     : plannedWorkMinutesOf(shift);
-  const nightMinutes = pairedNightMinutes(markings.map((marking) => marking.markedAt));
   const tolerance = toleranceOf(shift);
   const incidents: DayIncident[] = [];
   let deviation: DayView["deviation"] = null;
   const coverage = coverageOf(shift, manualSegments);
+  const instants = markings.map((marking) => marking.markedAt);
+  // Mesma função do banco de horas, para a tela e a apuração mostrarem o mesmo total noturno.
+  const nightMinutes = pairedNightMinutes(instants) - (shift?.nightToleranceRule && !coverage && !manualSegments.length
+    ? toleratedNightMinutes(instants, shift, shift.policyTolerances ?? undefined) : 0);
 
   // Com a intrajornada na política, o intervalo é avaliado pela duração trabalhada, com a mesma função da apuração.
   const intrajornada = past && shift?.intrajornada && shift.policyTolerances && markings.length >= 2 && markings.length % 2 === 0

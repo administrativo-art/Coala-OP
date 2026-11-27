@@ -367,4 +367,12 @@ A proteção do contrato legado para turnos comuns não elimina a conferência a
 - **Chave:** `DP_TIME_NIGHT_SHIFT_ENABLED`, `false` no `apphosting.yaml`. Desligada, ajustes, telas, fechamento, banco, espelho, AEJ e falta automática continuam como descrito nas seções anteriores. Ligada, os leitores de batidas devolvem o dia do turno; a data civil continua no registro, no AFD, no pacote de comprovantes e no ensaio. Os turnos retirados pela falta automática continuam entrando na conta.
 - **Ainda bloqueia ligar:** página principal do Registro de ponto e painel do dia na web; Coala Go (pede APK novo); saída depois da meia-noite em turno que termina antes dela e dia manual em trechos; ajustes já aprovados na data civil; versão dos algoritmos do dia e do banco; transição do AEJ; custo das leituras de escala. Ligar somente em virada de mês, sem fechamento em andamento.
 - **Decisão jurídica/contábil pendente:** o AEJ por jornada cita NSR que está no AFD da competência seguinte, e o espelho mostra o horário do dia seguinte sem indicar a data.
-- **Não incluído:** a regra dos minutos noturnos para turno que termina às 22h.
+- **Minutos noturnos do turno que termina às 22h:** ver a seção seguinte.
+
+## Turno que termina às 22h e minutos noturnos (27/11/2026, programado e desligado)
+
+- **Regra decidida:** só no turno cujo fim previsto é 22:00, se a tolerância absorve a saída, os minutos depois das 22h não são noturnos; passou dela, contam todos (tolerância 5: 22:05 = 0; 22:08 = 8). Sem parecer jurídico anexado.
+- **Qual tolerância:** a mesma conta do saldo do banco (`edgeTolerance` em [`core.ts`](../../../src/features/dp/time-bank/core.ts)). Sem política, 5 min por ponta e a soma de entrada e saída até a tolerância da jornada (no máximo 10); com política, as tolerâncias dela. Exemplo: tolerância 5, entrada 3 min fora e saída 22:03 soma 6, e os 3 minutos noturnos contam. A tela usa a mesma função.
+- **Sem mudança:** cobertura que estende o dia, dia manual em trechos e turno que não termina exatamente às 22:00. O AEJ não é afetado. O Coala Go exibe o total do servidor.
+- **Chave:** `DP_TIME_NIGHT_TOLERANCE_ENABLED`, `false` no `apphosting.yaml`. O total noturno segue para o banco de horas, o fechamento do portal e a conferência do contracheque.
+- **Antes de ligar:** decidir a competência (ligar antes de fechar um mês muda o total dele; apuração já gravada não é recalculada); dia que zera o noturno perde a pendência `NIGHT_SHIFT`; liberações de alerta de dias com turno até 22:00 deixam de valer, porque o turno passa a levar a marca da regra; subir a versão do banco (`time-bank-v5`, mantendo v3 e v4 legíveis) e `DAY_ALGORITHM_VERSION`.
