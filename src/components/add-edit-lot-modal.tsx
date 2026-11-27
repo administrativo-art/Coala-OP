@@ -329,7 +329,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                 <label className="flex flex-col gap-1.5 text-xs font-bold text-[#4a4f57]">
                   Número do lote
                   <input {...form.register('lotNumber')} placeholder="Sem lote ou código do fabricante" className={cn(MODAL_INPUT, errors.lotNumber && 'border-[#e11d48]')} />
-                  <span className="text-xs font-normal text-ds-ink-soft">Deixe vazio quando o item não tiver lote.</span>
+                  <span className="text-xs font-normal text-ds-ink-muted">Deixe vazio quando o item não tiver lote.</span>
                   {errors.lotNumber && <span className={MODAL_ERROR_TEXT}>{errors.lotNumber.message}</span>}
                   {errors.root && <span role="alert" className={MODAL_ERROR_TEXT}>{errors.root.message}</span>}
                 </label>

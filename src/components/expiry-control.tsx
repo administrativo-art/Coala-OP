@@ -977,12 +977,12 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
           subtitle="Saldo reunido. Escolha uma entrada para consultar o histórico ou movimentar sua quantidade."
           highlights={<span>{lotQuantityParts(selectedLot.lot, selectedLot.product).map(part => `${part.value} ${part.unit}`).join(' · ')}</span>}
         >
-          <p className="text-sm text-ds-ink-soft">As entradas mantêm seu histórico e suas reservas. As ações usam somente a quantidade da entrada escolhida.</p>
+          <p className="text-sm text-ds-ink-muted">As entradas mantêm seu histórico e suas reservas. As ações usam somente a quantidade da entrada escolhida.</p>
           <div className="rounded-ds-lg border border-ds-border bg-ds-surface">
             {selectedLot.lot.sourceLots.map((source, index) => (
               <LiftRow key={source.id} onClick={() => setSelectedSourceLotId(source.id)}>
                 <span className="block text-sm font-bold text-ds-ink">Entrada {index + 1} · {lotQuantityParts(source, selectedLot.product).map(part => `${part.value} ${part.unit}`).join(' · ')}</span>
-                <span className="text-xs text-ds-ink-soft">{stockLotLabel(source)} · {lotReservedQuantity(source, reservationsByLot.get(source.id)).toLocaleString('pt-BR')} reservado(s)</span>
+                <span className="text-xs text-ds-ink-muted">{stockLotLabel(source)} · {lotReservedQuantity(source, reservationsByLot.get(source.id)).toLocaleString('pt-BR')} reservado(s)</span>
               </LiftRow>
             ))}
           </div>
