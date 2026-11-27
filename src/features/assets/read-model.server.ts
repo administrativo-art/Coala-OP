@@ -5,6 +5,10 @@ import { PDFDocument, StandardFonts } from "pdf-lib";
 
 import { dbAdmin } from "@/lib/firebase-admin";
 import { AppError } from "@/lib/observability/app-error";
+import {
+  historyDocumentId, isGroupedMaintenanceChild, linkedMaintenanceId, projectHistoryMaintenance,
+  type HistoryScope, type MaintenanceHistoryRecord,
+} from "./history-maintenance";
 import { mergeHistoryPages, type AssetCollectionCursor, type AssetHistoryRow } from "./history-pagination";
 
 type CollectionCursor = AssetCollectionCursor;
@@ -87,33 +91,90 @@ const historySources: HistorySource[] = [
   { collection: "generatedDocuments", date: "createdAt", kind: "document", assetField: "sourceAssetId" },
 ];
 
-export async function consolidatedAssetHistory(assetId: string, options: { limit: number; cursor?: string | null; kind?: string | null; exportAll?: boolean }) {
-  const take = options.exportAll ? 500 : options.limit;
+async function loadMissingHistoryRecords(
+  collection: FirebaseFirestore.CollectionReference,
+  ids: Iterable<string>,
+  cache: Map<string, MaintenanceHistoryRecord | undefined>,
+) {
+  const missing = [...new Set(ids)].filter((id) => !cache.has(id));
+  for (let index = 0; index < missing.length; index += 100) {
+    const refs = missing.slice(index, index + 100).map((id) => collection.doc(id));
+    for (const document of await dbAdmin.getAll(...refs)) cache.set(document.id, document.data());
+  }
+}
+
+export async function consolidatedAssetHistory(
+  scope: HistoryScope,
+  options: { limit: number; cursor?: string | null; kind?: string | null; exportAll?: boolean },
+) {
+  const take = options.exportAll ? 500 : Math.trunc(options.limit);
   const prior = options.exportAll ? null : decodeCursor(options.cursor ?? null, isHistoryCursor);
-  const selected = historySources.filter((source) => !options.kind || source.kind === options.kind || (options.kind === "lifecycle" && ["movement", "custody"].includes(source.kind)));
+  const selected = historySources.filter((source) => !options.kind || options.kind === "all"
+    || source.kind === options.kind || (options.kind === "lifecycle" && ["movement", "custody"].includes(source.kind)));
+  const includesMaintenance = selected.some((source) => source.kind === "maintenance");
   const pages = await Promise.all(selected.map(async (source) => {
     let query: FirebaseFirestore.Query = dbAdmin.collection(source.collection)
-      .where(source.assetField ?? "assetId", "==", assetId)
+      .where(source.assetField ?? "assetId", "==", scope.assetId)
       .orderBy(source.date, "desc")
       .orderBy(FieldPath.documentId(), "desc");
     const sourceCursor = prior?.sources[source.kind];
     if (sourceCursor) query = query.startAfter(sourceCursor.at, sourceCursor.id);
-    const snapshot = await query.limit(take + 1).get();
+    const snapshot = await query.limit(options.exportAll ? take : take + 1).get();
     return {
-      source: source.kind,
-      rows: snapshot.docs.slice(0, take + 1).map((document) => {
-        const data = document.data();
-        return {
-          id: document.id,
-          at: String(data[source.date] ?? ""),
-          type: String(data.type ?? source.kind),
-          source: source.kind,
-          description: String(data.notes ?? data.description ?? data.templateName ?? data.status ?? ""),
-        } satisfies AssetHistoryRow;
-      }),
+      source,
+      records: snapshot.docs.slice(0, take).map((document) => ({ id: document.id, data: document.data() })),
+      hasMore: !options.exportAll && snapshot.size > take,
     };
   }));
-  const merged = mergeHistoryPages(pages, take, prior?.sources);
+
+  const roots = new Map<string, MaintenanceHistoryRecord | undefined>(
+    pages.find(({ source }) => source.kind === "maintenance")?.records.map(({ id, data }) => [id, data]),
+  );
+  const documents = new Map<string, MaintenanceHistoryRecord | undefined>(
+    pages.find(({ source }) => source.kind === "document")?.records.map(({ id, data }) => [id, data]),
+  );
+  if (includesMaintenance && !options.exportAll) {
+    // Duas fontes de filhos, no máximo 2 * take raízes adicionais. A raiz pode estar em outra página.
+    const linkedIds = pages.flatMap(({ source, records }) => records.flatMap(({ data }) => {
+      if (data.workspaceId !== scope.workspaceId) return [];
+      const id = linkedMaintenanceId(source.kind, data);
+      return id ? [id] : [];
+    }));
+    await loadMissingHistoryRecords(dbAdmin.collection("assetMaintenanceOccurrences"), linkedIds, roots);
+  }
+
+  const merged = mergeHistoryPages(pages.map(({ source, records, hasMore }) => ({
+    source: source.kind,
+    hasMore,
+    rows: records.map(({ id, data }) => {
+      const rootId = includesMaintenance ? linkedMaintenanceId(source.kind, data) : null;
+      return {
+        id,
+        at: String(data[source.date] ?? ""),
+        type: String(data.type ?? source.kind),
+        source: source.kind,
+        description: String(data.notes ?? data.description ?? data.templateName ?? data.status ?? ""),
+        hidden: (data.workspaceId != null && data.workspaceId !== scope.workspaceId)
+          || (data.workspace_id != null && data.workspace_id !== scope.workspaceId)
+          || Boolean(rootId && isGroupedMaintenanceChild(scope, source.kind, id, data, roots.get(rootId))),
+      } satisfies AssetHistoryRow & { hidden: boolean };
+    }),
+  })), take, prior?.sources);
+
+  const orderIds = merged.items.flatMap((item) => {
+    if (item.source !== "maintenance") return [];
+    const id = historyDocumentId(roots.get(item.id)?.orderDocumentId);
+    return id ? [id] : [];
+  });
+  // Até take documentos de ordens das raízes visíveis, com reaproveitamento da consulta de documentos.
+  await loadMissingHistoryRecords(dbAdmin.collection("generatedDocuments"), orderIds, documents);
+  for (const item of merged.items) {
+    const root = item.source === "maintenance" ? roots.get(item.id) : undefined;
+    if (!root) continue;
+    const orderId = historyDocumentId(root.orderDocumentId);
+    item.maintenance = projectHistoryMaintenance(scope, item.id, root, orderId ? documents.get(orderId) : undefined);
+  }
+
   return {
     items: merged.items,
     nextCursor: !options.exportAll && merged.hasMore

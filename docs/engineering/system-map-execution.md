@@ -318,3 +318,12 @@ novas entradas e agrupamento dos saldos legados sem reescrever IDs/histórico.
 Ações continuam por registro físico, selecionado no painel; ver
 [stock-control](flows/stock-control.md). Testes dirigidos não substituem a
 verificação integrada pendente do fluxo.
+
+27/11/2026 — Patrimônio: agendamento separado do registro de serviço realizado,
+peças opcionais, conclusão vinculada por versão e histórico com ordem/documento
+reunidos por referências verificadas. Datas civis de serviço e timestamps do
+registro permanecem distintos, assim como seus atores. Testes dirigidos de
+contrato, persistência em memória, paginação, payload e apresentação; integração
+com Firestore real e validação visual pendentes. Ver [Patrimônio](flows/assets.md).
+
+Na revisão pré-publicação de manutenção, o leitor de vínculos passou a receber a referência de coleção já classificada. O inventário pessoal registra criador, concluidor e responsável usuário da ocorrência por ID e namespace explícitos, com assets.view + assets.viewHistory e workspace exato. Consultas reutilizam paginação e limites do coletor existente, sob demanda; nenhum listener ou job foi adicionado. E2E local permanente cobre o registro e conclusão com peças e descoberta por pessoa.

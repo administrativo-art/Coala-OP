@@ -4,14 +4,13 @@ import { getStorage } from "firebase-admin/storage";
 import { applyCoalaLetterheadToPdf } from "@/features/hr/documents/letterhead-pdf.server";
 import { allocateIdempotentDocumentProtocol } from "@/features/hr/documents/document-protocol.server";
 import { renderMaintenanceOrderPdf } from "./maintenance-order-pdf";
-import { assetAuditInputSchema, maintenanceMaterializedPatch, maintenanceMaterializeOn, maintenancePlanInputSchema, manualMaintenanceInputSchema, nextMaintenanceDate, nextProvisionAttemptAt, occurrenceId, taskIdForOccurrence } from "./maintenance-model";
+import { assetAuditInputSchema, canCompleteMaintenance, completeOccurrenceInputSchema, maintenanceCompletionDates, maintenanceMaterializedPatch, maintenanceMaterializeOn, maintenancePlanInputSchema, manualMaintenanceFingerprint, manualMaintenanceInputSchema, nextMaintenanceDate, nextProvisionAttemptAt, occurrenceId, taskIdForOccurrence } from "./maintenance-model";
 import { createManualTask, ensureTaskProject, ensureTaskSubproject } from "@/features/tasks/lib/server";
 import type { ServerUserContext } from "@/lib/auth-server";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { AppError } from "@/lib/observability/app-error";
 import { WORKSPACE_ID } from "@/lib/workspace";
-import { z } from "zod";
 import { verifyAndClaimAssetAuditPhotos } from "./audit-evidence.server";
 import { resolveMaintenanceAssignee } from "./references.server";
 
@@ -30,6 +29,7 @@ async function ensureMaintenanceTask(context: ServerUserContext, occurrence: Rec
 }
 
 async function provisionMaintenanceArtifacts(context: ServerUserContext, occurrence: Record<string, any>) {
+  if (occurrence.mode === "completed") return false;
   const reference = dbAdmin.collection("assetMaintenanceOccurrences").doc(occurrence.id);
   try {
     if (!occurrence.taskId || occurrence.taskStatus === "failed") await ensureMaintenanceTask(context, occurrence);
@@ -56,6 +56,7 @@ export async function reconcileMaintenanceArtifacts(limit = 100, now = new Date(
 export async function ensureMaintenanceOrder(context: ServerUserContext, occurrenceIdValue: string) {
   const ref = dbAdmin.collection("assetMaintenanceOccurrences").doc(occurrenceIdValue); const occurrence = await ref.get(); if (!occurrence.exists) throw new AppError({ code: "ASSET_MAINTENANCE_NOT_FOUND", kind: "NOT_FOUND" });
   if (occurrence.get("workspaceId") !== context.workspace_id) throw new AppError({ code: "ASSET_MAINTENANCE_FORBIDDEN", kind: "AUTHORIZATION" });
+  if (occurrence.get("mode") === "completed") throw new AppError({ code: "ASSET_MAINTENANCE_ORDER_NOT_FOUND", kind: "NOT_FOUND" });
   if (occurrence.get("orderDocumentId")) return { documentId: occurrence.get("orderDocumentId"), reused: true };
   const asset = await dbAdmin.collection("assets").doc(String(occurrence.get("assetId"))).get(); if (!asset.exists) throw new AppError({ code: "ASSET_NOT_FOUND", kind: "NOT_FOUND" });
   const documentId = `asset_maintenance_order_${occurrence.id}`; const protocol = await allocateIdempotentDocumentProtocol({ entity: "CS", type: "MNT", actorId: context.userDoc.id, reservationKey: `asset-maintenance:${occurrence.id}` });
@@ -79,11 +80,112 @@ export async function createAssetAudit(context: ServerUserContext, assetId: stri
 
 export async function upsertMaintenancePlan(context: ServerUserContext, assetId: string, raw: unknown) { const input = maintenancePlanInputSchema.parse(raw); const asset = await dbAdmin.collection("assets").doc(assetId).get(); if (!asset.exists) throw new AppError({ code: "ASSET_NOT_FOUND", kind: "NOT_FOUND" }); if ((asset.get("workspaceId") ?? WORKSPACE_ID) !== context.workspace_id) throw new AppError({ code: "ASSET_MAINTENANCE_FORBIDDEN", kind: "AUTHORIZATION" }); const assignee=await resolveMaintenanceAssignee(context,input.assignee); const id = planId(assetId, input.idempotencyKey); const now = new Date().toISOString(); await dbAdmin.collection("assetMaintenancePlans").doc(id).set({ id, workspaceId: context.workspace_id, assetId, assetCode: asset.get("code"), assetName: asset.get("name"), ...input, assignee, materializeOn: maintenanceMaterializeOn(input.nextDueDate, input.leadDays), version: 1, updatedAt: now, createdAt: now, updatedBy: actor(context) }, { merge: true }); return { id }; }
 
-export async function createManualMaintenance(context:ServerUserContext,assetId:string,raw:unknown){const input=manualMaintenanceInputSchema.parse(raw),asset=await dbAdmin.collection("assets").doc(assetId).get();if(!asset.exists)throw new AppError({code:"ASSET_NOT_FOUND",kind:"NOT_FOUND"});if((asset.get("workspaceId")??WORKSPACE_ID)!==context.workspace_id)throw new AppError({code:"ASSET_MAINTENANCE_FORBIDDEN",kind:"AUTHORIZATION"});const assignee=await resolveMaintenanceAssignee(context,input.assignee);const id=occurrenceId("manual",`${assetId}:${input.idempotencyKey}`),ref=dbAdmin.collection("assetMaintenanceOccurrences").doc(id),now=new Date().toISOString();if(!(await ref.get()).exists)await ref.create({id,workspaceId:context.workspace_id,assetId,assetCode:asset.get("code"),assetName:asset.get("name"),type:"manual",source:{type:"manual",id:input.idempotencyKey},status:"open",version:1,...input,assignee,provisioningStatus:"pending",provisioningAttempts:0,nextProvisionAttemptAt:now,createdAt:now,updatedAt:now,createdBy:actor(context)});const occurrence=await ref.get();await provisionMaintenanceArtifacts(context,{id:occurrence.id,...occurrence.data()});return{id,reused:occurrence.get("createdAt")!==now};}
+export async function createManualMaintenance(
+  context: ServerUserContext,
+  assetId: string,
+  raw: unknown,
+  { db = dbAdmin, resolveAssignee = resolveMaintenanceAssignee, provision = provisionMaintenanceArtifacts } = {},
+) {
+  const input = manualMaintenanceInputSchema.parse(raw);
+  const workspaceId = context.workspace_id;
+  const assetRef = db.collection("assets").doc(assetId);
+  const id = occurrenceId("manual", `${assetId}:${input.idempotencyKey}`);
+  const ref = db.collection("assetMaintenanceOccurrences").doc(id);
+  const requestFingerprint = manualMaintenanceFingerprint(input);
+  const now = new Date().toISOString();
+  const { reused, occurrence } = await db.runTransaction(async (tx) => {
+    const [asset, existing] = await Promise.all([tx.get(assetRef), tx.get(ref)]);
+    if (!asset.exists) throw new AppError({ code: "ASSET_NOT_FOUND", kind: "NOT_FOUND" });
+    if ((asset.get("workspaceId") ?? WORKSPACE_ID) !== workspaceId) {
+      throw new AppError({ code: "ASSET_MAINTENANCE_FORBIDDEN", kind: "AUTHORIZATION" });
+    }
+    if (existing.exists) {
+      const record = existing.data()!;
+      if (record.workspaceId !== workspaceId || record.assetId !== assetId) {
+        throw new AppError({ code: "ASSET_MAINTENANCE_FORBIDDEN", kind: "AUTHORIZATION" });
+      }
+      let storedFingerprint = record.requestFingerprint;
+      if (!storedFingerprint && record.type === "manual" && record.mode === undefined) {
+        const legacy = manualMaintenanceInputSchema.safeParse({
+          idempotencyKey: record.idempotencyKey,
+          dueDate: record.dueDate,
+          priority: record.priority,
+          assignee: record.assignee,
+          description: record.description,
+          checklistSnapshot: record.checklistSnapshot,
+          supplierSnapshot: record.supplierSnapshot,
+          components: record.components,
+        });
+        if (legacy.success) storedFingerprint = manualMaintenanceFingerprint(legacy.data);
+      }
+      if (storedFingerprint !== requestFingerprint) {
+        throw new AppError({
+          code: "ASSET_MAINTENANCE_IDEMPOTENCY_CONFLICT",
+          kind: "CONFLICT",
+          safeMessage: "Esta solicitação já foi usada com dados diferentes.",
+        });
+      }
+      return { reused: true, occurrence: { ...record, id } };
+    }
+
+    const resolved = await resolveAssignee(context, input.assignee);
+    const assignee = resolved.type === "user" ? { ...resolved, namespace: "main.users" } : resolved;
+    const createdBy = { ...actor(context), namespace: "main.users" };
+    const record = {
+      id, workspaceId, assetId, assetCode: asset.get("code"), assetName: asset.get("name"),
+      type: "manual", source: { type: "manual", id: input.idempotencyKey }, version: 1,
+      ...input, assignee, requestFingerprint, createdAt: now, updatedAt: now, createdBy,
+      ...(input.mode === "completed"
+        ? { status: "completed", completedAt: now, completedBy: createdBy }
+        : { status: "open", provisioningStatus: "pending", provisioningAttempts: 0, nextProvisionAttemptAt: now }),
+    };
+    tx.create(ref, record);
+    return { reused: false, occurrence: record };
+  });
+  // The transaction winner provisions; pending/failed artifacts remain recoverable by the job.
+  if (input.mode === "scheduled" && !reused) await provision(context, occurrence);
+  return { id, reused };
+}
 
 export async function materializeDueMaintenance(now = new Date()) { const reconciliation=await reconcileMaintenanceArtifacts(100,now);const today=now.toISOString().slice(0,10); const plans = await dbAdmin.collection("assetMaintenancePlans").where("workspaceId", "==", WORKSPACE_ID).where("active", "==", true).where("materializeOn", "<=", today).orderBy("materializeOn", "asc").limit(100).get(); let created=0,skipped=0; for (const plan of plans.docs) { const dueDate=String(plan.get("nextDueDate")); const id=occurrenceId("plan", `${plan.id}:${dueDate}`); const ref=dbAdmin.collection("assetMaintenanceOccurrences").doc(id); const made=await dbAdmin.runTransaction(async tx=>{const [existing,currentPlan]=await Promise.all([tx.get(ref),tx.get(plan.ref)]);if(!currentPlan.exists||currentPlan.get("nextDueDate")!==dueDate)return false;const at=now.toISOString();tx.set(plan.ref,maintenanceMaterializedPatch(dueDate,at),{merge:true});if(existing.exists)return false;tx.create(ref,{id,workspaceId:WORKSPACE_ID,assetId:plan.get("assetId"),assetCode:plan.get("assetCode"),assetName:plan.get("assetName"),type:"preventive",source:{type:"plan",id:plan.id},planId:plan.id,dueDate,status:"scheduled",version:1,assignee:plan.get("assignee"),description:`Manutenção preventiva: ${plan.get("name")}`,checklistSnapshot:plan.get("checklistSnapshot")??[],supplierSnapshot:plan.get("supplierSnapshot")??null,components:[],provisioningStatus:"pending",provisioningAttempts:0,nextProvisionAttemptAt:at,createdAt:at,updatedAt:at});return true;}); if(made)created++; const occurrence=await ref.get(); if(!occurrence.exists){skipped++;continue;} await provisionMaintenanceArtifacts(systemContext(),{id:occurrence.id,...occurrence.data()}); } return { scanned: plans.size, created,skipped,limit:100, materializeThrough:today, remainingPossible:plans.size===100,reconciliation }; }
 
-export const completeOccurrenceInputSchema=z.object({expectedVersion:z.number().int().positive(),completedAt:z.string().datetime({offset:true}),result:z.string().trim().min(1).max(4000),components:z.array(z.string().trim().min(1).max(200)).max(30).default([])}).strict();
-export async function completeMaintenanceOccurrence(context:ServerUserContext,id:string,raw:unknown){const input=completeOccurrenceInputSchema.parse(raw);const ref=dbAdmin.collection("assetMaintenanceOccurrences").doc(id);await dbAdmin.runTransaction(async tx=>{const snap=await tx.get(ref);if(!snap.exists)throw new AppError({code:"ASSET_MAINTENANCE_NOT_FOUND",kind:"NOT_FOUND"});if(snap.get("workspaceId")!==context.workspace_id)throw new AppError({code:"ASSET_MAINTENANCE_FORBIDDEN",kind:"AUTHORIZATION"});if(snap.get("version")!==input.expectedVersion)throw new AppError({code:"ASSET_MAINTENANCE_VERSION_CONFLICT",kind:"CONFLICT"});const pid=snap.get("planId");const planRef=pid?dbAdmin.collection("assetMaintenancePlans").doc(pid):null;const plan=planRef?await tx.get(planRef):null;tx.update(ref,{status:"completed",completedAt:input.completedAt,result:input.result,components:input.components,completedBy:actor(context),version:input.expectedVersion+1,updatedAt:new Date().toISOString()});if(planRef&&plan?.exists){const nextDueDate=nextMaintenanceDate(plan.get("cadence"),input.completedAt.slice(0,10));tx.update(planRef,{nextDueDate,materializeOn:maintenanceMaterializeOn(nextDueDate,Number(plan.get("leadDays")??0)),lastCompletedAt:input.completedAt,updatedAt:new Date().toISOString()});}});return {ok:true};}
+export async function completeMaintenanceOccurrence(context: ServerUserContext, id: string, raw: unknown, db = dbAdmin) {
+  const input = completeOccurrenceInputSchema.parse(raw);
+  const ref = db.collection("assetMaintenanceOccurrences").doc(id);
+  const now = new Date().toISOString();
+  const { serviceDate, ...dates } = maintenanceCompletionDates(input, now);
+  await db.runTransaction(async (tx) => {
+    const occurrence = await tx.get(ref);
+    if (!occurrence.exists) throw new AppError({ code: "ASSET_MAINTENANCE_NOT_FOUND", kind: "NOT_FOUND" });
+    if (occurrence.get("workspaceId") !== context.workspace_id) {
+      throw new AppError({ code: "ASSET_MAINTENANCE_FORBIDDEN", kind: "AUTHORIZATION" });
+    }
+    if (occurrence.get("version") !== input.expectedVersion) {
+      throw new AppError({ code: "ASSET_MAINTENANCE_VERSION_CONFLICT", kind: "CONFLICT" });
+    }
+    if (!canCompleteMaintenance(occurrence.get("status"))) {
+      throw new AppError({
+        code: "ASSET_MAINTENANCE_STATUS_CONFLICT",
+        kind: "CONFLICT",
+        safeMessage: "A manutenção precisa estar aberta ou agendada para registrar a realização.",
+      });
+    }
+    const planId = occurrence.get("planId");
+    const planRef = planId ? db.collection("assetMaintenancePlans").doc(planId) : null;
+    const plan = planRef ? await tx.get(planRef) : null;
+    tx.update(ref, {
+      status: "completed", ...dates, result: input.result, components: input.components,
+      completedBy: { ...actor(context), namespace: "main.users" }, version: input.expectedVersion + 1, updatedAt: now,
+    });
+    if (planRef && plan?.exists) {
+      const nextDueDate = nextMaintenanceDate(plan.get("cadence"), serviceDate);
+      tx.update(planRef, {
+        nextDueDate, materializeOn: maintenanceMaterializeOn(nextDueDate, Number(plan.get("leadDays") ?? 0)),
+        lastCompletedAt: dates.completedAt, updatedAt: now,
+      });
+    }
+  });
+  return { ok: true };
+}
 
 export async function deactivateAssetMaintenance(context:ServerUserContext,assetId:string){const [plans,occurrences]=await Promise.all([dbAdmin.collection("assetMaintenancePlans").where("assetId","==",assetId).where("active","==",true).limit(100).get(),dbAdmin.collection("assetMaintenanceOccurrences").where("assetId","==",assetId).where("status","in",["scheduled","open"]).limit(200).get()]);const now=new Date().toISOString();const batch=dbAdmin.batch();plans.docs.forEach(d=>batch.update(d.ref,{active:false,deactivatedAt:now,deactivatedBy:actor(context),updatedAt:now}));occurrences.docs.forEach(d=>batch.update(d.ref,{status:"cancelled",cancelReason:"asset_retired",updatedAt:now}));batch.set(dbAdmin.collection("assetMovements").doc(),{workspaceId:context.workspace_id,assetId,type:"MANUTENCAO_DESATIVADA",actor:actor(context),occurredAt:now,notes:`${plans.size} plano(s) e ${occurrences.size} ocorrência(s) futura(s).`});await batch.commit();return{plans:plans.size,occurrences:occurrences.size};}
