@@ -242,6 +242,20 @@ Na prévia e no fechamento o servidor inclui quem teve ao menos um dia de víncu
 
 Para cada mês aberto, a leitura de equipe consulta os campos necessários dos usuários, os cabeçalhos de vínculo por usuário e apenas as revisões publicadas indicadas por esses cabeçalhos. O limite de 450 pessoas se aplica à lista combinada da competência.
 
+## Registro do mês da pessoa no fechamento (26/11/2026, local)
+
+Fase 1 das telas aprovadas ([plano](../../planos/plano-fechamento-ponto-politica-hora-extra.md), seção 8). Substitui, na etapa de saneamento, a consulta embutida e a abertura pela lista descritas na seção de 01/11; o modo embutido de `MyTimeRecordingPage` ficou sem consumidor.
+
+- **Registro** (`closure-person-record.tsx` e o modelo puro `closure-person-record-model.ts`): indicadores, calendário e horas do mês recolhíveis, tabela dos dias e conferência. Lê `POST employees/[employeeUid]` e `GET time-bank` da pessoa (uma vez por pessoa e após cada decisão num dia). O dia abre no mesmo `closure-focus-mode.tsx`; a devolução usa `DayCorrectionBatch`.
+- **O que trava:** só o que `GET closures?alerts=1` devolve. Mês em andamento, falha na consulta ou alerta fora do escopo de quem consulta: a tela mostra “a conferir” e não afirma que trava. Com a resposta, dia que só o cálculo da tela considera grave aparece como aviso. A devolução em lote oferece os dias que a tela lista como alerta.
+- **Abertura e lateral:** mês aberto abre na primeira pessoa (ordem alfabética) com pedido ou alerta que trava (falta automática fica marcada, sem contar como pendência); “Visão da organização” volta aos pedidos, ao fechamento e à conciliação. Mês fechado mantém a visão anterior. A lateral mostra P, A e F por pessoa e troca a organização, que continua sendo filtro: o fechamento é de todas.
+- **Falta automática:** vem da declaração do fechamento e é cruzada pela data, porque `POST employees/[employeeUid]` lê só pedidos de ausência. Esses dias não aparecem como “dia sem batidas” nem entram na fila de tratamento.
+- **Etapa de saneamento:** com a resposta do servidor, só dia que trava segura a etapa; aviso e alerta liberado não seguram.
+- **Limites dos textos:** o fechamento também recusa dia devolvido aberto, pedido de classificação de batida e falta automática não reconciliada com a escala, que a tela não recebe; por isso diz “sem pedido nem alerta que trave”. Turno que atravessa a meia-noite não gera falta nem batida ímpar no cálculo do dia (lacuna anterior, também no servidor) e aparece como “Turno da noite · conferir”.
+- **Sem gravação nova:** não há “mês conferido” nem decisão do DP sobre falta automática.
+- **Custo:** `alerts=1` passa a rodar uma vez por abertura de mês terminado e aberto, ao fechar o modal depois de decidir, após devolver dias e ao sair da conferência (antes, só ao conferir). Relê escalas, batidas e classificações de toda a equipe; sem listener ou polling.
+- **Não verificado:** sem E2E do fechamento no repositório e sem conferência visual no navegador.
+
 ## Fechamento por organização, trilha e modo foco — 01/11/2026
 
 - **Tela:** `/dashboard/dp/fechamento` (`closure-section.tsx`). A lateral mostra organizações; a organização da pessoa vem da unidade financeira (`unitId`) → organização da unidade ou do grupo. Ao abrir um mês, a lateral lista os colaboradores e cada um tem a trilha (`closure-person-trail.tsx`): saneamento, banco de horas e extras, resumo e fechamento. A etapa de fechamento ainda usa o fechamento **global** da competência.
