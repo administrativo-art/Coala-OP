@@ -19,7 +19,7 @@
  * Feriado com escala de trabalho, batida ímpar e faixa ausente vão para revisão do DP, sem lançamento. Turnos que
  * atravessam a meia-noite são pareados pelo instante fiscal e preservam os minutos noturnos para a folha.
  */
-import type { DPAbsenceType, DPOvertimeCategory, DPOvertimePolicy } from '@/types';
+import type { DPAbsenceType, DPOvertimeCategory, DPOvertimePolicy, DPPolicyTolerances } from '@/types';
 
 import { absorbedEdgeMinutes, assessBreak } from '../time-config/policy-rules';
 
@@ -35,6 +35,8 @@ export type BankJourney = { cycleLengthDays: number; validFrom: string; days: Ar
   weeklyRest?: { placement: 'fixed_cycle' | 'schedule' } | null };
 export type BankShift = {
   type: 'work' | 'day_off'; startTime: string | null; endTime: string | null; workDateRule?: boolean; overnight: boolean;
+  /** Só com `DP_TIME_NIGHT_TOLERANCE_ENABLED` ligada, em turno que termina às 22h. */
+  nightToleranceRule?: boolean;
   /** Duração líquida prevista do turno (sem o intervalo). */
   plannedMinutes: number | null;
   referenceMinutes: number | null; toleranceMinutes: number | null; journeyId: string | null;
@@ -100,6 +102,40 @@ export function pairedNightMinutes(markings: string[]) {
     }
   }
   return Math.round(total);
+}
+
+/**
+ * Entrada e saída absorvidas pela tolerância, na conta do saldo. `early` é quanto chegou antes e `late` quanto saiu
+ * depois do previsto. Com política vale a dela; sem ela, 5 min por ponta e a soma até a tolerância da jornada.
+ */
+export function edgeTolerance(early: number, late: number, journeyToleranceMinutes: number | null | undefined,
+  policy?: Pick<DPPolicyTolerances, 'markingMinutes' | 'dailyMinutes'>) {
+  if (policy) {
+    const absorbed = absorbedEdgeMinutes([early, late], policy);
+    return { minutes: absorbed.minutes, applied: absorbed.applied, lateAbsorbed: late > 0 && absorbed.applied && absorbed.minutes !== Math.min(0, early) };
+  }
+  const daily = Math.min(journeyToleranceMinutes ?? 0, 2 * MARKING_TOLERANCE_LIMIT);
+  const inside = daily > 0 && Math.abs(early) <= MARKING_TOLERANCE_LIMIT && Math.abs(late) <= MARKING_TOLERANCE_LIMIT
+    && Math.abs(early) + Math.abs(late) <= daily;
+  return { minutes: inside ? early + late : 0, applied: inside && (early !== 0 || late !== 0), lateAbsorbed: inside && late > 0 };
+}
+
+/**
+ * Regra de 27/11/2026, só no turno que termina às 22h: se a tolerância absorve a saída, os minutos depois das 22h não
+ * são noturnos; passou dela, contam todos. Devolve quantos minutos deixam de contar. Quem chama deixa de fora a
+ * cobertura e o dia em trechos.
+ */
+export function toleratedNightMinutes(markings: string[], shift: { startTime: string | null; endTime: string | null; toleranceMinutes?: number | null },
+  policy?: Pick<DPPolicyTolerances, 'markingMinutes' | 'dailyMinutes'>) {
+  if (shift.endTime !== '22:00' || !shift.startTime || !markings.length || markings.length % 2) return 0;
+  const sorted = [...markings].sort((left, right) => instantMs(left) - instantMs(right));
+  const entry = sorted[0];
+  const exit = sorted[sorted.length - 1];
+  const shiftEnd = clockMinutes(shift.endTime);
+  const late = localMinutes(exit) - shiftEnd;
+  // Saída em outro dia, ou período que já começou depois do fim do turno, não é atraso de saída.
+  if (exit.slice(0, 10) !== entry.slice(0, 10) || late <= 0 || localMinutes(sorted[sorted.length - 2]) >= shiftEnd) return 0;
+  return edgeTolerance(clockMinutes(shift.startTime) - localMinutes(entry), late, shift.toleranceMinutes, policy).lateAbsorbed ? late : 0;
 }
 
 const previousDate = (date: string) => new Date(Date.parse(`${date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
@@ -198,7 +234,9 @@ function computeWorkedTimeDay(input: BankDayInput): BankDay {
   const worked = pairedMinutes(markings);
   const day: BankDay = { date: input.date, kind, holiday: input.holiday, sunday, referenceMinutes: kind === 'workday' ? shift?.referenceMinutes ?? null : null,
     plannedMinutes: kind === 'workday' ? shift?.plannedMinutes ?? null : null, workedMinutes: worked, consideredMinutes: null, deltaMinutes: null,
-    toleranceApplied: false, abonoMinutes: 0, nightMinutes: pairedNightMinutes(markings),
+    toleranceApplied: false, abonoMinutes: 0, nightMinutes: pairedNightMinutes(markings)
+      - (shift?.type === 'work' && shift.nightToleranceRule && !shift.manual && !isCoverageShift(shift)
+        ? toleratedNightMinutes(markings, shift, input.policy?.tolerances) : 0),
     absences: input.absences.map((item) => ({ id: item.id, effect: item.effect })), unjustifiedAbsence: false,
     policy: input.policy ? { id: input.policy.id, version: input.policy.version,
       ...(input.policy.weeklyOvertimeLimitMinutes ? { weeklyOvertimeLimitMinutes: input.policy.weeklyOvertimeLimitMinutes } : {}) } : null, lines: [], issues: [] };
@@ -267,14 +305,9 @@ function computeWorkedTimeDay(input: BankDayInput): BankDay {
       && shift!.referenceMinutes > shift!.plannedMinutes
       ? clockMinutes(shift!.startTime) + shift!.referenceMinutes + COVERAGE_BREAK_MINUTES : null;
     const late = nearest(localMinutes(markings[markings.length - 1]) - (coverageEnd ?? clockMinutes(shift!.endTime)));
-    if (policyTolerances) {
-      const absorbed = absorbedEdgeMinutes([early, late], policyTolerances);
-      considered = worked - absorbed.minutes;
-      day.toleranceApplied = absorbed.applied;
-    } else if (Math.abs(early) <= MARKING_TOLERANCE_LIMIT && Math.abs(late) <= MARKING_TOLERANCE_LIMIT && Math.abs(early) + Math.abs(late) <= tolerance) {
-      considered = worked - early - late;
-      day.toleranceApplied = early !== 0 || late !== 0;
-    }
+    const absorbed = edgeTolerance(early, late, shift!.toleranceMinutes, policyTolerances);
+    considered = worked - absorbed.minutes;
+    day.toleranceApplied = absorbed.applied;
   }
   // Ausência em horas: a justificada ou com crédito soma ao considerado; a com débito deixa a falta aparecer.
   // Ausência em horas: justificada ou crédito somam ao considerado; injustificada soma e vai à folha como desconto;
