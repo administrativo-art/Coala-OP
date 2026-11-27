@@ -8,7 +8,7 @@ import { repPDateInZone } from "./time-zones";
  * com as mesmas regras de `day-model.ts` e o entrega pronto; web e Coala Go só exibem. Mudar a regra do dia exige
  * subir a versão, para que pedidos de revisão e conferências saibam com qual cálculo o resultado foi produzido.
  */
-export const DAY_ALGORITHM_VERSION = 2;
+export const DAY_ALGORITHM_VERSION = 3;
 
 /** Fuso do negócio para "hoje" no servidor; o mesmo da falta automática. */
 export const BUSINESS_TIME_ZONE = "America/Fortaleza";
