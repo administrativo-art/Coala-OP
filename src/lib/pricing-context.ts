@@ -1,5 +1,15 @@
 import type { EffectivePriceResolution, PriceOverride, ProductSimulation, SalesChannel } from '@/types';
 
+/** Automatic channel prices use canonical cents, then a forty-cent cutoff. */
+export function calculateAutomaticChannelPrice(basePrice: number, markupRate: number): number {
+  const calculatedPrice = basePrice * (1 + markupRate);
+  if (!Number.isFinite(calculatedPrice) || calculatedPrice < 0) return calculatedPrice;
+
+  const scaled = calculatedPrice * 100;
+  const cents = Math.round(scaled + Number.EPSILON * Math.max(1, Math.abs(scaled)));
+  return Math.floor(cents / 100) + (cents % 100 >= 40 ? 1 : 0);
+}
+
 export function buildPriceOverrideId(simulationId: string, unitId: string | null, channelId: string | null) {
   return `simulation:${simulationId}__unit:${unitId ?? 'all'}__channel:${channelId ?? 'all'}`;
 }
@@ -68,7 +78,7 @@ export function resolveEffectivePrice(
 
   if (unitOverride && channel?.defaultPriceRule?.mode === 'markup') {
     return {
-      price: unitPrice * (1 + channel.defaultPriceRule.value),
+      price: calculateAutomaticChannelPrice(unitPrice, channel.defaultPriceRule.value),
       available: true,
       source: 'channel-default-rule',
       override: null,
@@ -102,7 +112,7 @@ export function resolveEffectivePrice(
 
   if (channel?.defaultPriceRule?.mode === 'markup') {
     return {
-      price: unitPrice * (1 + channel.defaultPriceRule.value),
+      price: calculateAutomaticChannelPrice(unitPrice, channel.defaultPriceRule.value),
       available: true,
       source: 'channel-default-rule',
       override: null,

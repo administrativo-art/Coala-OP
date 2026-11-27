@@ -37,3 +37,56 @@ No [hook de lotes](../../../src/hooks/use-expiry-products.tsx), `updateLot` faz 
 ## Evidências da etapa 2
 
 A [verificação por grupo](../flow-verification.md) registra as referências disponíveis e o que ainda falta comprovar nesta base. Resultados de funções ou regras isoladas não certificam automaticamente este percurso completo.
+
+
+## Saldo sem lote e sem validade — 27/11/2026
+
+O controle agrupa código vazio, espaços e hífen isolado quando não há validade
+(incluindo o legado de data vazia), por produto, unidade e local. O helper
+[`stock-lot-identity.ts`](../../../src/lib/stock-lot-identity.ts) preserva códigos
+reais, datas, workspaces explicitamente distintos e estados de uniforme. O
+workspace ausente segue o padrão `WORKSPACE_ID` já usado pelas entradas manuais.
+O rótulo é **Sem lote**. Os documentos físicos e `movementHistory` permanecem
+intactos; nenhum saldo é migrado ou duplicado pelo agrupamento.
+
+Quando um saldo reúne vários documentos, o painel oferece as entradas de origem
+com suas quantidades e reservas. Histórico, edição, exclusão, baixa e transferência
+usam exclusivamente o ID e o saldo da entrada escolhida. A reserva da linha é a
+soma das reservas de todas as fontes. Links por `lotId` identificam também as
+fontes secundárias. O agrupamento não é uma autorização para movimentar o total
+por meio do ID de uma única fonte.
+
+Novas entradas manuais, recebimentos de compras de estoque comum e destinos de
+transferência/reposição compartilham o ID `prod_<produto>__kiosk_<unidade>__lot_-__exp_null`
+somente para ausência de lote e de validade. IDs legados continuam válidos para
+movimentação e estorno. Números reais, lotes com validade, compras locais `CL-*`
+e a chave específica dos uniformes mantêm suas regras anteriores. O formulário
+manual aceita código vazio; o hook grava hífen para o caso sem lote/validade.
+
+Regressão dirigida: `tests/unit/stock-lot-identity.test.ts` cobre os saldos
+2.434 e 3.595, data vazia/null, workspace legado, IDs físicos, reservas e separação
+por produto, unidade, local, código, data e condição. A apresentação permanece
+coberta por `tests/unit/lot-presentation.test.ts`. Esses testes não homologam
+integração completa com Firestore. Não há alteração de listener, consulta ou
+permissão; o custo recorrente existente não aumenta.
+
+A edição de um documento pode mudar seu código ou validade sem trocar o ID.
+Antes de somar a um destino reservado a estoque sem lote, as entradas conferem
+produto, unidade, workspace, ausência de código/validade e estado de uniforme.
+Cadastro manual, transferência e reposição fazem essa leitura dentro da mesma
+transação que ajusta o saldo. Recebimento de compras protege o lote por
+precondição da versão lida (ou criação exclusiva) no mesmo lote de gravações
+do recebimento. Um conflito preserva a identificação, o saldo e os movimentos.
+O cadastro exige número do lote quando a validade for preenchida.
+
+O estorno de reposição pareia cada entrada com uma saída distinta e aplica a
+soma dos ajustes uma vez por documento. A transação lê a atividade e seus
+movimentos e verifica o saldo disponível após restaurar as reservas. A suíte
+`tests/integration/stock-untracked-reposition.test.mjs` cobre quantidades iguais
+e diferentes para várias origens com um destino comum, tentativa concorrente de
+estorno e bloqueio de destino com identificação editada.
+
+O teste da tela `tests/e2e/stock/untracked-lots.spec.ts` passou com o projeto
+demo dos emuladores. Ele verifica agrupamento visual, seleção de origem,
+recusa de destino com código e validade e movimentação apenas da origem
+selecionada, com os IDs físicos no histórico.

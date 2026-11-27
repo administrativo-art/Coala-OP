@@ -2,6 +2,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from 'react';
+import { stockLotLabel } from '@/lib/stock-lot-identity';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
@@ -24,7 +25,7 @@ type MoveStockModalProps = {
   onOpenChange: (open: boolean) => void;
   lotToMove: LotEntry;
   kiosks: Kiosk[];
-  onMoveConfirm: (params: MoveLotParams[], user: User) => void;
+  onMoveConfirm: (params: MoveLotParams[], user: User) => Promise<unknown>;
 };
 
 const nf = (value: number) => value.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
@@ -38,12 +39,15 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
   const [quantity, setQuantity] = useState('1');
   const [destinationId, setDestinationId] = useState('');
   const [tried, setTried] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     if (open) {
       setQuantity('1');
       setDestinationId('');
       setTried(false);
+      setSaveError('');
     }
   }, [open, lotToMove.id]);
 
@@ -66,9 +70,9 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
   const moving = parsed > 0 ? Math.min(parsed, available) : 0;
   const destinationName = kiosks.find(k => k.id === destinationId)?.name;
 
-  const submit = () => {
+  const submit = async () => {
     setTried(true);
-    if (!user || !(parsed >= 1) || parsed > available || !destinationId) return;
+    if (saving || !user || !(parsed >= 1) || parsed > available || !destinationId) return;
 
     const params: MoveLotParams = {
       lotId: lotToMove.id,
@@ -81,8 +85,16 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
       productName,
       lotNumber: lotToMove.lotNumber,
     };
-    onMoveConfirm([params], user);
-    onOpenChange(false);
+    setSaving(true);
+    setSaveError('');
+    try {
+      await onMoveConfirm([params], user);
+      onOpenChange(false);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Não foi possível movimentar o estoque.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -90,7 +102,7 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
       open={open}
       onOpenChange={onOpenChange}
       title="Mover estoque"
-      description={`Mova unidades do item ${productName} (lote ${lotToMove.lotNumber}) de ${sourceName}.`}
+      description={`Mova unidades do item ${productName} (${stockLotLabel(lotToMove)}) de ${sourceName}.`}
       width={820}
       sidebarWidth={280}
       sidebar={
@@ -99,7 +111,7 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
           <h2 className="m-0 text-[20px] font-extrabold leading-[1.2] tracking-[-.02em]">{productName}</h2>
           <ShellFacts
             rows={[
-              { label: 'Lote', value: lotToMove.lotNumber, mono: true },
+              { label: 'Lote', value: stockLotLabel(lotToMove), mono: true },
               { label: 'Origem', value: sourceName },
               { label: 'No lote', value: `${nf(lotToMove.quantity)} ${packageLabel}(s)` },
               { label: 'Reservado', value: `${nf(reserved)} ${packageLabel}(s)`, className: 'text-[#93b4ff]' },
@@ -111,10 +123,11 @@ export function MoveStockModal({ open, onOpenChange, lotToMove, kiosks, onMoveCo
       footer={
         <>
           <CancelButton onClick={() => onOpenChange(false)} />
-          <PrimaryButton type="button" onClick={submit}>Confirmar movimentação</PrimaryButton>
+          <PrimaryButton type="button" onClick={submit} disabled={saving}>Confirmar movimentação</PrimaryButton>
         </>
       }
     >
+      {saveError && <p role="alert" className={MODAL_ERROR_TEXT}>{saveError}</p>}
       <div className="flex flex-col gap-2">
         <span className="flex justify-between text-xs font-bold text-[#4a4f57]">
           <span>Quantidade a mover ({packageLabel}s)</span>

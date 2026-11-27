@@ -17,3 +17,35 @@ A resolução contextual no mesmo arquivo rejeita canal inativo; prioriza overri
 ## Evidências da etapa 2
 
 A [verificação por grupo](../flow-verification.md) aponta testes disponíveis e lacunas na main. Execuções do worktree de correções não certificam esta base; funções ou regras isoladas não certificam o percurso completo.
+
+
+## Arredondamento do preço automático por canal — 27/11/2026
+
+A regra de acréscimo passa por `calculateAutomaticChannelPrice`, em
+[`pricing-context.ts`](../../../src/lib/pricing-context.ts), antes de devolver o
+preço efetivo. O resultado é normalizado em centavos; de 0 a 39 centavos desce
+para o real inteiro e de 40 a 99 centavos sobe para o próximo real. Exemplos:
+R$ 30,39 → R$ 30,00; R$ 30,40 → R$ 31,00. Um cálculo com mais casas, como
+R$ 30,399, primeiro corresponde a R$ 30,40 e resulta em R$ 31,00. A normalização
+compensa diferenças de representação numérica no limite do centavo.
+
+Os dois caminhos da regra automática (preço global ou preço da unidade) e a
+prévia do editor compartilham o mesmo helper. Para o exemplo do iFood com base
+R$ 20,00 e acréscimo de 36,05%, R$ 27,21 calculados resultam em R$ 27,00. Lista,
+ficha e métricas que usam o preço resolvido recebem esse valor final; a margem é
+calculada sobre ele. Não se arredondam imposto, percentual de acréscimo ou CMV.
+
+Preços manuais por canal/unidade e o preço de balcão mantêm seus centavos. A
+precedência e a disponibilidade permanecem como antes. O cálculo é derivado,
+sem migração, alteração de overrides ou regravação do histórico de vendas.
+O painel **Preços por canal** identifica **Regra do canal · arredondado** e tem
+um `InfoPopover` no cabeçalho e na caixa da regra do editor, acionável por
+clique, toque ou teclado, com alcance e exemplos do corte.
+
+Regressão dirigida em `tests/unit/pricing-context.test.ts`: limites de centavos,
+normalização, preço global/unidade, reajuste, exceções manuais, indisponibilidade
+e métricas do preço final. Nenhuma consulta, listener, permissão ou fonte de
+dados nova; custo recorrente adicional de Firestore: zero. Verificação global
+do fluxo segue distinta da cobertura desses cálculos.
+
+As prévias de criação e edição da regra nos Parâmetros também usam o cálculo final arredondado compartilhado, inclusive o exemplo de base R$ 12,00.

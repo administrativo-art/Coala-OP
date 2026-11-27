@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { maintenanceOrderPdfSchema, renderMaintenanceOrderPdf } from "../../../src/features/assets/maintenance-order-pdf";
-import { maintenanceMaterializedPatch, maintenanceMaterializeOn, maintenancePlanInputSchema, nextMaintenanceDate, nextProvisionAttemptAt, occurrenceId, taskIdForOccurrence } from "../../../src/features/assets/maintenance-model";
+import { completeOccurrenceInputSchema, maintenanceCivilDate, maintenanceCompletionDates, manualMaintenanceInputSchema, maintenanceMaterializedPatch, maintenanceMaterializeOn, maintenancePlanInputSchema, nextMaintenanceDate, nextProvisionAttemptAt, occurrenceId, taskIdForOccurrence } from "../../../src/features/assets/maintenance-model";
 import { SYSTEM_DOCUMENT_TEMPLATES } from "../../../src/features/hr/documents/system-template-catalog";
 
 test("cadências calculam próxima data sem estourar fim do mês", () => {
@@ -70,15 +70,47 @@ test("rotas são seguras, job limitado e tarefa não conclui ocorrência", () =>
   assert.match(service, /if\(!occurrence\.exists\)\{skipped\+\+;continue;\}/);
   assert.match(service, /existingCorrective.*provisionMaintenanceArtifacts/);
   assert.match(service, /type: "corrective".*provisioningStatus: "pending"/);
-  assert.match(service, /type:"manual".*provisioningStatus:"pending"/);
   assert.match(service, /externalAssignee/);
   assert.match(service, /assigneeId: external \? context\.userDoc\.id/);
   assert.match(service, /taskIdForOccurrence/);
-  assert.match(service, /status:"completed"/);
   assert.doesNotMatch(service, /task.*completed.*occurrence|occurrence.*task.*completed/i);
   assert.match(service, /nextMaintenanceDate/);
   assert.match(service, /MANUTENCAO_DESATIVADA/);
   const scheduler = readFileSync("functions/src/asset-maintenance-jobs.ts", "utf8");
   assert.match(scheduler, /onSchedule/);
   assert.match(scheduler, /ASSET_MAINTENANCE_JOB_SECRET/);
+});
+
+test("registro direto valida data civil de Belém, campos exclusivos e limites de peças", () => {
+  assert.equal(maintenanceCivilDate(new Date("2026-11-28T02:59:59Z")), "2026-11-27");
+  assert.equal(maintenanceCivilDate(new Date("2026-11-28T03:00:00Z")), "2026-11-28");
+  const performedOn = maintenanceCivilDate();
+  const done = {
+    idempotencyKey: "troca-de-peca", mode: "completed", performedOn, description: "Troca de rolamento",
+    assignee: { type: "third_party", nameSnapshot: "Oficina" },
+  };
+  assert.deepEqual(manualMaintenanceInputSchema.parse(done).components, []);
+  assert.deepEqual(manualMaintenanceInputSchema.parse({ ...done, components: [" Rolamento "] }).components, ["Rolamento"]);
+  for (const invalid of [
+    { performedOn: "9999-12-31" }, { performedOn: "2026-02-30" }, { performedOn: performedOn + "T00:00:00Z" },
+    { dueDate: performedOn }, { priority: "normal" }, { cost: 30 }, { completedBy: "operador" },
+    { components: Array<string>(31).fill("peça") }, { components: ["a".repeat(201)] }, { components: [" "] },
+  ]) assert.equal(manualMaintenanceInputSchema.safeParse({ ...done, ...invalid }).success, false);
+  const { mode, performedOn: dueDate, ...base } = done;
+  assert.equal(mode, "completed");
+  assert.equal(manualMaintenanceInputSchema.parse({ ...base, dueDate }).mode, "scheduled");
+  assert.equal(manualMaintenanceInputSchema.safeParse({ ...base, dueDate, performedOn }).success, false);
+});
+
+test("conclusão distingue data do serviço e instante de registro, incluindo chamada legada", () => {
+  const fields = { expectedVersion: 2, result: "Troca de peça" };
+  const performedOn = "2025-01-31";
+  const now = "2025-02-01T03:20:00.000Z";
+  const completedAt = "2025-01-31T23:20:00-03:00";
+  const civil = completeOccurrenceInputSchema.parse({ ...fields, performedOn });
+  const legacy = completeOccurrenceInputSchema.parse({ ...fields, completedAt });
+  assert.deepEqual(maintenanceCompletionDates(civil, now), { completedAt: now, performedOn, serviceDate: performedOn });
+  assert.deepEqual(maintenanceCompletionDates(legacy, now), { completedAt, serviceDate: performedOn });
+  assert.equal(completeOccurrenceInputSchema.safeParse({ ...fields, performedOn, completedAt }).success, false);
+  assert.equal(completeOccurrenceInputSchema.safeParse({ ...fields, performedOn: "9999-12-31" }).success, false);
 });

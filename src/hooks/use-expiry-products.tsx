@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { fetchClientBootstrap } from '@/lib/client-bootstrap';
 import { pruneUndefined } from '@/lib/utils';
 import { convertValue } from '@/lib/conversion';
+import { canReceiveUntrackedStock, incompatibleUntrackedStockMessage, missingDatedStockLotNumberMessage, stockLotNumber, untrackedStockLotId } from '@/lib/stock-lot-identity';
 
 // --- TYPE DEFINITIONS ---
 export type MoveLotParams = {
@@ -64,6 +65,8 @@ const destLotIdKey = (params: {
   expiryDate?: string | null;
   lotNumber: string;
 }) => {
+  const untrackedId = untrackedStockLotId(params);
+  if (untrackedId) return untrackedId;
   const { productId, kioskId, lotNumber, expiryDate = 'null' } = params;
   const cleanLotNumber = lotNumber.replace(/[\/\s]/g, '_');
   return `prod_${productId}__kiosk_${kioskId}__lot_${cleanLotNumber}__exp_${expiryDate}`;
@@ -133,6 +136,8 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
   const addLot = useCallback(async (lot: Omit<LotEntry, 'id'>, user: User) => {
     if (!user) throw new Error("Usuário não autenticado");
+    if (lot.expiryDate && !lot.lotNumber.trim()) throw new Error(missingDatedStockLotNumberMessage);
+    lot = { ...lot, lotNumber: stockLotNumber(lot) };
 
     try {
         await runTransaction(db, async (transaction) => {
@@ -147,6 +152,9 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             const existingDoc = await transaction.get(lotRef);
 
             if (existingDoc.exists()) {
+                if (untrackedStockLotId(lot) && !canReceiveUntrackedStock(existingDoc.data() as LotEntry, lot)) {
+                    throw new Error(incompatibleUntrackedStockMessage);
+                }
                 transaction.update(lotRef, {
                     quantity: increment(lot.quantity),
                     imageUrl: lot.imageUrl || existingDoc.data().imageUrl || null,
@@ -188,6 +196,9 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   const updateLot = useCallback(async (updatedLot: Partial<LotEntry> & { id: string }) => {
     const lotRef = doc(db, "lots", updatedLot.id);
     const { id, ...dataToUpdate } = updatedLot;
+    if (dataToUpdate.lotNumber !== undefined && dataToUpdate.expiryDate !== undefined) {
+      dataToUpdate.lotNumber = stockLotNumber({ lotNumber: dataToUpdate.lotNumber, expiryDate: dataToUpdate.expiryDate });
+    }
     try {
       await setDoc(lotRef, dataToUpdate, { merge: true });
     } catch (error) {
@@ -244,7 +255,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             const destId = destLotIdKey({
                 productId: it.productId,
                 kioskId: it.toKioskId,
-                lotNumber: it.lotNumber,
+                lotNumber: source.lotNumber,
                 expiryDate: source.expiryDate,
             });
             if (!destRefsMap.has(destId)) {
@@ -255,7 +266,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
         const destSnapMap = new Map(destSnaps.map(snap => [snap.id, snap]));
 
         for (const [index, it] of paramsArray.entries()) {
-            const { lotId, quantityToMove, toKioskId, productId, lotNumber } = it;
+            const { lotId, quantityToMove, toKioskId, productId } = it;
 
             if (!lotId || !Number.isFinite(quantityToMove) || quantityToMove <= 0) {
                 results.push({ lotId, requested: quantityToMove, moved: 0, pending: quantityToMove - 0 });
@@ -305,27 +316,26 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                 reservedQuantity: newReserved,
             });
 
-            const destId = destLotIdKey({
-                productId: productId,
-                kioskId: toKioskId,
-                lotNumber: lotNumber,
-                expiryDate: source.expiryDate,
-            });
+            const destination = { productId, kioskId: toKioskId, lotNumber: source.lotNumber, expiryDate: source.expiryDate };
+            const destId = destLotIdKey(destination);
             const destRef = destRefsMap.get(destId)!;
             const destSnap = destSnapMap.get(destId);
 
             if (destSnap?.exists()) {
+                if (untrackedStockLotId(destination) && !canReceiveUntrackedStock(destSnap.data() as LotEntry, destination)) {
+                    throw new Error(incompatibleUntrackedStockMessage);
+                }
                 transaction.update(destRef, { quantity: increment(movable) });
             } else {
-                const newLotData = { ...source, kioskId: toKioskId, quantity: movable, reservedQuantity: 0, locationId: null, locationName: null, locationCode: null, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+                const newLotData = { ...source, lotNumber: stockLotNumber(source), kioskId: toKioskId, quantity: increment(movable), reservedQuantity: 0, locationId: null, locationName: null, locationCode: null, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
                 delete (newLotData as any).id;
-                transaction.set(destRef, newLotData);
+                transaction.set(destRef, newLotData, { merge: true });
             }
             
             const now = new Date().toISOString();
-            const commonData = { productId: source.productId, productName: it.productName, lotNumber: it.lotNumber, quantityChange: movable, userId: user.id, username: user.username, timestamp: now, activityId };
+            const commonData = { productId: source.productId, productName: it.productName, lotNumber: source.lotNumber, quantityChange: movable, userId: user.id, username: user.username, timestamp: now, activityId };
             
-            addMovementRecord(transaction, { ...commonData, lotId: source.id, type: 'TRANSFERENCIA_SAIDA', fromKioskId: it.fromKioskId, toKioskId: it.toKioskId, fromKioskName: it.fromKioskName, toKioskName: it.toKioskName });
+            addMovementRecord(transaction, { ...commonData, lotId, type: 'TRANSFERENCIA_SAIDA', fromKioskId: it.fromKioskId, toKioskId: it.toKioskId, fromKioskName: it.fromKioskName, toKioskName: it.toKioskName });
             addMovementRecord(transaction, { ...commonData, lotId: destRef.id, type: 'TRANSFERENCIA_ENTRADA', fromKioskId: it.fromKioskId, toKioskId: it.toKioskId, fromKioskName: it.fromKioskName, toKioskName: it.toKioskName });
 
             results.push({ lotId, requested: quantityToMove, moved: movable, pending: quantityToMove - movable });

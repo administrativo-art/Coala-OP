@@ -61,6 +61,13 @@ export function canViewPersonSource(actor: ServerUserContext, source: Source): b
 }
 /** Source-native scope fields; financial result centers never become operational units. */
 export function canViewPersonRecord(actor: ServerUserContext, source: Source, data: Record<string, unknown> | undefined): boolean {
+  if (source.id.startsWith("asset-maintenance-")) {
+    const key = source.id === "asset-maintenance-creators" ? "createdBy"
+      : source.id === "asset-maintenance-completers" ? "completedBy" : "assignee";
+    const person = data?.[key] as { namespace?: unknown; type?: unknown; userId?: unknown; id?: unknown } | undefined;
+    if (data?.workspaceId !== actor.workspace_id || person?.namespace !== "main.users"
+      || (key === "assignee" ? person.type !== "user" || typeof person.id !== "string" : typeof person.userId !== "string")) return false;
+  }
   if (DP_ADMIN_POLICIES.has(source.permissionPolicy) && !matchesPersonWorkspace(data, actor.workspace_id)) return false;
   if (["fiscal-afd-export-actors", "fiscal-aej-export-actors"].includes(source.id) && data?.workspaceId !== actor.workspace_id) return false;
   // Existing cash-withdrawal claims own their tenant under source, not at the root.
