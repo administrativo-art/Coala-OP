@@ -1396,7 +1396,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/pricing/cost-analysis/page.tsx`](../../src/app/dashboard/pricing/cost-analysis/page.tsx), [`src/app/dashboard/pricing/price-comparison/page.tsx`](../../src/app/dashboard/pricing/price-comparison/page.tsx).
 
-Arquivos locais percorridos: 81.
+Arquivos locais percorridos: 82.
 
 Chamadas candidatas encontradas:
 

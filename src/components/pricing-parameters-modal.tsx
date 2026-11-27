@@ -14,6 +14,7 @@ import { PlusCircle, Edit, Trash2, Palette } from 'lucide-react';
 import { type PricingParameters, type ProfitRange, type SalesChannel, type SimulationCategory } from '@/types';
 import { useEffect, useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
+import { calculateAutomaticChannelPrice } from '@/lib/pricing-context';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -483,7 +484,7 @@ function ChannelManager() {
     };
 
     const previewBasePrice = 12;
-    const previewRulePrice = ruleMode === 'markup' ? previewBasePrice * (1 + rulePercent / 100) : previewBasePrice;
+    const previewRulePrice = ruleMode === 'markup' ? calculateAutomaticChannelPrice(previewBasePrice, rulePercent / 100) : previewBasePrice;
 
     return (
         <div className="space-y-4">
@@ -595,7 +596,7 @@ function InlineChannelRuleEditor({
   }, [channel.defaultPriceRule?.mode, channel.defaultPriceRule?.value]);
 
   const previewBasePrice = 12;
-  const previewRulePrice = mode === 'markup' ? previewBasePrice * (1 + percent / 100) : previewBasePrice;
+  const previewRulePrice = mode === 'markup' ? calculateAutomaticChannelPrice(previewBasePrice, percent / 100) : previewBasePrice;
 
   return (
     <div className="space-y-2">

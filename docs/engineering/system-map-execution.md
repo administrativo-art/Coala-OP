@@ -305,3 +305,10 @@ Nova consulta auditada e painel de localização na candidata local, com permiss
 
 
 26/11/2026 — levantamento de produtor deve distinguir arquivo persistido de localização no Acervo: generatedDocuments, editorDocuments, recebidos, fontes contextuais e anexos admissionais possuem leitores próprios. Anexos públicos só entram após conclusão com final assinado; não expor bearer URL nem inferir envio confirmado de objeto avulso. Cancelamento admissional definitivo usa escopos privados, lease e reconciliação de objetos tardios.
+
+
+27/11/2026 — Precificação: regra automática do canal normalizada em centavos e
+arredondada em reais inteiros no corte de R$ 0,40; prévia e resolvedor usam o
+mesmo helper e preservam exceções manuais. InfoPopover explica alcance e
+exemplos. Ver [preços e custo](flows/pricing.md). Cobertura dirigida da regra,
+sem declarar homologação global de todos os fluxos de precificação.
