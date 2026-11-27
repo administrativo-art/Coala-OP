@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { resolveEffectivePrice } from '../../src/lib/pricing-context';
+import { calculateAutomaticChannelPrice, calculateSimulationMetrics, resolveEffectivePrice } from '../../src/lib/pricing-context';
 import type { PriceOverride, SalesChannel } from '../../src/types';
 
 const ifoodChannel: SalesChannel = {
@@ -47,7 +47,7 @@ test('regra do canal acompanha o preço vigente da unidade', () => {
     [unitOverride]
   );
 
-  assert.equal(result.price, 16.326);
+  assert.equal(result.price, 16);
   assert.equal(result.available, true);
   assert.equal(result.source, 'channel-default-rule');
 });
@@ -72,8 +72,8 @@ test('regra do canal não congela o preço quando a unidade é reajustada', () =
     [updated]
   );
 
-  assert.ok(Math.abs((previousResult.price ?? 0) - 16.326) < 0.000001);
-  assert.ok(Math.abs((updatedResult.price ?? 0) - 17.6865) < 0.000001);
+  assert.equal(previousResult.price, 16);
+  assert.equal(updatedResult.price, 18);
 });
 
 test('preço específico da unidade no canal continua tendo prioridade', () => {
@@ -93,6 +93,50 @@ test('preço específico da unidade no canal continua tendo prioridade', () => {
   assert.equal(result.source, 'override:unit+channel');
 });
 
+test('preço automático usa o corte de quarenta centavos após normalizar a moeda', () => {
+  for (const [calculated, expected] of [
+    [30, 30], [30.01, 30], [30.39, 30], [30.40, 31], [30.99, 31],
+    [30.394, 30], [30.395, 31], [30.399, 31], [0, 0], [1234.40, 1235],
+  ]) {
+    assert.equal(calculateAutomaticChannelPrice(calculated, 0), expected, `${calculated} deve resultar em ${expected}`);
+  }
+  assert.equal(calculateAutomaticChannelPrice(10, 2.04), 31);
+  assert.equal(calculateAutomaticChannelPrice(20, 0.3605), 27);
+});
+
+test('regra global do iFood e métricas usam o preço arredondado efetivo', () => {
+  const result = resolveEffectivePrice({ salePrice: 20 }, null, 'ifood', [ifoodChannel], []);
+  assert.equal(result.price, 27);
+  assert.equal(result.source, 'channel-default-rule');
+  const metrics = calculateSimulationMetrics(result.price!, 5.61, 0, 0);
+  assert.equal(Math.round(metrics.grossMargin * 100), 2139);
+  assert.equal(metrics.grossMarginPct.toFixed(1), '79.2');
+});
+
+test('preço manual de canal, preço de balcão e preço de unidade sem regra mantêm centavos', () => {
+  const simulation = { salePrice: 30.40 };
+  const manualChannel = resolveEffectivePrice(simulation, null, 'ifood', [ifoodChannel], [override('manual', null, 'ifood', 29.90)]);
+  assert.equal(manualChannel.price, 29.90);
+  assert.equal(manualChannel.source, 'override:channel');
+  const counter = resolveEffectivePrice(simulation, null, null, [ifoodChannel], []);
+  assert.equal(counter.price, 30.40);
+  assert.equal(counter.source, 'global');
+  const noRule = resolveEffectivePrice(simulation, 'joao-paulo', 'ifood', [{ ...ifoodChannel, defaultPriceRule: null }], [override('unit', 'joao-paulo', null, 30.39)]);
+  assert.equal(noRule.price, 30.39);
+  assert.equal(noRule.source, 'override:unit');
+});
+
+test('arredondamento não reativa canal inativo ou unidade fora do escopo', () => {
+  const unavailableChannel = resolveEffectivePrice({ salePrice: 20 }, null, 'ifood', [{ ...ifoodChannel, active: false }], []);
+  assert.equal(unavailableChannel.price, null);
+  assert.equal(unavailableChannel.available, false);
+  assert.equal(unavailableChannel.source, 'channel-inactive');
+  const unavailableUnit = resolveEffectivePrice({ salePrice: 20, kioskIds: ['tirirical'] }, 'joao-paulo', 'ifood', [ifoodChannel], []);
+  assert.equal(unavailableUnit.price, null);
+  assert.equal(unavailableUnit.available, false);
+  assert.equal(unavailableUnit.source, 'unit-disabled');
+});
+
 test('indisponibilidade específica da unidade no canal não é anulada pela regra', () => {
   const simulation = { salePrice: 10, kioskIds: ['joao-paulo'] };
   const unitOverride = override('unit-price', 'joao-paulo', null, 12);
@@ -108,4 +152,9 @@ test('indisponibilidade específica da unidade no canal não é anulada pela reg
 
   assert.equal(result.available, false);
   assert.equal(result.source, 'override:unit+channel');
+});
+
+test('prévia da configuração do canal usa o preço final normalizado', () => {
+  assert.equal(calculateAutomaticChannelPrice(12, 0.3605), 16);
+  assert.equal(calculateAutomaticChannelPrice(12, 0.37), 17);
 });

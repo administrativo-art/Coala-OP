@@ -32,6 +32,9 @@ import { UNIFORM_STOCK_ID } from '@/lib/uniform';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { LotDetailPanel } from './stock/lot-detail-panel';
+import { SidePanel } from './patterns/side-panel';
+import { LiftRow } from './patterns/lift-row';
+import { groupStockLots, physicalLotForAction, stockLotLabel, type StockLotGroup } from '@/lib/stock-lot-identity';
 import {
   ACTIVE_REPOSITION_RESERVATION_STATUSES,
   buildReservationsByLot,
@@ -50,7 +53,7 @@ const BarcodeScannerModal = dynamic(
 
 export type GroupedProduct = {
   product: Product;
-  lots: LotEntry[];
+  lots: StockLotGroup[];
 };
 
 export type GroupedByBrand = {
@@ -181,6 +184,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [lotToMove, setLotToMove] = useState<LotEntry | null>(null);
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
+  const [selectedSourceLotId, setSelectedSourceLotId] = useState<string | null>(null);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
   const [quickProjectionProduct, setQuickProjectionProduct] = useState<BaseProduct | null>(null);
 
@@ -221,16 +225,6 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
     }
   }, [canSeeAllKiosks, kioskQuery, selectedKioskId, sortedKiosks]);
 
-  useEffect(() => {
-    if (scannedLotId) {
-      const element = document.getElementById(`lot-instance-${scannedLotId}`);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        element.classList.add('animate-pulse-once');
-      }
-    }
-  }, [scannedLotId, loading]);
-
   const productById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
 
   const stockOperationalCategories = useMemo(
@@ -268,7 +262,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
       return (
         product.baseName.toLowerCase().includes(search) ||
         (product.brand && product.brand.toLowerCase().includes(search)) ||
-        lot.lotNumber.toLowerCase().includes(search) ||
+        stockLotLabel(lot).toLowerCase().includes(search) ||
         (product?.barcode && product.barcode.toLowerCase().includes(search)) ||
         expiryDateFormatted.includes(search) ||
         kioskName.includes(search) ||
@@ -288,10 +282,10 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
 
   const operationalCategoryCounts = useMemo(() => {
     return stockOperationalCategories.reduce((acc, category) => {
-      acc[category.id] = filteredLotsBeforeCategory.filter((lot) => {
+      acc[category.id] = groupStockLots(filteredLotsBeforeCategory.filter((lot) => {
         const product = productById.get(lot.productId);
         return !!product && productMatchesOperationalCategory(product, category.id);
-      }).length;
+      })).length;
       return acc;
     }, {} as Record<string, number>);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -304,15 +298,16 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
     let expired = 0;
     let reserved = 0;
 
-    kioskLots.forEach((lot) => {
+    const groups = groupStockLots(kioskLots);
+    groups.forEach((lot) => {
       productIds.add(lot.productId);
-      if (lotReservedQuantity(lot, reservationsByLot.get(lot.id)) > 0) reserved += 1;
+      if (lot.sourceLots.some(source => lotReservedQuantity(source, reservationsByLot.get(source.id)) > 0)) reserved += 1;
       const status = lotStatusOf(lot, productById.get(lot.productId));
       if (status.key === 'expired') expired += 1;
       else if (status.key === 'expiring') expiringSoon += 1;
     });
 
-    return { products: productIds.size, lots: kioskLots.length, expiringSoon, expired, reserved };
+    return { products: productIds.size, lots: groups.length, expiringSoon, expired, reserved };
   }, [kioskLots, productById, reservationsByLot]);
 
   const groupedData = useMemo(() => {
@@ -323,22 +318,11 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
           return !!product && productMatchesOperationalCategory(product, selectedOperationalCategoryId);
         });
 
-    const lotsByKey: Record<string, LotEntry> = {};
-    categoryFilteredLots.forEach(lot => {
-      const key = `${lot.productId}-${lot.lotNumber}-${lot.expiryDate || 'no-expiry'}-${lot.kioskId}`;
-      if (lotsByKey[key]) {
-        lotsByKey[key].quantity += lot.quantity;
-        if (lot.reservedQuantity) {
-          lotsByKey[key].reservedQuantity = (lotsByKey[key].reservedQuantity || 0) + lot.reservedQuantity;
-        }
-      } else {
-        lotsByKey[key] = { ...lot };
-      }
-    });
+    const lotGroups = groupStockLots(categoryFilteredLots);
 
     const groups: Map<string, GroupedByBaseProduct> = new Map();
 
-    Object.values(lotsByKey).forEach(lot => {
+    lotGroups.forEach(lot => {
       const product = productById.get(lot.productId);
       if (!product) return;
 
@@ -389,6 +373,17 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredLotsBeforeCategory, selectedOperationalCategoryId, productById, baseProducts, getProductFullName, activeCategories]);
 
+  useEffect(() => {
+    if (!scannedLotId) return;
+    const group = groupedData.flatMap(base => base.brands.flatMap(brand => brand.products.flatMap(product => product.lots)))
+      .find(lot => lot.sourceLots.some(source => source.id === scannedLotId));
+    const element = group ? document.getElementById(`lot-instance-${group.id}`) : null;
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      element.classList.add('animate-pulse-once');
+    }
+  }, [scannedLotId, groupedData]);
+
   const shownLots = useMemo(
     () => groupedData.reduce((sum, group) => sum + group.brands.reduce((s, b) => s + b.products.reduce((p, pg) => p + pg.lots.length, 0), 0), 0),
     [groupedData],
@@ -410,6 +405,13 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
     }
     return null;
   }, [groupedData, selectedLotId]);
+
+  const selectedPhysicalLot = selectedLot ? physicalLotForAction(selectedLot.lot, selectedSourceLotId) : null;
+
+  const closeLotPanel = () => {
+    setSelectedLotId(null);
+    setSelectedSourceLotId(null);
+  };
 
   // Se o lote sair da lista (baixa total, filtro), o painel fecha junto.
   useEffect(() => {
@@ -472,7 +474,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
                         "Produto Base": baseGroup.name,
                         "Insumo": getProductFullName(productGroup.product),
                         "Marca": productGroup.product.brand || 'N/A',
-                        "Lote": lot.lotNumber,
+                        "Lote": stockLotLabel(lot),
                         "Quantidade": lot.quantity,
                         "Validade": lot.expiryDate ? format(parseISO(lot.expiryDate), 'dd/MM/yyyy') : 'N/A',
                         "Quiosque": kiosks.find(k => k.id === lot.kioskId)?.name || 'N/A',
@@ -501,8 +503,17 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
 
   const getLotView = (lot: LotEntry, product: Product) => {
     const status = lotStatusOf(lot, product);
-    const reservation = reservationsByLot.get(lot.id);
-    const reserved = lotReservedQuantity(lot, reservation);
+    const sources = 'sourceLots' in lot ? (lot as StockLotGroup).sourceLots : [lot];
+    const destinationsByName: Record<string, number> = {};
+    let reserved = 0;
+    for (const source of sources) {
+      const sourceReservation = reservationsByLot.get(source.id);
+      reserved += lotReservedQuantity(source, sourceReservation);
+      for (const [name, quantity] of Object.entries(sourceReservation?.destinations ?? {})) {
+        destinationsByName[name] = (destinationsByName[name] || 0) + quantity;
+      }
+    }
+    const reservation = reserved > 0 ? { total: reserved, destinations: destinationsByName } : undefined;
     const destinations = reservation ? Object.entries(reservation.destinations) : [];
     return {
       status,
@@ -520,11 +531,12 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
     id: `lot-instance-${lotId}`,
     role: 'button' as const,
     tabIndex: 0,
-    onClick: () => setSelectedLotId(lotId),
+    onClick: () => { setSelectedLotId(lotId); setSelectedSourceLotId(null); },
     onKeyDown: (event: React.KeyboardEvent) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         setSelectedLotId(lotId);
+        setSelectedSourceLotId(null);
       }
     },
   });
@@ -556,7 +568,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
             <React.Fragment key={baseGroup.baseProductId || baseGroup.name}>
               <div className="flex items-center justify-between border-b border-[#efece6] bg-[#fbfaf7] px-[18px] py-2.5">
                 <span className="text-[12.5px] font-extrabold uppercase tracking-[.02em]">{baseGroup.name}</span>
-                <span className="text-xs text-[#70757d]">{rows.length} lotes · <b className="text-[#a6325b]">{summary.converted}</b></span>
+                <span className="text-xs text-[#70757d]">{rows.length} {rows.length === 1 ? 'saldo' : 'saldos'} · <b className="text-[#a6325b]">{summary.converted}</b></span>
               </div>
               {rows.map(({ product, lot }) => {
                 const view = getLotView(lot, product);
@@ -577,7 +589,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
                         <span className="truncate text-[11.5px] text-[#9a9ba1]">{productSpecLine({ ...product, multiplo_caixa: undefined, rotulo_caixa: undefined })}</span>
                       </span>
                     </div>
-                    <span className="font-mono text-xs font-semibold">{lot.lotNumber}</span>
+                    <span className="font-mono text-xs font-semibold">{stockLotLabel(lot)}</span>
                     <span className="flex min-w-0 flex-col"><span className="text-[13px]">{view.kioskName}</span><span className="text-[11.5px] text-[#9a9ba1]">{view.locationName}</span></span>
                     <span className="flex flex-col items-start gap-[3px]"><span className={view.status.pillClass}>{view.status.text}</span><span className="font-mono text-[11.5px] text-[#70757d]">{view.expiry}</span></span>
                     <span className="text-right text-[13px] font-bold">{view.parts.map(p => `${p.value} ${p.unit}`).join(' · ')}</span>
@@ -616,7 +628,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
                     Projeção
                   </button>
                 )}
-                <span className="text-xs text-[#9a9ba1]">{groupLots} lotes</span>
+                <span className="text-xs text-[#9a9ba1]">{groupLots} {groupLots === 1 ? 'saldo' : 'saldos'}</span>
               </div>
               {summary.totalPackages > 0 && (
                 <div className="flex flex-wrap items-center gap-2 text-[13.5px]">
@@ -646,7 +658,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
                     )}
                     <span className="text-[12.5px] text-[#70757d]">{productSpecLine(product, { withBarcode: true })}</span>
                   </div>
-                  <span className="whitespace-nowrap text-[12.5px] text-[#9a9ba1]">{productLots.length} {productLots.length === 1 ? 'lote' : 'lotes'}</span>
+                  <span className="whitespace-nowrap text-[12.5px] text-[#9a9ba1]">{productLots.length} {productLots.length === 1 ? 'saldo' : 'saldos'}</span>
                 </div>
                 <div className="rounded-b-[18px] border-t border-[#efece6]">
                   {productLots.map(lot => {
@@ -663,7 +675,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
                       >
                         <div className="flex flex-wrap items-center gap-3">
                           <div className="flex w-[170px] flex-col gap-1">
-                            <span className="font-mono text-[12.5px] font-bold">{lot.lotNumber}</span>
+                            <span className="font-mono text-[12.5px] font-bold">{stockLotLabel(lot)}</span>
                             <span className={view.status.pillClass}>{view.status.text}</span>
                           </div>
                           <div className="flex min-w-[160px] flex-1 flex-col gap-0.5">
@@ -745,7 +757,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
 
   const kpis: { label: string; value: number; color: string; key?: string; hint?: string }[] = [
     { label: 'Insumos', value: stockStats.products, color: '#ffffff' },
-    { label: 'Lotes ativos', value: stockStats.lots, color: '#ffffff' },
+    { label: 'Saldos ativos', value: stockStats.lots, color: '#ffffff' },
     { label: 'Vencendo', value: stockStats.expiringSoon, color: '#fb923c', key: 'expiring', hint: '≤ 7 dias' },
     { label: 'Vencidos', value: stockStats.expired, color: '#fb7185', key: 'expired' },
     { label: 'Reservas ativas', value: stockStats.reserved, color: '#93b4ff', key: 'reserved' },
@@ -902,7 +914,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-baseline gap-2.5">
                 <span className="text-[28px] font-extrabold tracking-[-.03em]">{shownLots}</span>
-                <span className="text-[13px] text-[#70757d]">lotes em {shownProducts} insumos</span>
+                <span className="text-[13px] text-[#70757d]">saldos em {shownProducts} insumos</span>
                 {activeFilterPills.map(pill => (
                   <button
                     key={pill.label}
@@ -943,7 +955,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
                   onClick={() => setStatusFilters(current => current.includes('reserved') ? current : [...current, 'reserved'])}
                   className="h-[34px] whitespace-nowrap rounded-[10px] border border-[#c7d6f8] bg-white px-3.5 text-[12.5px] font-bold text-[#1d4ed8]"
                 >
-                  Ver lotes reservados
+                  Ver saldos reservados
                 </button>
                 <Link href="/dashboard/stock/analysis" className="whitespace-nowrap text-[12.5px] font-bold text-[#1d4ed8]">
                   Abrir reposição →
@@ -956,15 +968,37 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
         </div>
       </div>
 
-      {selectedLot && (
+      {selectedLot && !selectedPhysicalLot && (
+        <SidePanel
+          open
+          onOpenChange={open => { if (!open) closeLotPanel(); }}
+          kicker={stockLotLabel(selectedLot.lot)}
+          title={getProductFullName(selectedLot.product)}
+          subtitle="Saldo reunido. Escolha uma entrada para consultar o histórico ou movimentar sua quantidade."
+          highlights={<span>{lotQuantityParts(selectedLot.lot, selectedLot.product).map(part => `${part.value} ${part.unit}`).join(' · ')}</span>}
+        >
+          <p className="text-sm text-ds-ink-muted">As entradas mantêm seu histórico e suas reservas. As ações usam somente a quantidade da entrada escolhida.</p>
+          <div className="rounded-ds-lg border border-ds-border bg-ds-surface">
+            {selectedLot.lot.sourceLots.map((source, index) => (
+              <LiftRow key={source.id} onClick={() => setSelectedSourceLotId(source.id)}>
+                <span className="block text-sm font-bold text-ds-ink">Entrada {index + 1} · {lotQuantityParts(source, selectedLot.product).map(part => `${part.value} ${part.unit}`).join(' · ')}</span>
+                <span className="text-xs text-ds-ink-muted">{stockLotLabel(source)} · {lotReservedQuantity(source, reservationsByLot.get(source.id)).toLocaleString('pt-BR')} reservado(s)</span>
+              </LiftRow>
+            ))}
+          </div>
+        </SidePanel>
+      )}
+
+      {selectedLot && selectedPhysicalLot && (
         <LotDetailPanel
-          lot={selectedLot.lot}
+          lot={selectedPhysicalLot}
           product={selectedLot.product}
           fullName={getProductFullName(selectedLot.product)}
           kioskName={kiosks.find(k => k.id === selectedLot.lot.kioskId)?.name || 'Quiosque desconhecido'}
           locationName={selectedLot.lot.locationId ? locations.find(l => l.id === selectedLot.lot.locationId)?.name : null}
-          reservation={reservationsByLot.get(selectedLot.lot.id)}
-          onClose={() => setSelectedLotId(null)}
+          reservation={reservationsByLot.get(selectedPhysicalLot.id)}
+          onClose={closeLotPanel}
+          onBack={selectedLot.lot.sourceLots.length > 1 ? () => setSelectedSourceLotId(null) : undefined}
           onEdit={handleEditClick}
           onMove={handleMoveClick}
           onDelete={forceDeleteLotById}

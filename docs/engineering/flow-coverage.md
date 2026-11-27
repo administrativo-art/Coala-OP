@@ -71,7 +71,7 @@ Classificação atual: **174/174 páginas** — 126 ativas, 6 de navegação, 31
 
 | Grupo | Páginas associadas | Estado | Documento profundo |
 | --- | ---: | --- | --- |
-| `assets` | 1 | Traçado | [Cadastro e movimentação](flows/assets.md) — percurso complementado; verificação integrada pendente |
+| `assets` | 1 | Traçado | [Cadastro, manutenção e histórico](flows/assets.md) — agendamento, registro realizado, peças e consolidação por vínculos cobertos por testes dirigidos; verificação integrada pendente |
 | `card-statements` | 2 | Traçado | [Prévia, importação e fechamento](flows/card-statements.md) — projeção por compra/parcela coberta localmente; verificação integrada pendente |
 | `cash-closures` | 6 | Traçado | [Sincronização PDV e contagem](flows/cash-closures.md) — classificação/gate/UI implementados; integração e HTTP autenticado em emulador aprovados; não certifica todos os depósitos nem UI no navegador |
 | `cash-deposits` | 1 | Traçado | [Lote, cobrança Inter e conciliação](flows/cash-deposits.md) — percurso complementado; verificação integrada pendente |
@@ -110,7 +110,7 @@ Classificação atual: **174/174 páginas** — 126 ativas, 6 de navegação, 31
 | `pdv-sync` | 1 | Traçado | [Callable e reprocessamento](flows/pdv-sync.md) — percurso complementado; verificação integrada pendente |
 | `people-access` | 7 | Traçado | [Colaboradores e acesso](flows/people-access.md) — percurso complementado; verificação integrada pendente |
 | `platform-home` | 1 | Traçado | [Página inicial](flows/platform-home.md) — percurso complementado; verificação integrada pendente |
-| `pricing` | 4 | Traçado | [Preços](flows/pricing.md) — percurso complementado; verificação integrada pendente |
+| `pricing` | 4 | Traçado | [Preços](flows/pricing.md) — percurso complementado; arredondamento automático por canal coberto por teste dirigido; verificação integrada pendente |
 | `purchasing` | 15 | Traçado | [Cotação, pedido, recebimento e estoque](flows/purchasing-order-receipt.md) — destino e avisos de recebimento cobertos localmente em testes puros/emulador; prontidão e códigos de pedidos importados cobertos por teste unitário; taxa de serviço com classificação e liquidação próprias coberta em cálculo puro, sem homologação financeira integrada; compra por volume depende do multiplicador no cadastro e exibe quantidade e custo unitário no editor; compra local sem comprovante, sessão única/retomada de vínculo na própria sangria, filtros hierárquicos de unidade e classificação operacional de itens pela IA cobertos por contrato/teste de estado, sem OCR real ou HTTP autenticado; sem criação automática de cadastro/patrimônio pendente; homologação global pendente |
 | `receivables` | 1 | Traçado | [Período, carteira e posição Stone](flows/receivables-stone.md) — percurso complementado; verificação integrada pendente |
 | `recruitment` | 3 | Traçado | [Vagas e candidatos](flows/recruitment.md) — percurso complementado; verificação integrada pendente |
@@ -121,7 +121,7 @@ Classificação atual: **174/174 páginas** — 126 ativas, 6 de navegação, 31
 | `settings` | 4 | Traçado | [Configurações gerais](flows/settings.md) — custos de IA e Google Cloud mantêm escopo por projeto e cobertura conservadora; fatos rápidos de unidades e fluxo local de perfis cobertos por contratos; verificação integrada pendente |
 | `signage` | 1 | Traçado | [Slides, publicação e heartbeat](flows/signage.md) — percurso complementado; verificação integrada pendente |
 | `stock-analysis` | 9 | Traçado | [Análises de estoque](flows/stock-analysis.md) — margem padrão de 30%, exceção de 15% para AMENDOIM no CD, compra direta por unidade e comparação local; testes puro e de integração no emulador passaram; E2E, piloto e ativação pendentes |
-| `stock-control` | 6 | Traçado | [Lotes, baixa e transferência](flows/stock-control.md) — percurso complementado; verificação integrada pendente |
+| `stock-control` | 6 | Traçado | [Lotes, baixa e transferência](flows/stock-control.md) — percurso complementado; saldo sem lote com IDs de origem preservados e regressão dirigida; verificação integrada pendente |
 | `stock-count` | 3 | Traçado | [Sessões e ajustes de lote](flows/stock-count.md) — percurso complementado; verificação integrada pendente |
 | `stock-reposition` | 2 | Traçado | [Reserva e transição](flows/stock-requests-reposition-returns.md) — percurso complementado; verificação integrada pendente |
 | `stock-requests` | 1 | Traçado | [Solicitação e tarefa](flows/stock-requests-reposition-returns.md) — percurso complementado; verificação integrada pendente |

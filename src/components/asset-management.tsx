@@ -37,6 +37,9 @@ import { Segmented } from '@/components/patterns/segmented';
 import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
 import { Skeleton } from '@/components/ui/skeleton';
 import { WizardModal, type WizardStep } from '@/components/patterns/wizard-modal';
+import type { AssetHistoryMaintenance, AssetHistoryRow } from '@/features/assets/history-pagination';
+import { formatMaintenanceDate, MAINTENANCE_LIMITS, maintenanceHistoryDetails, maintenanceStatus, prepareMaintenanceRequest, type MaintenanceErrors } from '@/features/assets/maintenance-ui';
+import { operationalCivilDate } from '@/lib/operational-unit-periods';
 import { cn } from '@/lib/utils';
 
 const assetSchema = z.object({
@@ -157,7 +160,7 @@ const ASSET_STEPS: { id: AssetStep; label: string; description: string }[] = [
   { id: 'audit', label: 'Auditoria e manutenção', description: 'Auditorias, planos preventivos, ocorrências e ordens.' },
   { id: 'location', label: 'Local e posse', description: 'Onde o bem está, com quem está e o histórico de local e posse.' },
   { id: 'acquisition', label: 'Aquisição', description: 'Compra, recebimento, nota fiscal, garantia e classificação contábil.' },
-  { id: 'history', label: 'Histórico geral', description: 'Linha cronológica consolidada do ciclo patrimonial.' },
+  { id: 'history', label: 'Histórico geral', description: 'Eventos do ciclo de vida do patrimônio.' },
 ];
 
 function assetQrPayload(asset: Asset) {
@@ -306,10 +309,71 @@ function AssetPhotoPicker({ files, onChange, label }: { files: File[]; onChange:
 const OWNERSHIP_LABEL = { owned: 'Próprio', leased: 'Alugado', loaned: 'Comodato', third_party: 'De terceiro', unknown: 'Não informado' } as const;
 
 type AssetPage<T> = { items: T[]; nextCursor: string | null };
+type AssetReadModel = 'audits' | 'plans' | 'occurrences' | 'history' | 'custody';
 type AssetAuditRow = { id: string; auditedAt?: string; createdAt?: string; condition?: string; operationalStatus?: string; description?: string; auditor?: { nameSnapshot?: string } };
 type AssetPlanRow = { id: string; name?: string; active?: boolean; nextDueDate?: string; cadence?: { unit?: string; interval?: number }; assignee?: { nameSnapshot?: string } };
-type AssetOccurrenceRow = { id: string; type?: string; status?: string; dueDate?: string; description?: string; taskStatus?: string; orderStatus?: string; orderProtocol?: string };
-type AssetHistoryRow = { id: string; at: string; type: string; source: string; description: string };
+type AssetOccurrenceRow = {
+  id: string;
+  version: number;
+  type?: string;
+  status?: string;
+  dueDate?: string;
+  description?: string;
+  assignee?: { nameSnapshot?: string };
+  components?: string[];
+  result?: string;
+  performedOn?: string;
+  completedAt?: string;
+  orderStatus?: string;
+  orderProtocol?: string;
+};
+function MaintenanceFieldError({ id, message }: { id: string; message?: string }) {
+  return message ? <p id={id} role="alert" className="mt-1 text-xs text-destructive">{message}</p> : null;
+}
+
+function MaintenanceParts({ components, label }: { components?: string[]; label: string }) {
+  if (!components?.length) return null;
+  return (
+    <div className="mt-1 text-xs text-muted-foreground">
+      <span className="font-medium">{label}</span>
+      <ul className="list-disc break-words pl-4">{components.map((part, index) => <li key={index}>{part}</li>)}</ul>
+    </div>
+  );
+}
+
+function MaintenanceHistoryCard({ item, maintenance, onDownload }: {
+  item: AssetHistoryRow;
+  maintenance: AssetHistoryMaintenance;
+  onDownload: (order: NonNullable<AssetHistoryMaintenance['order']>) => void;
+}) {
+  const details = maintenanceHistoryDetails(maintenance, item.description);
+  const { order } = maintenance;
+  return (
+    <div className="space-y-1.5 rounded-xl border bg-card p-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h4 className="text-sm font-semibold">{details.title}</h4>
+        {details.date !== '—' ? <span className="text-xs text-muted-foreground">{details.dateLabel} {details.date}</span> : null}
+      </div>
+      {details.service ? <p className="whitespace-pre-wrap break-words text-sm">{details.service}</p> : null}
+      {maintenance.assigneeLabel ? <p className="break-words text-xs text-muted-foreground">Responsável · {maintenance.assigneeLabel}</p> : null}
+      <MaintenanceParts components={maintenance.components} label={maintenance.status === 'completed' ? 'Peças substituídas' : 'Peças previstas'} />
+      {order ? <Button type="button" size="sm" variant="outline" onClick={() => onDownload(order)}>Abrir ordem</Button> : null}
+      <details className="text-xs text-muted-foreground">
+        <summary className="cursor-pointer font-medium">Ver detalhes</summary>
+        <div className="mt-1 space-y-1">
+          <p>Registrada em {formatMaintenanceDate(item.at, true)}</p>
+          {maintenance.registeredByLabel ? <p>Registrada por {maintenance.registeredByLabel}</p> : null}
+          {maintenance.status === 'completed' && maintenance.completedAt ? (
+            <p>{maintenance.performedOn ? 'Realização registrada em' : 'Conclusão em'} {formatMaintenanceDate(maintenance.completedAt, true)}{maintenance.completedByLabel ? ` · ${maintenance.completedByLabel}` : ''}</p>
+          ) : null}
+          <p>Situação · {details.status}</p>
+          {maintenance.result && item.description && maintenance.result !== item.description ? <p className="whitespace-pre-wrap break-words">Descrição original · {item.description}</p> : null}
+        </div>
+      </details>
+    </div>
+  );
+}
+
 type AssetCustodyTransferRow = {
   id: string;
   createdAt?: string;
@@ -343,9 +407,9 @@ async function downloadAssetFile(path: string, filename: string) {
 const FORM_PAYMENTS = ['PIX', 'Boleto', 'Cartão de crédito', 'Transferência / TED', 'Dinheiro', 'Cartão BNDES'];
 const FORM_INPUT = fieldInputClass;
 
-function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+function FieldLabel({ children, required, htmlFor }: { children: React.ReactNode; required?: boolean; htmlFor?: string }) {
   return (
-    <label className="mb-1.5 flex items-center gap-1 text-xs font-bold text-ds-ink-2">
+    <label htmlFor={htmlFor} className="mb-1.5 flex items-center gap-1 text-xs font-bold text-ds-ink-2">
       {children}{required && <span className="text-ds-danger">*</span>}
     </label>
   );
@@ -836,6 +900,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
   const [loadingMovements, setLoadingMovements] = useState(false);
   const [saving, setSaving] = useState(false);
   const [assetStep, setAssetStep] = useState<AssetStep>('identification');
+  const initializedAssetId = useRef<string | null>(null);
   const [movWithdrawerType, setMovWithdrawerType] = useState<'cadastrado' | 'externo'>('cadastrado');
   const [movWithdrawerUserId, setMovWithdrawerUserId] = useState('');
   const [movWithdrawerFree, setMovWithdrawerFree] = useState('');
@@ -851,6 +916,14 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
   const [locationKind, setLocationKind] = useState<'unit' | 'external' | 'in_transit'>('unit');
   const [custodyDialogOpen, setCustodyDialogOpen] = useState(false);
   const [maintenanceDialogOpen, setMaintenanceDialogOpen] = useState(false);
+  const [maintenanceAction, setMaintenanceAction] = useState<'scheduled' | 'completed'>('scheduled');
+  const [maintenanceOccurrence, setMaintenanceOccurrence] = useState<AssetOccurrenceRow | null>(null);
+  const [maintenancePerformedOn, setMaintenancePerformedOn] = useState('');
+  const [maintenanceComponents, setMaintenanceComponents] = useState('');
+  const [maintenanceErrors, setMaintenanceErrors] = useState<MaintenanceErrors>({});
+  const [maintenanceRequestError, setMaintenanceRequestError] = useState('');
+  const maintenanceKey = useRef('');
+  const maintenanceInFlight = useRef(false);
   const [maintenanceMode, setMaintenanceMode] = useState<'corrective' | 'preventive'>('corrective');
   const [maintenanceDescription, setMaintenanceDescription] = useState('');
   const [maintenancePriority, setMaintenancePriority] = useState<'low' | 'normal' | 'high' | 'urgent'>('normal');
@@ -871,6 +944,10 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
   const [planNextDate, setPlanNextDate] = useState('');
   const [planChecklist, setPlanChecklist] = useState('');
   const [planSaving, setPlanSaving] = useState(false);
+  const maintenanceBusy = maintenanceSaving || planSaving;
+  const maintenanceToday = operationalCivilDate();
+  const completingMaintenance = maintenanceAction === 'completed';
+  const planningMaintenance = !completingMaintenance && maintenanceMode === 'preventive';
   const [historyFilter, setHistoryFilter] = useState<'all' | 'lifecycle' | 'maintenance' | 'custody' | 'movement'>('all');
   const [auditsPage, setAuditsPage] = useState<AssetPage<AssetAuditRow>>({ items: [], nextCursor: null });
   const [plansPage, setPlansPage] = useState<AssetPage<AssetPlanRow>>({ items: [], nextCursor: null });
@@ -931,7 +1008,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
   const documentUrl = form.watch('documentUrl');
 
   useEffect(() => {
-    if (!asset) return;
+    if (!asset) { initializedAssetId.current = null; return; }
     form.reset({
       code: asset.code ?? '',
       name: asset.name ?? '',
@@ -982,7 +1059,10 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
       .catch(() => setQrUrl(''));
     setMovements([]);
     setLifecycleVersion(asset.lifecycleVersion ?? 1);
-    setAssetStep('identification');
+    if (initializedAssetId.current !== asset.id) {
+      initializedAssetId.current = asset.id;
+      setAssetStep('identification');
+    }
   }, [asset, form]);
 
   useEffect(() => {
@@ -1006,17 +1086,18 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
 
   const historyKind = historyFilter === 'all' ? '' : historyFilter;
 
-  async function loadReadModels(options: { append?: boolean; target?: 'audits' | 'plans' | 'occurrences' | 'history' | 'custody' } = {}) {
+  async function loadReadModels(options: { append?: boolean; target?: AssetReadModel | AssetReadModel[] } = {}) {
     if (!asset || !permissions.assets?.viewHistory) return;
     const { append = false, target } = options;
+    const targets = target ? [target].flat() : null;
     setReadModelsLoading(true); setReadModelsError(null);
     try {
       const requests: Array<Promise<void>> = [];
-      if (!target || target === 'audits') requests.push(assetApi<AssetPage<AssetAuditRow>>(`/api/assets/${asset.id}/audits/list?limit=20${append && auditsPage.nextCursor ? `&cursor=${encodeURIComponent(auditsPage.nextCursor)}` : ''}`).then((page) => setAuditsPage((current) => ({ items: append ? [...current.items, ...page.items] : page.items, nextCursor: page.nextCursor }))));
-      if (!target || target === 'plans') requests.push(assetApi<AssetPage<AssetPlanRow>>(`/api/assets/${asset.id}/maintenance-plans/list?limit=20${append && plansPage.nextCursor ? `&cursor=${encodeURIComponent(plansPage.nextCursor)}` : ''}`).then((page) => setPlansPage((current) => ({ items: append ? [...current.items, ...page.items] : page.items, nextCursor: page.nextCursor }))));
-      if (!target || target === 'occurrences') requests.push(assetApi<AssetPage<AssetOccurrenceRow>>(`/api/assets/${asset.id}/maintenance-occurrences/list?limit=20${append && occurrencesPage.nextCursor ? `&cursor=${encodeURIComponent(occurrencesPage.nextCursor)}` : ''}`).then((page) => setOccurrencesPage((current) => ({ items: append ? [...current.items, ...page.items] : page.items, nextCursor: page.nextCursor }))));
-      if (!target || target === 'history') requests.push(assetApi<AssetPage<AssetHistoryRow>>(`/api/assets/${asset.id}/history?limit=30${historyKind ? `&kind=${historyKind}` : ''}${append && historyPage.nextCursor ? `&cursor=${encodeURIComponent(historyPage.nextCursor)}` : ''}`).then((page) => setHistoryPage((current) => ({ items: append ? [...current.items, ...page.items] : page.items, nextCursor: page.nextCursor }))));
-      if (!target || target === 'custody') requests.push(assetApi<AssetPage<AssetCustodyTransferRow>>(`/api/assets/${asset.id}/custody-transfers/list?limit=20${append && custodyTransfersPage.nextCursor ? `&cursor=${encodeURIComponent(custodyTransfersPage.nextCursor)}` : ''}`).then((page) => setCustodyTransfersPage((current) => ({ items: append ? [...current.items, ...page.items] : page.items, nextCursor: page.nextCursor }))));
+      if (!targets || targets.includes('audits')) requests.push(assetApi<AssetPage<AssetAuditRow>>(`/api/assets/${asset.id}/audits/list?limit=20${append && auditsPage.nextCursor ? `&cursor=${encodeURIComponent(auditsPage.nextCursor)}` : ''}`).then((page) => setAuditsPage((current) => ({ items: append ? [...current.items, ...page.items] : page.items, nextCursor: page.nextCursor }))));
+      if (!targets || targets.includes('plans')) requests.push(assetApi<AssetPage<AssetPlanRow>>(`/api/assets/${asset.id}/maintenance-plans/list?limit=20${append && plansPage.nextCursor ? `&cursor=${encodeURIComponent(plansPage.nextCursor)}` : ''}`).then((page) => setPlansPage((current) => ({ items: append ? [...current.items, ...page.items] : page.items, nextCursor: page.nextCursor }))));
+      if (!targets || targets.includes('occurrences')) requests.push(assetApi<AssetPage<AssetOccurrenceRow>>(`/api/assets/${asset.id}/maintenance-occurrences/list?limit=20${append && occurrencesPage.nextCursor ? `&cursor=${encodeURIComponent(occurrencesPage.nextCursor)}` : ''}`).then((page) => setOccurrencesPage((current) => ({ items: append ? [...current.items, ...page.items] : page.items, nextCursor: page.nextCursor }))));
+      if (!targets || targets.includes('history')) requests.push(assetApi<AssetPage<AssetHistoryRow>>(`/api/assets/${asset.id}/history?limit=30${historyKind ? `&kind=${historyKind}` : ''}${append && historyPage.nextCursor ? `&cursor=${encodeURIComponent(historyPage.nextCursor)}` : ''}`).then((page) => setHistoryPage((current) => ({ items: append ? [...current.items, ...page.items] : page.items, nextCursor: page.nextCursor }))));
+      if (!targets || targets.includes('custody')) requests.push(assetApi<AssetPage<AssetCustodyTransferRow>>(`/api/assets/${asset.id}/custody-transfers/list?limit=20${append && custodyTransfersPage.nextCursor ? `&cursor=${encodeURIComponent(custodyTransfersPage.nextCursor)}` : ''}`).then((page) => setCustodyTransfersPage((current) => ({ items: append ? [...current.items, ...page.items] : page.items, nextCursor: page.nextCursor }))));
       await Promise.all(requests);
     } catch (error) { setReadModelsError(error instanceof Error ? error.message : 'Falha ao carregar o ciclo patrimonial.'); }
     finally { setReadModelsLoading(false); }
@@ -1238,11 +1319,46 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     } finally { setAuditSaving(false); }
   }
 
+  function resetMaintenance(occurrence: AssetOccurrenceRow | null = null) {
+    setMaintenanceOccurrence(occurrence);
+    setMaintenanceAction(occurrence ? 'completed' : 'scheduled');
+    setMaintenanceMode('corrective');
+    setMaintenanceDescription(occurrence?.description ?? '');
+    setMaintenancePriority('normal');
+    setMaintenanceDueDate('');
+    setMaintenancePerformedOn(operationalCivilDate());
+    setMaintenanceAssignee('');
+    setMaintenanceComponents('');
+    setMaintenanceErrors({});
+    setMaintenanceRequestError('');
+    setPlanName('Manutenção preventiva');
+    setPlanInterval('6');
+    setPlanNextDate('');
+    setPlanChecklist('');
+  }
+
+  function openMaintenance(occurrence: AssetOccurrenceRow | null = null) {
+    if (maintenanceInFlight.current) return;
+    resetMaintenance(occurrence);
+    maintenanceKey.current = crypto.randomUUID();
+    setMaintenanceDialogOpen(true);
+  }
+
+  function finishMaintenance() {
+    setMaintenanceDialogOpen(false);
+    resetMaintenance();
+    maintenanceKey.current = '';
+  }
+
   async function handleSavePlan() {
+    if (maintenanceInFlight.current) return;
     if (!asset || !user || !planNextDate || !planName.trim()) {
-      toast({ title: 'Informe o plano e a primeira data prevista.', variant: 'destructive' }); return;
+      setMaintenanceRequestError('Informe o plano e a primeira data prevista.');
+      return;
     }
+    maintenanceInFlight.current = true;
     setPlanSaving(true);
+    setMaintenanceRequestError('');
     try {
       await assetApi(`/api/assets/${asset.id}/maintenance-plans`, {
         method: 'POST',
@@ -1254,33 +1370,54 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
         }),
       });
       toast({ title: 'Plano preventivo salvo.' });
-      setMaintenanceDialogOpen(false);
-      await Promise.all([loadReadModels({ target: 'plans' }), loadReadModels({ target: 'occurrences' })]);
+      await loadReadModels({ target: ['plans', 'occurrences'] });
+      finishMaintenance();
     } catch (error) {
-      toast({ title: 'Falha ao salvar plano', description: error instanceof Error ? error.message : 'Erro inesperado.', variant: 'destructive' });
-    } finally { setPlanSaving(false); }
+      setMaintenanceRequestError(error instanceof Error ? error.message : 'Não foi possível salvar o plano.');
+    } finally {
+      maintenanceInFlight.current = false;
+      setPlanSaving(false);
+    }
   }
 
-  async function handleCreateCorrective() {
-    if (!asset || !user || !maintenanceDescription.trim() || !maintenanceDueDate) {
-      toast({ title: 'Descreva o problema e informe o prazo.', variant: 'destructive' }); return;
-    }
+  async function handleSaveMaintenance() {
+    if (!asset || !user || maintenanceInFlight.current) return;
+    const completed = maintenanceAction === 'completed';
+    const request = prepareMaintenanceRequest({
+      mode: maintenanceAction,
+      key: maintenanceKey.current,
+      date: completed ? maintenancePerformedOn : maintenanceDueDate,
+      today: operationalCivilDate(),
+      description: maintenanceDescription,
+      assignee: maintenanceAssignee,
+      priority: maintenancePriority,
+      components: maintenanceComponents,
+      occurrence: maintenanceOccurrence,
+      user,
+    });
+    setMaintenanceErrors(request.errors ?? {});
+    setMaintenanceRequestError('');
+    if (!request.body) return;
+
+    maintenanceInFlight.current = true;
     setMaintenanceSaving(true);
     try {
-      await assetApi(`/api/assets/${asset.id}/maintenance-occurrences`, {
+      const occurrencePath = maintenanceOccurrence ? `/${encodeURIComponent(maintenanceOccurrence.id)}` : '';
+      await assetApi(`/api/assets/${asset.id}/maintenance-occurrences${occurrencePath}`, {
         method: 'POST',
-        body: JSON.stringify({
-          idempotencyKey: crypto.randomUUID(), dueDate: maintenanceDueDate, priority: maintenancePriority,
-          assignee: maintenanceAssignee.trim() ? { type: 'third_party', nameSnapshot: maintenanceAssignee.trim() } : { type: 'user', id: user.id, nameSnapshot: user.username },
-          description: maintenanceDescription.trim(), checklistSnapshot: [], components: [],
-        }),
+        body: JSON.stringify(request.body),
       });
-      toast({ title: 'Manutenção corretiva aberta.' });
-      setMaintenanceDescription(''); setMaintenanceDueDate(''); setMaintenanceAssignee(''); setMaintenanceDialogOpen(false);
-      await loadReadModels({ target: 'occurrences' });
+      toast({ title: completed ? 'Realização registrada.' : 'Manutenção agendada.' });
+      const targets: AssetReadModel[] = ['occurrences', 'history'];
+      if (maintenanceOccurrence?.type === 'preventive') targets.push('plans');
+      await loadReadModels({ target: targets });
+      finishMaintenance();
     } catch (error) {
-      toast({ title: 'Falha ao abrir manutenção', description: error instanceof Error ? error.message : 'Erro inesperado.', variant: 'destructive' });
-    } finally { setMaintenanceSaving(false); }
+      setMaintenanceRequestError(error instanceof Error ? error.message : 'Não foi possível salvar a manutenção.');
+    } finally {
+      maintenanceInFlight.current = false;
+      setMaintenanceSaving(false);
+    }
   }
 
   async function handleStatus(status: AssetStatus) {
@@ -1329,6 +1466,10 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
 
   async function handleSave(values: AssetEditFormValues) {
     if (!asset) return;
+    if (!form.formState.isDirty) {
+      onOpenChange(false);
+      return;
+    }
     setSaving(true);
     try {
       const kiosk = kiosks.find((k) => k.id === asset.currentKioskId);
@@ -1793,19 +1934,37 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                         <section className="rounded-2xl border bg-card p-4">
                           <div className="flex items-center justify-between gap-3">
                             <p className={SUMMARY_LABEL}>Manutenção · {occurrencesPage.items.length + plansPage.items.length}</p>
-                            <Button type="button" size="sm" onClick={() => setMaintenanceDialogOpen(true)} disabled={!permissions.assets?.edit}><Plus className="mr-1.5 h-4 w-4" />Nova manutenção</Button>
+                            <Button type="button" size="sm" onClick={() => openMaintenance()} disabled={!permissions.assets?.edit}><Plus className="mr-1.5 h-4 w-4" />Nova manutenção</Button>
                           </div>
-                          {readModelsLoading && occurrencesPage.items.length === 0 && plansPage.items.length === 0 ? <Skeleton className="mt-3 h-20 w-full" /> : occurrencesPage.items.length === 0 && plansPage.items.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">Nenhuma manutenção agendada ou aberta.</p> : (
+                          {readModelsLoading && occurrencesPage.items.length === 0 && plansPage.items.length === 0 ? <Skeleton className="mt-3 h-20 w-full" /> : occurrencesPage.items.length === 0 && plansPage.items.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">Nenhuma manutenção encontrada.</p> : (
                             <div className="mt-2 divide-y">
-                              {occurrencesPage.items.map((occurrence) => (
-                                <div key={occurrence.id} className="flex items-center justify-between gap-3 py-2.5"><div className="min-w-0"><strong className="text-sm">{occurrence.type === 'preventive' ? 'Preventiva' : occurrence.type === 'corrective' ? 'Corretiva' : 'Manutenção'}</strong><p className="truncate text-xs text-muted-foreground">{occurrence.description || 'Sem descrição'} · vence {occurrence.dueDate || '—'}</p></div>
-                                  {occurrence.orderStatus === 'generated' ? <Button type="button" variant="outline" size="sm" onClick={() => void downloadAssetFile(`/api/assets/${asset.id}/maintenance-occurrences/${occurrence.id}/order`, `ordem-${occurrence.orderProtocol || occurrence.id}.pdf`).catch((error) => toast({ title: 'Falha no download', description: error.message, variant: 'destructive' }))}>Ordem MNT</Button> : null}</div>
-                              ))}
+                              {occurrencesPage.items.map((occurrence) => {
+                                const completed = occurrence.status === 'completed';
+                                const canComplete = occurrence.status === 'open' || occurrence.status === 'scheduled';
+                                const date = completed ? occurrence.performedOn ?? occurrence.completedAt : occurrence.dueDate;
+                                return (
+                                  <div key={occurrence.id} className="flex flex-wrap items-start justify-between gap-2 py-2.5">
+                                    <div className="min-w-0">
+                                      <strong className="text-sm">{occurrence.type === 'preventive' ? 'Preventiva' : occurrence.type === 'corrective' ? 'Corretiva' : 'Manutenção'} · {maintenanceStatus(occurrence.status)}</strong>
+                                      {date ? <p className="text-xs text-muted-foreground">{completed ? 'Realizada em' : 'Concluir até'} {formatMaintenanceDate(date)}</p> : null}
+                                      <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground">{occurrence.result || occurrence.description || 'Sem descrição'}</p>
+                                      {occurrence.assignee?.nameSnapshot ? <p className="break-words text-xs text-muted-foreground">Responsável · {occurrence.assignee.nameSnapshot}</p> : null}
+                                      <MaintenanceParts components={occurrence.components} label={completed ? 'Peças substituídas' : 'Peças previstas'} />
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      {canComplete && permissions.assets?.edit ? <Button type="button" variant="outline" size="sm" onClick={() => openMaintenance(occurrence)}>Registrar realização</Button> : null}
+                                      {occurrence.orderStatus === 'generated' ? <Button type="button" variant="outline" size="sm" onClick={() => void downloadAssetFile(`/api/assets/${asset.id}/maintenance-occurrences/${occurrence.id}/order`, `ordem-${occurrence.orderProtocol || occurrence.id}.pdf`).catch((error) => toast({ title: 'Falha no download', description: error.message, variant: 'destructive' }))}>Abrir ordem</Button> : null}
+                                    </div>
+                                  </div>
+                                );
+                              })}
                               {plansPage.items.map((plan) => (
-                                <div key={plan.id} className="flex items-center justify-between gap-3 py-2.5"><div className="min-w-0"><strong className="text-sm">{plan.name || 'Plano preventivo'}</strong><p className="truncate text-xs text-muted-foreground">Preventiva · próxima {plan.nextDueDate || '—'}</p></div><StatusPill variant={plan.active === false ? 'neutral' : 'ok'}>{plan.active === false ? 'Inativo' : 'Ativo'}</StatusPill></div>
+                                <div key={plan.id} className="flex items-center justify-between gap-3 py-2.5"><div className="min-w-0"><strong className="text-sm">{plan.name || 'Plano preventivo'}</strong><p className="truncate text-xs text-muted-foreground">Preventiva · próxima {formatMaintenanceDate(plan.nextDueDate)}</p></div><StatusPill variant={plan.active === false ? 'neutral' : 'ok'}>{plan.active === false ? 'Inativo' : 'Ativo'}</StatusPill></div>
                               ))}
                             </div>
                           )}
+                          {occurrencesPage.nextCursor ? <Button type="button" variant="ghost" size="sm" disabled={readModelsLoading} onClick={() => void loadReadModels({ target: 'occurrences', append: true })}>Carregar mais manutenções</Button> : null}
+                          {plansPage.nextCursor ? <Button type="button" variant="ghost" size="sm" disabled={readModelsLoading} onClick={() => void loadReadModels({ target: 'plans', append: true })}>Carregar mais planos</Button> : null}
                         </section>
                       </div>
                     </div>
@@ -1904,7 +2063,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                   {permissions.assets?.viewHistory ? (
                     <div>
                       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div><p className="text-sm font-semibold">Linha cronológica consolidada</p><p className="mt-1 text-xs text-muted-foreground">Alterações, posse, localização, manutenção e documentos do patrimônio.</p></div>
+                        <div><p className="text-sm font-semibold">Histórico do patrimônio</p><p className="mt-1 text-xs text-muted-foreground">Eventos mais recentes por data de registro.</p></div>
                         <div className="flex flex-wrap gap-2">
                           <Button type="button" variant="outline" size="sm" onClick={() => exportHistory('csv')} disabled={historyPage.items.length === 0}>Exportar CSV</Button>
                           <Button type="button" variant="outline" size="sm" onClick={() => exportHistory('pdf')} disabled={historyPage.items.length === 0}>Exportar PDF</Button>
@@ -1915,29 +2074,32 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                       {readModelsLoading && historyPage.items.length === 0 ? (
                         <Skeleton className="h-28 w-full" />
                       ) : historyPage.items.length === 0 ? (
-                        <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">Nenhum evento encontrado neste filtro.</p>
+                        <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">{historyPage.nextCursor ? 'Esta página não contém eventos visíveis.' : 'Nenhum evento encontrado neste filtro.'}</p>
                       ) : (
-                        <>
                         <ScrollArea className="max-h-[520px]">
                           <ol className="relative ml-1.5 space-y-3.5 border-l pl-5">
                             {historyPage.items.map((item) => (
                               <li key={`${item.source}-${item.id}`} className="relative">
                                 <span className="absolute left-[-27px] grid h-5 w-5 place-items-center rounded-full bg-zinc-900 text-white ring-2 ring-background dark:bg-zinc-100 dark:text-zinc-900"><Check className="h-2.5 w-2.5" /></span>
-                                <div className="rounded-xl border bg-card p-3">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-[10.5px] font-bold uppercase tracking-wider text-foreground/70">{historyEventLabel(item.type)}</span>
-                                    <span className="text-[11px] text-muted-foreground">{item.at ? new Date(item.at).toLocaleString('pt-BR') : '—'}</span>
+                                {item.maintenance ? (
+                                  <MaintenanceHistoryCard item={item} maintenance={item.maintenance}
+                                    onDownload={(order) => void downloadAssetFile(order.href, `ordem-${order.protocol || order.documentId}.pdf`).catch((error) => toast({ title: 'Falha no download', description: error.message, variant: 'destructive' }))} />
+                                ) : (
+                                  <div className="rounded-xl border bg-card p-3">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[10.5px] font-bold uppercase tracking-wider text-foreground/70">{historyEventLabel(item.type)}</span>
+                                        <span className="text-[11px] text-muted-foreground">{item.at ? new Date(item.at).toLocaleString('pt-BR') : '—'}</span>
+                                      </div>
+                                      {item.description ? <div className="mt-1 text-[12.5px] text-foreground/80">{item.description}</div> : null}
+                                      <div className="mt-1 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">{HISTORY_SOURCE_LABEL[item.source] || historyEventLabel(item.source)}</div>
                                   </div>
-                                  {item.description ? <div className="mt-1 text-[12.5px] text-foreground/80">{item.description}</div> : null}
-                                  <div className="mt-1 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">{HISTORY_SOURCE_LABEL[item.source] || historyEventLabel(item.source)}</div>
-                                </div>
+                                )}
                               </li>
                             ))}
                           </ol>
                         </ScrollArea>
-                        {historyPage.nextCursor ? <Button type="button" variant="ghost" size="sm" className="mt-3" onClick={() => void loadReadModels({ target: 'history', append: true })}>Carregar mais eventos</Button> : null}
-                        </>
                       )}
+                      {historyPage.nextCursor ? <Button type="button" variant="ghost" size="sm" className="mt-3" disabled={readModelsLoading} onClick={() => void loadReadModels({ target: 'history', append: true })}>Carregar mais eventos</Button> : null}
                     </div>
                   ) : null}
                     </>
@@ -1991,36 +2153,93 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
           </AssetSheetDialog>
           <AssetSheetDialog
             open={maintenanceDialogOpen}
-            onOpenChange={setMaintenanceDialogOpen}
-            title="Nova manutenção"
-            description="Gera ocorrência, tarefa e ordem MNT no prazo configurado."
+            onOpenChange={(open) => { if (!maintenanceInFlight.current) setMaintenanceDialogOpen(open); }}
+            title={maintenanceOccurrence ? 'Registrar realização' : 'Nova manutenção'}
+            description={completingMaintenance
+              ? maintenanceOccurrence ? 'Registre o serviço executado nesta manutenção.' : 'Registre um serviço que já foi executado neste patrimônio.'
+              : planningMaintenance ? 'Defina a frequência e a primeira data prevista do plano.'
+                : 'Ao salvar, o sistema abre a ocorrência e a tarefa de manutenção.'}
             footer={<>
-              <Button type="button" variant="outline" onClick={() => setMaintenanceDialogOpen(false)}>Cancelar</Button>
-              {maintenanceMode === 'corrective'
-                ? <Button type="button" onClick={() => void handleCreateCorrective()} loading={maintenanceSaving} disabled={!permissions.assets?.edit}>Abrir manutenção</Button>
-                : <Button type="button" onClick={() => void handleSavePlan()} loading={planSaving} disabled={!permissions.assets?.edit}>Salvar plano preventivo</Button>}
+              <Button type="button" variant="outline" disabled={maintenanceBusy} onClick={() => { if (!maintenanceInFlight.current) setMaintenanceDialogOpen(false); }}>Cancelar</Button>
+              <Button type="button" loading={maintenanceBusy} disabled={maintenanceBusy || !permissions.assets?.edit}
+                onClick={() => void (planningMaintenance ? handleSavePlan() : handleSaveMaintenance())}>
+                {completingMaintenance ? 'Registrar realização' : planningMaintenance ? 'Salvar plano preventivo' : 'Agendar manutenção'}
+              </Button>
             </>}
           >
-            <Segmented value={maintenanceMode} onChange={setMaintenanceMode} options={[{ value: 'corrective', label: 'Corretiva' }, { value: 'preventive', label: 'Plano preventivo' }]} aria-label="Tipo de manutenção" />
-            {maintenanceMode === 'corrective' ? (
-              <>
-                <div><FieldLabel required>Problema / descrição</FieldLabel><Textarea value={maintenanceDescription} onChange={(event) => setMaintenanceDescription(event.target.value)} rows={3} /></div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div><FieldLabel>Prioridade</FieldLabel><Select value={maintenancePriority} onValueChange={(value) => setMaintenancePriority(value as typeof maintenancePriority)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="low">Baixa</SelectItem><SelectItem value="normal">Normal</SelectItem><SelectItem value="high">Alta</SelectItem><SelectItem value="urgent">Urgente</SelectItem></SelectContent></Select></div>
-                  <div><FieldLabel required>Prazo</FieldLabel><Input type="date" value={maintenanceDueDate} onChange={(event) => setMaintenanceDueDate(event.target.value)} /></div>
-                </div>
-                <div><FieldLabel>Assistência / responsável</FieldLabel><Input value={maintenanceAssignee} onChange={(event) => setMaintenanceAssignee(event.target.value)} placeholder="Em branco = você" /></div>
-              </>
-            ) : (
-              <>
-                <div><FieldLabel required>Plano</FieldLabel><Input value={planName} onChange={(event) => setPlanName(event.target.value)} /></div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div><FieldLabel required>Periodicidade (meses)</FieldLabel><Input type="number" min={1} max={120} value={planInterval} onChange={(event) => setPlanInterval(event.target.value)} /></div>
-                  <div><FieldLabel required>Próxima execução</FieldLabel><Input type="date" value={planNextDate} onChange={(event) => setPlanNextDate(event.target.value)} /></div>
-                </div>
-                <div><FieldLabel>Checklist (um item por linha)</FieldLabel><Textarea value={planChecklist} onChange={(event) => setPlanChecklist(event.target.value)} rows={3} /></div>
-              </>
-            )}
+            <fieldset disabled={maintenanceBusy} className="min-w-0 space-y-4">
+              {!maintenanceOccurrence ? (
+                <Segmented value={maintenanceAction} onChange={(action) => {
+                  if (maintenanceInFlight.current) return;
+                  setMaintenanceAction(action);
+                  setMaintenanceErrors({});
+                  setMaintenanceRequestError('');
+                }} options={[{ value: 'scheduled', label: 'Agendar manutenção' }, { value: 'completed', label: 'Registrar manutenção realizada' }]} aria-label="Ação de manutenção" className="flex-wrap" />
+              ) : null}
+              {!completingMaintenance ? (
+                <Segmented value={maintenanceMode} onChange={(mode) => {
+                  if (maintenanceInFlight.current) return;
+                  setMaintenanceMode(mode);
+                  setMaintenanceErrors({});
+                  setMaintenanceRequestError('');
+                }} options={[{ value: 'corrective', label: 'Corretiva avulsa' }, { value: 'preventive', label: 'Plano preventivo' }]} aria-label="Tipo de manutenção" />
+              ) : null}
+              {planningMaintenance ? (
+                <>
+                  <div><FieldLabel required htmlFor="maintenance-plan-name">Plano</FieldLabel><Input id="maintenance-plan-name" value={planName} onChange={(event) => setPlanName(event.target.value)} /></div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div><FieldLabel required htmlFor="maintenance-plan-interval">Periodicidade (meses)</FieldLabel><Input id="maintenance-plan-interval" type="number" min={1} max={120} value={planInterval} onChange={(event) => setPlanInterval(event.target.value)} /></div>
+                    <div><FieldLabel required htmlFor="maintenance-plan-date">Próxima execução</FieldLabel><Input id="maintenance-plan-date" type="date" value={planNextDate} onChange={(event) => setPlanNextDate(event.target.value)} /></div>
+                  </div>
+                  <div><FieldLabel htmlFor="maintenance-plan-checklist">Checklist (um item por linha)</FieldLabel><Textarea id="maintenance-plan-checklist" value={planChecklist} onChange={(event) => setPlanChecklist(event.target.value)} rows={3} /></div>
+                </>
+              ) : (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <FieldLabel required htmlFor="maintenance-date">{completingMaintenance ? 'Data da realização' : 'Concluir até'}</FieldLabel>
+                      <Input id="maintenance-date" type="date" max={completingMaintenance ? maintenanceToday : undefined}
+                        value={completingMaintenance ? maintenancePerformedOn : maintenanceDueDate}
+                        onChange={(event) => (completingMaintenance ? setMaintenancePerformedOn : setMaintenanceDueDate)(event.target.value)}
+                        aria-required="true" aria-invalid={!!maintenanceErrors.date}
+                        aria-describedby={completingMaintenance ? (maintenanceErrors.date ? 'maintenance-date-error' : undefined) : `maintenance-due-help${maintenanceErrors.date ? ' maintenance-date-error' : ''}`} />
+                      {!completingMaintenance ? <p id="maintenance-due-help" className="mt-1 text-xs text-muted-foreground">Data-limite para concluir o serviço.</p> : null}
+                      <MaintenanceFieldError id="maintenance-date-error" message={maintenanceErrors.date} />
+                    </div>
+                    {!completingMaintenance ? <div><FieldLabel htmlFor="maintenance-priority">Prioridade</FieldLabel><Select disabled={maintenanceBusy} value={maintenancePriority} onValueChange={(value) => setMaintenancePriority(value as typeof maintenancePriority)}><SelectTrigger id="maintenance-priority"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="low">Baixa</SelectItem><SelectItem value="normal">Normal</SelectItem><SelectItem value="high">Alta</SelectItem><SelectItem value="urgent">Urgente</SelectItem></SelectContent></Select></div> : null}
+                  </div>
+                  <div>
+                    <FieldLabel required htmlFor="maintenance-description">{completingMaintenance ? 'Serviço realizado' : 'Problema / descrição'}</FieldLabel>
+                    <Textarea id="maintenance-description" value={maintenanceDescription} onChange={(event) => setMaintenanceDescription(event.target.value)} rows={3}
+                      maxLength={MAINTENANCE_LIMITS.description} aria-required="true" aria-invalid={!!maintenanceErrors.description}
+                      aria-describedby={maintenanceErrors.description ? 'maintenance-description-error' : undefined} />
+                    <MaintenanceFieldError id="maintenance-description-error" message={maintenanceErrors.description} />
+                  </div>
+                  <div>
+                    <FieldLabel htmlFor="maintenance-assignee">Assistência / responsável</FieldLabel>
+                    <Input id="maintenance-assignee" readOnly={!!maintenanceOccurrence}
+                      value={maintenanceOccurrence ? maintenanceOccurrence.assignee?.nameSnapshot || 'Não informado' : maintenanceAssignee}
+                      onChange={(event) => setMaintenanceAssignee(event.target.value)}
+                      maxLength={MAINTENANCE_LIMITS.assignee}
+                      aria-invalid={!!maintenanceErrors.assignee}
+                      aria-describedby={maintenanceOccurrence ? undefined : `maintenance-assignee-help${maintenanceErrors.assignee ? ' maintenance-assignee-error' : ''}`} />
+                    {!maintenanceOccurrence ? <p id="maintenance-assignee-help" className="mt-1 text-xs text-muted-foreground">Em branco, o responsável será você.</p> : null}
+                    <MaintenanceFieldError id="maintenance-assignee-error" message={maintenanceErrors.assignee} />
+                  </div>
+                  {completingMaintenance ? (
+                    <div>
+                      <FieldLabel htmlFor="maintenance-components">Peças substituídas (opcional)</FieldLabel>
+                      <Textarea id="maintenance-components" value={maintenanceComponents} onChange={(event) => setMaintenanceComponents(event.target.value)}
+                        rows={3} placeholder={'2 retentores\n1 correia'} aria-invalid={!!maintenanceErrors.components}
+                        aria-describedby={`maintenance-components-help${maintenanceErrors.components ? ' maintenance-components-error' : ''}`} />
+                      <p id="maintenance-components-help" className="mt-1 text-xs text-muted-foreground">Uma peça por linha. Inclua a quantidade quando necessário.</p>
+                      <MaintenanceFieldError id="maintenance-components-error" message={maintenanceErrors.components} />
+                    </div>
+                  ) : null}
+                </>
+              )}
+              <MaintenanceFieldError id="maintenance-request-error" message={maintenanceRequestError} />
+            </fieldset>
           </AssetSheetDialog>
         </Form>
       )}
