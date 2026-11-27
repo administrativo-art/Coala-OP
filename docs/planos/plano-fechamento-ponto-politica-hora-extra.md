@@ -226,3 +226,18 @@ Decisões de implementação: a abertura direta na pessoa vale só para competê
 Substituto do Doc Brown: não publicar com textos que afirmem mais que o servidor. Corrigido: “sem pedido nem alerta que trave” com aviso das demais conferências do fechamento; turno da noite nunca “sem ocorrência”; revisão pedida, filtros, legenda e totais da semana restaurados; fila do modal igual à do botão; falta automática fora das pendências e sem saldo; alertas antigos não são repetidos durante a releitura. Mantido: a abertura automática gera a trilha de acesso, sem indicar que foi automática (exigiria mudança no servidor).
 
 **Pendência separada, anterior a estas telas:** `buildDayView` não gera falta nem batida ímpar em turno que atravessa a meia-noite, e o fechamento usa o mesmo cálculo. Corrigir muda o que trava o fechamento e pede testes e revisão próprios. A cobertura desses turnos pela falta automática não foi verificada.
+
+#### Turno da noite: correção adiada (27/11/2026)
+
+Conferido no código: cada batida recebe a data civil em que foi feita; a leitura do mês agrupa por essa data. `overnightWorkDate` (`time-bank/core.ts`), usada só no banco de horas e no AEJ, atribui ao dia anterior apenas a batida até o fim previsto do turno. Ligar falta e batida ímpar sem resolver a atribuição acusaria turnos completos. Não é correção pura; depende de decisão do programador:
+
+1. Até quanto tempo depois do fim previsto a batida ainda pertence ao turno que começou na véspera (hoje: zero; saída 06:05 de um turno até 06:00 fica no dia seguinte).
+2. Como tratar a virada do mês (a conferência do fechamento só lê batidas do próprio mês).
+
+A correção também mudaria a impressão dos alertas do dia seguinte (liberações já feitas deixariam de valer) e acrescentaria leituras na virada do mês. Mitigação atual: turno da noite sem nenhuma batida é coberto, no código, pela falta automática (o prazo considera o fim no dia seguinte; execução da rotina em produção não conferida); batidas incompletas aparecem na tela como “Turno da noite · conferir”. Risco registrado, sem alteração: se a única batida for depois da meia-noite, `hasMarking` não a encontra na data do turno e pode lançar falta de quem trabalhou.
+
+### 8.4 Fase 2, parte visual: modal do dia (27/11/2026)
+
+Entregue sem gravação nova: fila dos dias no topo, evidências à esquerda (resumo, linha do dia, intervalo quando há ocorrência, batidas e destino pela política) e decisão à direita com as ações que já existiam (devolver o dia, decidir ajuste e ausência). “Trava o fechamento” só aparece com pedido aberto ou alerta devolvido pelo servidor, e some depois de uma decisão até a releitura.
+
+Ficam para a parte que grava, ainda não programada: escolha da hora extra por dia (depende da decisão da seção 6, faixa livre ou restrita ao tipo do dia), liberação do dia dentro do modal, aviso conferido e “não descontar” falta (seção 6). A linha do dia não é desenhada em turno que atravessa a meia-noite nem em jornada em trechos. Após a revisão de ponto: o quadro do intervalo só aparece quando o alerta vem da conta “previsto × feito” (fora de intrajornada, cobertura, pausa mínima, trechos e turno da noite), e o rótulo da fila segue a situação calculada com a resposta do servidor. Preexistente, sem alteração: ausência em “ajustes pedidos” não entra no dia (`day-model.ts`), então não vira pedido na tela.

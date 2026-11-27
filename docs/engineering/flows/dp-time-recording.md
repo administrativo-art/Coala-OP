@@ -252,6 +252,7 @@ Fase 1 das telas aprovadas ([plano](../../planos/plano-fechamento-ponto-politica
 - **Falta automática:** vem da declaração do fechamento e é cruzada pela data, porque `POST employees/[employeeUid]` lê só pedidos de ausência. Esses dias não aparecem como “dia sem batidas” nem entram na fila de tratamento.
 - **Etapa de saneamento:** com a resposta do servidor, só dia que trava segura a etapa; aviso e alerta liberado não seguram.
 - **Limites dos textos:** o fechamento também recusa dia devolvido aberto, pedido de classificação de batida e falta automática não reconciliada com a escala, que a tela não recebe; por isso diz “sem pedido nem alerta que trave”. Turno que atravessa a meia-noite não gera falta nem batida ímpar no cálculo do dia (lacuna anterior, também no servidor) e aparece como “Turno da noite · conferir”.
+- **Modal do dia (27/11/2026):** `closure-focus-mode.tsx` mostra a fila, as evidências (linha do dia e rótulos puros em `closure-day-view.ts`) e a coluna de decisão com as mesmas ações e rotas de antes. “Trava o fechamento” vem de pedido aberto ou do alerta do servidor.
 - **Sem gravação nova:** não há “mês conferido” nem decisão do DP sobre falta automática.
 - **Custo:** `alerts=1` passa a rodar uma vez por abertura de mês terminado e aberto, ao fechar o modal depois de decidir, após devolver dias e ao sair da conferência (antes, só ao conferir). Relê escalas, batidas e classificações de toda a equipe; sem listener ou polling.
 - **Não verificado:** sem E2E do fechamento no repositório e sem conferência visual no navegador.

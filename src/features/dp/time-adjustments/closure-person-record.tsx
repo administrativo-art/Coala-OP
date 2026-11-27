@@ -18,7 +18,9 @@ import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
 import { cn } from "@/lib/utils";
 
 import type { ClosurePerson } from "./closure-core";
+import { queueTag } from "./closure-day-view";
 import { ClosureFocusMode } from "./closure-focus-mode";
+import { competenceLabel } from "./closure-year-overview";
 import {
   applyAutomaticAbsences, automaticAbsenceDates, closureDayRow, closureRecordHours, closureRecordIndicators, closureTrailProblemDays,
   type ClosureDayKind, type ClosureDayRow, type ClosureDayTone, type PersonServerAlerts,
@@ -129,8 +131,12 @@ export function ClosurePersonRecord({ firebaseUser, competence, person, alerts, 
 
   // Os alertas do servidor releem a equipe toda: são atualizados uma vez, ao sair do modal, e não a cada decisão.
   const decided = useRef(false);
-  const changedInDay = useCallback(() => { decided.current = true; setReloadKey((value) => value + 1); }, []);
+  // Depois de uma decisão, o que trava só volta a ser afirmado quando o servidor for relido.
+  const [alertsOutdated, setAlertsOutdated] = useState(false);
+  const changedInDay = useCallback(() => { decided.current = true; setAlertsOutdated(true); setReloadKey((value) => value + 1); }, []);
   const returned = useCallback(() => { setReloadKey((value) => value + 1); onDecided(); }, [onDecided]);
+  // Só volta a afirmar quando a releitura começa (os alertas ficam vazios até a resposta nova); se ela falhar, continua calado.
+  useEffect(() => { if (alerts === null) setAlertsOutdated(false); }, [alerts]);
   const focusChanged = (next: boolean) => {
     setFocus((current) => ({ ...current, open: next }));
     if (!next && decided.current) { decided.current = false; onDecided(); }
@@ -338,6 +344,14 @@ export function ClosurePersonRecord({ firebaseUser, competence, person, alerts, 
       </section>
 
       <ClosureFocusMode open={focus.open} onOpenChange={focusChanged} startDate={focus.date} queueDates={queue}
+        competenceLabel={competenceLabel(competence)}
+        tagOf={(date) => { const row = rows.find((item) => item.day.date === date); return row ? queueTag(row) : null; }}
+        dayState={(date) => {
+          const row = rows.find((item) => item.day.date === date);
+          if (!row) return null;
+          if (row.kind === "request") return "blocks";
+          return alertsOutdated ? null : row.blocks ? "blocks" : row.released ? "released" : null;
+        }}
         days={days} today={today} adjustments={adjustments} unitNames={unitNames} employeeName={name} employeeUid={person.uid} firebaseUser={firebaseUser}
         bank={bank ? { policyName: bank.policy?.name ?? null, lines: bank.statement?.lines ?? [] } : null}
         onChanged={changedInDay} />

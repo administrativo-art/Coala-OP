@@ -94,6 +94,14 @@ test('Fechamento do ponto: mês aberto abre no registro da pessoa; mês fechado 
   // A fila do modal é a mesma do botão.
   await page.getByRole('button', { name: 'Tratar 1 dia', exact: true }).click();
   await expect(page.getByRole('dialog').getByText('Dia 1 de 1 a tratar')).toBeVisible();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('1 · Evidências do dia')).toBeVisible();
+  await expect(dialog.getByText('2 · Decisão do DP')).toBeVisible();
+  await expect(dialog.getByText('Trava o fechamento', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('navigation', { name: 'Dias a tratar' }).getByRole('button')).toHaveCount(1);
+  await expect(dialog.getByRole('img', { name: 'Batidas às 09:57, 13:02, 13:18' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Devolver dia ao colaborador' })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('modal-do-dia.png') });
   await page.getByRole('dialog').getByRole('button', { name: 'Fechar' }).click();
 
   // Abrir o dia e fechar sem decidir não relê os alertas da equipe.
