@@ -39,6 +39,9 @@ import { buildRepPReceiptArchive } from './receipt-archive';
 import { isValidRepPPilotReceiptSnapshot, REP_P_PILOT_RECEIPT_TITLE, renderRepPPilotReceipt,
   type RepPPilotReceiptSnapshot } from './pilot-receipt';
 import { repPOfficialMarkingEnabled, repPOfficialStartDate, repPPilotWorkDateAllowed } from './runtime-config';
+import { attributeMarkings, attributeWorkDate, markingReadRange } from '@/features/dp/time-bank/work-date';
+import { readWorkDateShifts, type WorkDateSources } from '@/features/dp/time-bank/work-date.server';
+import { nightShiftEnabled } from '@/features/dp/time-config/rollout.server';
 import { repPAfdExportSchema, repPMarkingClassificationSchema, repPMarkingSchema, repPOfflinePermitSchema, repPOwnHistorySchema, repPOwnOptionsSchema,
   type RepPAfdExportRequest, type RepPMarkingRequest, type RepPOfflinePermitRequest, type RepPOwnHistoryRequest } from './schemas';
 
@@ -1564,7 +1567,10 @@ export async function classifyOwnRepPMarking(context: ServerUserContext, receipt
     throw fail('REP_P_MARKING_NOT_FOUND', 'Batida não encontrada.', 'NOT_FOUND');
   }
   const snapshot = receipt.get('snapshot') as RepPReceiptSnapshot;
-  const workDate = String(receipt.get('recordedDate'));
+  const workDate = nightShiftEnabled()
+    ? attributeWorkDate(String(receipt.get('recordedDate')), snapshot.markedAt, await readWorkDateShifts(context.workspace_id,
+      context.decoded.uid, String(receipt.get('recordedDate')), String(receipt.get('recordedDate')), { mainDb: deps.mainDb, hrDb: deps.hrDb }))
+    : String(receipt.get('recordedDate'));
   const now = Timestamp.now();
   const classification = { purpose: parsed.data.purpose, source: 'declared', status: 'confirmed', updatedAt: now,
     updatedBy: context.decoded.uid };
@@ -1706,13 +1712,18 @@ export async function listRepPMarkingsOfPerson(workspaceId: string, employeeUid:
   if (!parsed.success) throw fail('REP_P_HISTORY_INPUT_INVALID', 'Período de consulta inválido.');
   const input: RepPOwnHistoryRequest = parsed.data;
   const deps = { ...defaults, ...injected };
-  const baseFilters = (database: Firestore, collection: string) => database.collection(collection)
+  const baseFilters = (database: Firestore, collection: string, range: { start: string; end: string }) => database.collection(collection)
     .where('workspaceId', '==', workspaceId).where('employeeId', '==', employeeUid)
-    .where('recordedDate', '>=', input.startDate).where('recordedDate', '<=', input.endDate)
+    .where('recordedDate', '>=', range.start).where('recordedDate', '<=', range.end)
     .orderBy('recordedDate').limit(MAX_HISTORY_MARKINGS + 1);
+  const period = { start: input.startDate, end: input.endDate };
+  const workDateShifts = nightShiftEnabled()
+    ? await readWorkDateShifts(workspaceId, employeeUid, period.start, period.end, { mainDb: deps.mainDb, hrDb: deps.hrDb })
+    : null;
   const [snapshot, pilotSnapshot] = await Promise.all([
-    baseFilters(deps.repDb, RECEIPTS).get(),
-    baseFilters(deps.pilotDb, PILOT_MARKINGS).get(),
+    baseFilters(deps.repDb, RECEIPTS, workDateShifts ? markingReadRange(period.start, period.end) : period).get(),
+    // O ensaio continua na data civil.
+    baseFilters(deps.pilotDb, PILOT_MARKINGS, period).get(),
   ]);
   const overlays = snapshot.docs.length ? await deps.hrDb.getAll(...snapshot.docs
     .map((document) => closureClassificationRef(deps.hrDb, document.id))) : [];
@@ -1738,7 +1749,7 @@ export async function listRepPMarkingsOfPerson(workspaceId: string, employeeUid:
       receiptIssue: data.status === 'issued' ? null : String(document.get('lastIssue') ?? '') || null,
       classification: document.get('classification') ?? null, pilot: true as const, location: null }];
   });
-  const combined = [...official, ...pilot]
+  const combined = [...(workDateShifts ? attributeMarkings(official, workDateShifts, period.start, period.end) : official), ...pilot]
     .sort((left, right) => repPInstantMs(left.markedAt) - repPInstantMs(right.markedAt) || left.nsr - right.nsr);
   return { startDate: input.startDate, endDate: input.endDate, markings: combined.slice(0, MAX_HISTORY_MARKINGS),
     truncated: snapshot.size > MAX_HISTORY_MARKINGS || pilotSnapshot.size > MAX_HISTORY_MARKINGS || combined.length > MAX_HISTORY_MARKINGS };
@@ -1763,15 +1774,19 @@ export async function readRepPPilotMarkingsForBank(workspaceId: string, employee
 }
 
 /** Entradas oficiais para conferir o ponto. Não lê PDFs, dados de localização nem o piloto. */
-export async function readClosureMarkings(repDb: Firestore, workspaceId: string, uid: string, start: string, end: string) {
+export async function readClosureMarkings(repDb: Firestore, workspaceId: string, uid: string, start: string, end: string,
+  sources: WorkDateSources) {
+  const workDateShifts = nightShiftEnabled() ? await readWorkDateShifts(workspaceId, uid, start, end, sources) : null;
+  const range = workDateShifts ? markingReadRange(start, end) : { start, end };
   const rows = await repDb.collection('repP_receipts').where('workspaceId', '==', workspaceId).where('employeeId', '==', uid)
-    .where('recordedDate', '>=', start).where('recordedDate', '<=', end).orderBy('recordedDate')
+    .where('recordedDate', '>=', range.start).where('recordedDate', '<=', range.end).orderBy('recordedDate')
     .select('snapshot.nsr', 'snapshot.markedAt', 'snapshot.executionUnitId', 'recordedDate', 'classification')
     .limit(MAX_HISTORY_MARKINGS + 1).get();
   if (rows.size > MAX_HISTORY_MARKINGS) throw fail('REP_P_HISTORY_TRUNCATED', 'Há batidas demais para conferir a competência.', 'CONFLICT');
-  return rows.docs.map((doc) => ({ receiptId: doc.id, workDate: String(doc.get('recordedDate')),
+  const markings = rows.docs.map((doc) => ({ receiptId: doc.id, workDate: String(doc.get('recordedDate')),
     nsr: Number(doc.get('snapshot.nsr')), markedAt: String(doc.get('snapshot.markedAt')), executionUnitId: String(doc.get('snapshot.executionUnitId')),
     classification: doc.get('classification') ?? null, receiptStatus: 'available' as const }));
+  return workDateShifts ? attributeMarkings(markings, workDateShifts, start, end) : markings;
 }
 
 export function closureClassificationRef(hrDb: Firestore, receiptId: string) {
@@ -1785,11 +1800,19 @@ export function closureClassificationRef(hrDb: Firestore, receiptId: string) {
  */
 export async function readRepPMarkingsForMirror(workspaceId: string, employeeId: string, startDate: string, endDate: string, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
+  const workDateShifts = nightShiftEnabled()
+    ? await readWorkDateShifts(workspaceId, employeeId, startDate, endDate, { mainDb: deps.mainDb, hrDb: deps.hrDb })
+    : null;
+  const range = workDateShifts ? markingReadRange(startDate, endDate) : { start: startDate, end: endDate };
   const snapshot = await deps.repDb.collection(RECEIPTS)
     .where('workspaceId', '==', workspaceId).where('employeeId', '==', employeeId)
-    .where('recordedDate', '>=', startDate).where('recordedDate', '<=', endDate)
+    .where('recordedDate', '>=', range.start).where('recordedDate', '<=', range.end)
     .orderBy('recordedDate').limit(MAX_HISTORY_MARKINGS + 1).get();
-  const receipts = snapshot.docs.slice(0, MAX_HISTORY_MARKINGS).map((document) => ({ workDate: String(document.get('recordedDate')), receipt: document.get('snapshot') as RepPReceiptSnapshot }))
+  const read = snapshot.docs.slice(0, MAX_HISTORY_MARKINGS).map((document) => ({ workDate: String(document.get('recordedDate')), receipt: document.get('snapshot') as RepPReceiptSnapshot }));
+  const receipts = (workDateShifts ? read.flatMap((item) => {
+    const workDate = attributeWorkDate(item.workDate, item.receipt.markedAt, workDateShifts);
+    return workDate >= startDate && workDate <= endDate ? [{ ...item, workDate }] : [];
+  }) : read)
     .sort((left, right) => repPInstantMs(left.receipt.markedAt) - repPInstantMs(right.receipt.markedAt) || left.receipt.nsr - right.receipt.nsr);
   const latest = receipts.at(-1)?.receipt;
   return {
@@ -1968,12 +1991,15 @@ export const repPIdentifiersForTest = Object.freeze({ establishmentKey, employee
  * estabelecimento. Ficam aqui porque só o serviço do REP-P acessa as coleções `repP_*`.
  */
 export async function readOwnRepPReceiptForAdjustment(context: ServerUserContext, receiptId: string, workDate: string,
-  injected: Partial<Dependencies> = {}) {
+  injected: Partial<Dependencies> = {},
+  /** Padrão: a batida é do dia em que foi registrada. Com o turno noturno ligado, quem chama aplica a regra do turno. */
+  belongsToWorkDate: (recordedDate: string, markedAt: string) => boolean = (recordedDate) => recordedDate === workDate) {
   const deps = { ...defaults, ...injected };
   const receipt = await deps.repDb.collection(RECEIPTS).doc(receiptId).get();
   const snapshot = receipt.get('snapshot') as Partial<RepPReceiptSnapshot> | undefined;
   if (!receipt.exists || receipt.get('workspaceId') !== context.workspace_id || receipt.get('employeeId') !== context.decoded.uid
-    || receipt.get('recordedDate') !== workDate || !snapshot?.nsr || !snapshot.markedAt || !snapshot.executionUnitId) return null;
+    || !snapshot?.nsr || !snapshot.markedAt || !snapshot.executionUnitId
+    || !belongsToWorkDate(String(receipt.get('recordedDate') ?? ''), snapshot.markedAt)) return null;
   return { receiptId: receipt.id, nsr: snapshot.nsr, markedAt: snapshot.markedAt, executionUnitId: snapshot.executionUnitId };
 }
 

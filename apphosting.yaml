@@ -19,6 +19,10 @@ env:
     value: "false"
     availability:
       - RUNTIME
+  - variable: DP_TIME_NIGHT_SHIFT_ENABLED
+    value: "false"
+    availability:
+      - RUNTIME
   - variable: NODE_OPTIONS
     value: "--max-old-space-size=4096"
     availability:

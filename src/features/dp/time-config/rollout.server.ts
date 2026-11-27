@@ -12,6 +12,11 @@ export function timeReviewEnabled() {
   return process.env.DP_TIME_REVIEW_ENABLED?.trim() === 'true';
 }
 
+/** Turno que passa da meia-noite: telas, ajustes, banco, espelho, AEJ e falta automática mudam juntos. */
+export function nightShiftEnabled() {
+  return process.env.DP_TIME_NIGHT_SHIFT_ENABLED?.trim() === 'true';
+}
+
 export function activeOvertimePolicy(policy: DPOvertimePolicy): DPOvertimePolicy {
   if (policyRulesEnabled()) return policy;
   const legacy = { ...policy };

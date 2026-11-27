@@ -14,8 +14,12 @@ import { AUTOMATIC_ABSENCES } from '@/features/dp/time-adjustments/automatic-abs
 import { adjustmentRestoresAutomaticAbsence, automaticAbsenceSuperseded } from '@/features/dp/time-adjustments/automatic-absence-core';
 
 import { policyDayRulesFor } from '@/features/dp/time-config/policy-tolerance.server';
+import { nightShiftEnabled } from '@/features/dp/time-config/rollout.server';
+import { crossesMidnight } from '@/features/dp/time-bank/work-date';
 import { repPOwnMonthSchema } from './schemas';
 import { isBrazilTimeZone } from './time-zones';
+
+const MAX_DISPLACED_RECORDS = 400;
 
 /** Turno escalado da própria pessoa num dia, com o intervalo do cadastro do turno e a tolerância da jornada; nunca dado fiscal. */
 export type RepPOwnScheduledShift = {
@@ -24,6 +28,8 @@ export type RepPOwnScheduledShift = {
   startTime: string | null;
   endTime: string | null;
   overnight: boolean;
+  /** Só com o turno noturno ligado, em turno que passa da meia-noite. */
+  workDateRule?: boolean;
   manualOrder?: number;
   manualMode?: 'fixed' | 'flexible';
   manualWorkMinutes?: number;
@@ -61,6 +67,8 @@ export type RepPOwnMonth = {
   month: string; shifts: RepPOwnScheduledShift[]; holidays: string[];
   /** Optional keeps injected readers and older clients compatible during rollout. */
   automaticAbsences?: string[]; truncated: boolean;
+  /** Presente só com o turno noturno ligado: avisa a tela de que a jornada de agora pode ser a de ontem. */
+  nightShift?: true;
 };
 
 // Um mês tem no máximo 31 dias; dois turnos por dia cobrem trocas e coberturas sem ler mais que o necessário.
@@ -106,6 +114,17 @@ export async function readOwnRepPMonth(context: ServerUserContext, raw: unknown,
   if (!parsed.success) throw new AppError({ code: 'REP_P_MONTH_INPUT_INVALID', kind: 'VALIDATION', safeMessage: 'Mês inválido.' });
   return readRepPMonthOfPerson([context.decoded.uid, text(context.userDoc.id), text(context.userDoc.hrEmployeeId)], parsed.data.month, injected,
     { automaticAbsence: { workspaceId: context.workspace_id, uid: context.decoded.uid } });
+}
+
+/** Turnos que a falta automática retirou da escala e que ainda não voltaram a ela. Só os horários. */
+export async function readDisplacedShifts(hrDb: Firestore, workspaceId: string, uid: string, start: string, end: string) {
+  const snapshot = await hrDb.collection(AUTOMATIC_ABSENCES).where('workspaceId', '==', workspaceId).where('employeeUid', '==', uid)
+    .where('workDate', '>=', start).where('workDate', '<=', end).orderBy('workDate').limit(MAX_DISPLACED_RECORDS + 1).get();
+  const shifts = snapshot.docs.filter((doc) => doc.get('scheduleSyncStatus') !== 'restored')
+    .flatMap((doc) => (doc.get('displacedShifts') as Array<{ shift?: Record<string, unknown> }> | undefined) ?? [])
+    .flatMap(({ shift }) => typeof shift?.date === 'string' ? [{ date: shift.date, type: shift.type === 'day_off' ? 'day_off' as const : 'work' as const,
+      startTime: text(shift.startTime), endTime: text(shift.endTime), overnight: shift.overnight === true }] : []);
+  return { shifts, truncated: snapshot.size > MAX_DISPLACED_RECORDS };
 }
 
 /**
@@ -202,6 +221,8 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       startTime: text(doc.get('startTime')),
       endTime: text(doc.get('endTime')),
       overnight: doc.get('overnight') === true,
+      ...(nightShiftEnabled() && doc.get('type') !== 'day_off' && crossesMidnight(doc.get('overnight'), text(doc.get('startTime')), text(doc.get('endTime')))
+        ? { workDateRule: true } : {}),
       unitId,
       unitName: unitId ? unitNameById.get(unitId) ?? null : null,
       assignmentKind: doc.get('assignmentKind') === 'external_coverage' ? 'external_coverage' : 'regular',
@@ -255,7 +276,7 @@ export async function readRepPMonthOfPerson(ids: Array<string | null | undefined
       .map((doc) => String(doc.get('workDate'))));
     effectiveAutomaticDates = effectiveAutomaticDates.filter((date) => !automaticAbsenceSuperseded(date, adjustmentDates, periods));
   }
-  return { month: competence, shifts: result, holidays,
+  return { month: competence, shifts: result, holidays, ...(nightShiftEnabled() ? { nightShift: true as const } : {}),
     automaticAbsences: effectiveAutomaticDates.sort(),
     truncated: (shifts?.size ?? 0) >= MAX_OWN_SHIFTS || ownShifts.length >= MAX_OWN_SHIFTS };
 }

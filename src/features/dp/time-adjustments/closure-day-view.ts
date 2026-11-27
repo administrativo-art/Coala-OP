@@ -21,7 +21,8 @@ export type DayTimeline = {
 export function dayTimeline(day: DayView): DayTimeline | null {
   const work = day.shift?.type === "work" ? day.shift : null;
   // Jornada em trechos também fica de fora: o turno do dia descreve só o primeiro trecho.
-  if (work?.overnight || day.manualSegments?.length) return null;
+  if (work?.overnight || work?.workDateRule || day.manualSegments?.length
+    || day.markings.some((marking) => marking.markedAt.slice(0, 10) !== day.date)) return null;
   const marks = day.markings.map((marking) => ({ key: marking.receiptId, time: fiscalClock(marking.markedAt), included: marking.treatment === "included" }));
   const shift = work?.startTime && work.endTime && work.endTime > work.startTime ? [toMinutes(work.startTime), toMinutes(work.endTime)] as const : null;
   const points = [...marks.map((mark) => toMinutes(mark.time)), ...(shift ?? [])];
@@ -50,7 +51,7 @@ export function dayTimeline(day: DayView): DayTimeline | null {
 export function breakSummary(day: DayView) {
   const work = day.shift?.type === "work" ? day.shift : null;
   const expected = day.expectedBreakMinutes ?? plannedBreakMinutesOf(work);
-  if (!work || work.intrajornada || work.coverage || work.breakMinPauseMinutes || work.overnight || day.manualSegments?.length) return null;
+  if (!work || work.intrajornada || work.coverage || work.breakMinPauseMinutes || work.overnight || work.workDateRule || day.manualSegments?.length) return null;
   if (day.markings.length % 2 === 1 || day.markings.length < 4 || day.breakMinutes === null || expected <= 0) return null;
   if (!day.incidents.some((incident) => incident === "short_break" || incident === "long_break")) return null;
   return { expected, done: day.breakMinutes, difference: day.breakMinutes - expected };

@@ -18,7 +18,7 @@ export async function readPersonAlertSources(dbs: Sources, workspaceId: string, 
   const user = await dbs.mainDb.collection('users').doc(uid).get();
   const [schedule, markings] = await Promise.all([
     readRepPMonthOfPerson([uid, user.get('hrEmployeeId')], competence, { db: dbs.mainDb, hrDb: dbs.hrDb }),
-    readClosureMarkings(dbs.repDb, workspaceId, uid, start, end),
+    readClosureMarkings(dbs.repDb, workspaceId, uid, start, end, { mainDb: dbs.mainDb, hrDb: dbs.hrDb }),
   ]);
   if (schedule.truncated) throw new AppError({ code: 'PTRP_CLOSURE_ALERT_INPUT_LIMIT', kind: 'CONFLICT', safeMessage: 'A escala está incompleta para conferir os alertas.' });
   return { schedule, markings, fallbackUnits: getLinkedUnitIds(user.data() ?? {}) };
