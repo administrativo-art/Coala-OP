@@ -21,6 +21,7 @@ import { REASON_LABELS } from "@/features/dp/time-bank/time-bank-card";
 import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
 import { cn } from "@/lib/utils";
 
+import { OvertimeDayCard, type OvertimeMonthState } from "./overtime-decision-card";
 import { breakSummary, dayTimeline, type QueueTag } from "./closure-day-view";
 import { dayNeedsTreatment } from "./closure-person-record-model";
 import { ADJUSTMENT_KIND_LABELS, ADJUSTMENT_STATUS_LABELS, type AdjustmentView } from "./types";
@@ -55,8 +56,11 @@ export function absenceCoverage(dayAbsence: DayView["absence"], request: { unit:
  * O ponto é de uso exclusivo do colaborador: aqui o DP só decide pedidos feitos por ele (ajuste e ausência) e consulta
  * batidas e política; nada grava batida ou pedido em nome da pessoa. Clicar fora não fecha (Esc e "Fechar" fecham).
  */
-export function ClosureFocusMode({ open, onOpenChange, startDate, queueDates, dayState, tagOf, competenceLabel, days, today, adjustments, bank, unitNames, employeeName, employeeUid, firebaseUser, onChanged }: {
+export function ClosureFocusMode({ open, onOpenChange, startDate, queueDates, dayState, tagOf, competenceLabel, days, today, adjustments, bank, unitNames, employeeName, employeeUid, firebaseUser, onChanged, overtime, onOvertimeSaved }: {
   open: boolean;
+  /** Hora extra por dia do mês aberto; ausente onde o modal não define destino. */
+  overtime?: OvertimeMonthState;
+  onOvertimeSaved?: () => void;
   onOpenChange: (open: boolean) => void;
   startDate: string | null;
   /** Fila de dias a tratar de quem abre o modal; sem ela, todos os dias que pedem ação. */
@@ -117,7 +121,7 @@ export function ClosureFocusMode({ open, onOpenChange, startDate, queueDates, da
             </header>
             <div className="flex-1 overflow-y-auto px-5 py-4">
               <FocusDay key={day.date} day={day} adjustments={adjustments.filter((item) => item.workDate === day.date)} bank={bank} unitNames={unitNames}
-                employeeName={employeeName} employeeUid={employeeUid} firebaseUser={firebaseUser} onChanged={onChanged} />
+                employeeName={employeeName} employeeUid={employeeUid} firebaseUser={firebaseUser} onChanged={onChanged} overtime={overtime} onOvertimeSaved={onOvertimeSaved} />
             </div>
             <footer className="flex flex-wrap items-center gap-2 border-t border-ds-border bg-ds-surface px-5 py-3">
               <Button variant="ds-secondary" size="sm" disabled={!previous} onClick={() => previous && setDate(previous)}><ChevronLeft className="h-4 w-4" aria-hidden /> Anterior</Button>
@@ -163,9 +167,9 @@ function Card({ title, aside, children, className }: { title: React.ReactNode; a
   );
 }
 
-function FocusDay({ day, adjustments, bank, unitNames, employeeName, employeeUid, firebaseUser, onChanged }: {
+function FocusDay({ day, adjustments, bank, unitNames, employeeName, employeeUid, firebaseUser, onChanged, overtime, onOvertimeSaved }: {
   day: DayView; adjustments: AdjustmentView[]; bank: BankLines; unitNames: Map<string, string>; employeeName: string; employeeUid: string;
-  firebaseUser: FirebaseUser | null; onChanged: () => void;
+  firebaseUser: FirebaseUser | null; onChanged: () => void; overtime?: OvertimeMonthState; onOvertimeSaved?: () => void;
 }) {
   const work = day.shift?.type === "work" ? day.shift : null;
   const [absence, setAbsence] = useState<AbsenceRequestDto | null>(null);
@@ -289,7 +293,8 @@ function FocusDay({ day, adjustments, bank, unitNames, employeeName, employeeUid
             absence ? <AbsenceCard request={absence} firebaseUser={firebaseUser} employeeName={employeeName} onChanged={() => { void loadAbsence(); onChanged(); }} />
               : <Card title={`Ausência · ${day.absence.typeName}`}><p className="px-4 py-3 text-sm text-ds-ink-muted">{absenceError ?? "Abrindo o pedido…"}</p></Card>
           ) : null}
-          {!decisions && !coveredAlerts.length ? <p className="text-sm text-ds-ink-muted">Nada a decidir neste dia.</p> : null}
+          {overtime ? <OvertimeDayCard overtime={overtime} date={day.date} employeeUid={employeeUid} firebaseUser={firebaseUser} onSaved={onOvertimeSaved ?? onChanged} /> : null}
+          {!decisions && !coveredAlerts.length && !overtime?.view?.days.some((item) => item.date === day.date) ? <p className="text-sm text-ds-ink-muted">Nada a decidir neste dia.</p> : null}
         </div>
       </Zone>
 

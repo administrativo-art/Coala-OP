@@ -23,12 +23,12 @@ import type { DPAbsenceType, DPOvertimeCategory, DPOvertimePolicy, DPPolicyToler
 
 import { absorbedEdgeMinutes, assessBreak } from '../time-config/policy-rules';
 
-// v5: minutos noturnos do turno que termina às 22h.
-export const TIME_BANK_ALGORITHM_VERSION = 'time-bank-v5' as const;
-export type TimeBankAlgorithmVersion = 'time-bank-v3' | 'time-bank-v4' | typeof TIME_BANK_ALGORITHM_VERSION;
+// v5: minutos noturnos do turno que termina às 22h. v6: escolha da hora extra por dia.
+export const TIME_BANK_ALGORITHM_VERSION = 'time-bank-v6' as const;
+export type TimeBankAlgorithmVersion = 'time-bank-v3' | 'time-bank-v4' | 'time-bank-v5' | typeof TIME_BANK_ALGORITHM_VERSION;
 /** Saved calculations remain immutable and readable after an implementation update. */
 export function isReadableTimeBankAlgorithmVersion(value: unknown): value is TimeBankAlgorithmVersion {
-  return value === 'time-bank-v3' || value === 'time-bank-v4' || value === TIME_BANK_ALGORITHM_VERSION;
+  return value === 'time-bank-v3' || value === 'time-bank-v4' || value === 'time-bank-v5' || value === TIME_BANK_ALGORITHM_VERSION;
 }
 export const MARKING_TOLERANCE_LIMIT = 5;
 
@@ -61,9 +61,9 @@ export type BankLineNature = 'bank_credit' | 'bank_debit' | 'payroll_overtime' |
 export type BankLineReason = 'worked_less' | 'worked_more' | 'missing_day' | 'absence_debit' | 'absence_unexcused' | 'absence_review'
   | 'rest_day_work' | 'sunday_work' | 'holiday_work' | 'unplanned_work' | 'daily_limit_exceeded' | 'weekly_limit_exceeded'
   | 'no_category' | 'needs_review' | 'pending_approval' | 'approved_overtime' | 'manual_compensation' | 'manual_adjustment'
-  | 'payroll_settlement' | 'credit_expired' | 'break_suppressed';
+  | 'payroll_settlement' | 'credit_expired' | 'break_suppressed' | 'decision_outdated';
 export type BankLine = { nature: BankLineNature; minutes: number; reason: BankLineReason; categoryId?: string; ratePercent?: number;
-  factor?: number; requiresApproval?: boolean };
+  factor?: number; requiresApproval?: boolean; /** Destino escolhido pelo DP no dia. */ decided?: boolean };
 export type BankIssue = 'MISSING_DAY' | 'ODD_MARKINGS' | 'NIGHT_SHIFT' | 'NO_JOURNEY' | 'NO_POLICY' | 'TIME_BANK_DISABLED' | 'HOLIDAY_SCHEDULED'
   | 'WORK_ON_ABSENCE' | 'ABSENCE_REVIEW' | 'BREAK_REVIEW';
 export type BankDay = {

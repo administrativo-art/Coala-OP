@@ -3,6 +3,7 @@
  * cada pessoa traz, um a um e ligados ao dia, os pedidos de ajuste, as ausências e as trocas de turno que tocam
  * o mês, inclusive recusados e cancelados. Puro: o serviço lê, este módulo monta, carimba e compara versões.
  */
+import type { OvertimeDecisions } from '../time-bank/overtime-decision';
 import type { RosterReason } from './closure-roster';
 import { createHash } from 'node:crypto';
 
@@ -30,14 +31,20 @@ export type ClosureShiftSwap = {
 };
 export type ClosurePerson = {
   uid: string; name: string | null; rosterReason?: RosterReason; adjustments: ClosureAdjustment[]; absences: ClosureAbsence[]; shiftSwaps: ClosureShiftSwap[];
+  /** Escolhas da hora extra congeladas na versão; ausente quando não há nenhuma. */
+  overtimeDecisions?: OvertimeDecisions;
 };
 export type ClosureRosterPerson = Pick<ClosurePerson, 'uid' | 'name' | 'rosterReason'>;
 export type ClosureChanges = { added: string[]; changed: string[]; removed: string[] };
 
-/** Versões fechadas antes da inclusão da troca de turno continuam legíveis sem migração destrutiva. */
+/**
+ * Versões fechadas antes da inclusão da troca de turno continuam legíveis sem migração destrutiva. As escolhas de hora
+ * extra não saem daqui: só a apuração as lê, direto da versão, e telas e espelho não recebem motivo nem autor.
+ */
 export function normalizeClosurePerson(value: ClosurePerson): ClosurePerson {
+  const { overtimeDecisions: _decisions, ...person } = value;
   return {
-    ...value,
+    ...person,
     adjustments: Array.isArray(value.adjustments) ? value.adjustments : [],
     absences: Array.isArray(value.absences) ? value.absences : [],
     shiftSwaps: Array.isArray(value.shiftSwaps) ? value.shiftSwaps : [],

@@ -25,6 +25,14 @@ test('Fechamento do ponto: mês aberto abre no registro da pessoa; mês fechado 
   const people = [person('closure-ana-e2e', 'Ana Fechamento E2E'), person('closure-bia-e2e', 'Bia Fechamento E2E', [automatic])];
   const counts = { adjustments: 0, absences: 0, shiftSwaps: 0 };
   const alertCalls: string[] = [];
+  const overtimeSaved: Array<Record<string, unknown>> = [];
+  const overtimeOption = { destination: 'payroll', categoryId: 'he1', name: 'HE1', ratePercent: 50 };
+  // Respostas simuladas do servidor: o cálculo e as recusas são cobertos no teste de integração do fechamento.
+  const overtimeView = (uid: string) => ({ enabled: true, competence: openMonth, closed: false, closureVersion: 0, canDecide: true, revision: overtimeSaved.length,
+    days: uid !== 'closure-bia-e2e' ? [] : [{ date: date(5), sourceMinutes: 27, suggestion: overtimeOption, blockedReason: null, outdated: null,
+      options: [overtimeOption, { ...overtimeOption, destination: 'time_bank', factor: 1 }],
+      decision: overtimeSaved.length ? { date: date(5), sourceMinutes: 27, policy: { id: 'p', version: 1 }, parts: overtimeSaved[0].parts, reason: overtimeSaved[0].reason,
+        decidedBy: E2E_USER.uid, decidedAt: `${date(8)}T12:00:00.000Z` } : null }] });
 
   // A lista de meses volta sempre para o ano atual; o mês do ensaio pode estar no ano anterior.
   const openCard = async (competence: string) => {
@@ -43,6 +51,11 @@ test('Fechamento do ponto: mês aberto abre no registro da pessoa; mês fechado 
     const json = (body: unknown) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
     const competence = url.searchParams.get('competence') ?? '';
     if (url.pathname.endsWith('/closures')) {
+      if (route.request().method() === 'POST' && route.request().postDataJSON()?.action === 'decideOvertime') {
+        overtimeSaved.push(route.request().postDataJSON());
+        return json({ revision: 1, decision: null });
+      }
+      if (url.searchParams.get('overtimeOf')) return json(overtimeView(url.searchParams.get('overtimeOf')!));
       if (url.searchParams.get('alerts')) {
         alertCalls.push(competence);
         return json({ expectedVersion: 0, pendingOutsideScope: 0, alerts: [{ employeeUid: 'closure-bia-e2e', date: date(7), incidents: ['odd'], fingerprint: 'f', unitIds: [], canJustify: true, decision: null }] });
@@ -110,6 +123,26 @@ test('Fechamento do ponto: mês aberto abre no registro da pessoa; mês fechado 
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: 'Fechar' }).click();
   expect(alertCalls.length).toBe(before);
+
+  // Hora extra do dia: a escolha é enviada com o tempo e a revisão lidos, sem reler os alertas da equipe.
+  const overtimeList = page.getByRole('region', { name: 'Hora extra por dia' });
+  await expect(overtimeList.getByText('A definir')).toBeVisible();
+  await overtimeList.getByRole('button', { name: /^Ver hora extra de 05/ }).click();
+  const card = page.getByRole('dialog').getByRole('region', { name: 'Hora extra do dia' });
+  await card.getByRole('button', { name: 'Conferir dia e definir a extra' }).click();
+  await expect(card.getByRole('alert')).toContainText('motivo');
+  await card.getByRole('combobox', { name: 'Motivo da conferência' }).click();
+  await page.getByRole('option', { name: 'Cobertura de colega' }).click();
+  await page.screenshot({ path: testInfo.outputPath('hora-extra-do-dia.png') });
+  await card.getByRole('button', { name: 'Conferir dia e definir a extra' }).click();
+  await expect(card.getByText('Definida', { exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Mudar escolha' })).toBeVisible();
+  expect(overtimeSaved).toHaveLength(1);
+  expect(overtimeSaved[0]).toMatchObject({ employeeUid: 'closure-bia-e2e', date: date(5), sourceMinutes: 27, expectedRevision: 0,
+    reason: 'Cobertura de colega', parts: [{ destination: 'payroll', categoryId: 'he1', minutes: 27 }] });
+  await page.screenshot({ path: testInfo.outputPath('hora-extra-definida.png') });
+  await page.getByRole('dialog').getByRole('button', { name: 'Fechar' }).click();
+  await expect(overtimeList.getByText('Definida', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Anterior' }).click();
   await expect(page.getByRole('heading', { name: 'Ana Fechamento E2E', exact: true })).toBeVisible();
