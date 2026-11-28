@@ -673,3 +673,119 @@ test('inactive rules preserve regular and extended coverage break treatment thro
   assert.equal(readiness.people.find(person => person.uid === people[2].uid)?.status, 'review');
   assert.deepEqual(await Promise.all(receiptRefs.map(async ref => (await ref.get()).data())), originals, 'closure and payroll keep all recorded punches intact');
 });
+
+test('hora extra por dia: grava, aplica na prévia, congela no fechamento e desatualiza quando o dia muda', async (t) => {
+  const previous = process.env.DP_TIME_OVERTIME_DECISION_ENABLED;
+  t.after(() => { if (previous === undefined) delete process.env.DP_TIME_OVERTIME_DECISION_ENABLED; else process.env.DP_TIME_OVERTIME_DECISION_ENABLED = previous; });
+  process.env.DP_TIME_OVERTIME_DECISION_ENABLED = 'true';
+  const { actOnOvertimeDecision, readOvertimeMonth } = await import('../../src/features/dp/time-bank/overtime-decision.server.ts');
+  const { computeBankMonth } = await import('../../src/features/dp/time-bank/service.server.ts');
+  const prefix = `overtime-${randomUUID().slice(0, 6)}`;
+  const workspaceId = `${prefix}-ws`;
+  const uid = `${prefix}-employee`;
+  const unitId = `${prefix}-unit`;
+  const competence = '2026-04';
+  const tuesday = '2026-04-07';
+  const sunday = '2026-04-12';
+  const admin = { decoded: { uid: `${prefix}-admin` }, userDoc: { id: `${prefix}-admin`, unitIds: [unitId] }, profileId: null,
+    permissions: structuredClone(defaultAdminPermissions), isDefaultAdmin: true, workspace_id: workspaceId };
+  const guest = { ...admin, decoded: { uid: `${prefix}-guest` }, userDoc: { id: `${prefix}-guest`, unitIds: [unitId] }, permissions: structuredClone(defaultGuestPermissions), isDefaultAdmin: false };
+  const deps = { mainDb: dbAdmin, hrDb: hrDbAdmin, repDb: hrDbAdmin, now: () => new Date('2026-05-10T12:00:00.000Z'),
+    clock: { async read() { return { instant: new Date('2026-05-10T12:00:00.000Z') }; } }, readRoster: async () => [{ uid, name: 'Maria', rosterReason: 'current' }] };
+  const schedule = dbAdmin.collection('dp_schedules').doc(`${prefix}-schedule`);
+  const journeyId = `${prefix}-journey`;
+  await Promise.all([
+    dbAdmin.collection('users').doc(uid).set({ username: 'Maria', isActive: true, unitIds: [unitId] }),
+    dbAdmin.collection('dp_journeys').doc(journeyId).set({ lineageId: journeyId, version: 1, status: 'published', validFrom: '2026-04-06', cycleLengthDays: 7,
+      days: [1, 2, 3, 4, 5, 6, 7].map((dayIndex) => ({ dayIndex, plannedMinutes: 240, isRestDay: false })), toleranceMinutes: 0 }),
+    dbAdmin.collection('dp_overtimePolicies').doc(`${prefix}-policy`).set({ lineageId: `${prefix}-policy`, version: 1, status: 'published', name: 'Ensaio da extra',
+      applicability: { scope: { kind: 'company' }, collaboratorIds: [uid] }, validFrom: '2026-01-01', externalCoverageRule: 'origin',
+      categories: [{ id: 'he1', name: 'HE1', trigger: 'workday', ratePercent: 50, destination: 'payroll', requiresApproval: true },
+        { id: 'domingo', name: 'Domingo', trigger: 'sunday', ratePercent: 100, destination: 'payroll', requiresApproval: false }],
+      timeBank: { enabled: true, allowNegativeBalance: true, expiredBalanceDestination: 'review' } }),
+    schedule.set({ year: 2026, month: 4, unitId, locked: true, createdAt: new Date('2026-03-20T00:00:00Z') }),
+  ]);
+  await Promise.all([tuesday, sunday].map((date) => schedule.collection('shifts').doc(`${prefix}-${date}`).set({ scheduleId: schedule.id, unitId, userId: uid, type: 'work',
+    date, startTime: '08:00', endTime: '12:00', journeyResolution: { journeyId, lineageId: journeyId, version: 1 } })));
+  const punch = (id, date, time, nsr) => hrDbAdmin.collection('repP_receipts').doc(`${prefix}-${id}`).set({ workspaceId, employeeId: uid, recordedDate: date, status: 'issued',
+    snapshot: { nsr, markedAt: `${date}T${time}:00-0300`, executionUnitId: unitId } });
+  await Promise.all([punch('a', tuesday, '08:00', 1), punch('b', tuesday, '13:00', 2), punch('c', sunday, '08:00', 3), punch('d', sunday, '13:00', 4)]);
+
+  const query = { competence, employeeUid: uid };
+  const view = await readOvertimeMonth(admin, query, deps);
+  assert.deepEqual(view.days.map((item) => [item.date, item.sourceMinutes, item.blockedReason, item.options.map((option) => `${option.destination}:${option.categoryId}`)]),
+    [[tuesday, 60, null, ['payroll:he1', 'time_bank:he1']], [sunday, 60, null, ['payroll:domingo']]]);
+  const request = (overrides = {}) => ({ action: 'decideOvertime', employeeUid: uid, date: tuesday, operationId: randomUUID(), expectedRevision: 0, sourceMinutes: 60,
+    parts: [{ destination: 'payroll', categoryId: 'he1', minutes: 40 }, { destination: 'time_bank', categoryId: 'he1', minutes: 20 }], reason: 'Cobertura de colega', ...overrides });
+
+  await assert.rejects(actOnOvertimeDecision(guest, request(), deps), { code: 'PTRP_CLOSURE_FORBIDDEN' });
+  await assert.rejects(actOnOvertimeDecision({ ...admin, decoded: { uid } }, request(), deps), { code: 'PTRP_OVERTIME_DECISION_FORBIDDEN' }, 'ninguém define a própria extra');
+  await assert.rejects(actOnOvertimeDecision(admin, request({ date: sunday, parts: [{ destination: 'payroll', categoryId: 'he1', minutes: 60 }] }), deps), { code: 'PTRP_OVERTIME_DECISION_INVALID' });
+  await assert.rejects(actOnOvertimeDecision(admin, request({ parts: [{ destination: 'payroll', categoryId: 'he1', minutes: 59 }] }), deps), { code: 'PTRP_OVERTIME_DECISION_INVALID' });
+  await assert.rejects(actOnOvertimeDecision(admin, request({ sourceMinutes: 61 }), deps), { code: 'PTRP_OVERTIME_DAY_CHANGED' });
+  const pendingRef = hrDbAdmin.collection('ptrp_adjustmentRequests').doc(`${prefix}-pending`);
+  await pendingRef.set({ id: pendingRef.id, workspaceId, employeeUid: uid, workDate: tuesday, status: 'in_review', kind: 'include', target: null,
+    inclusion: { markedAt: `${tuesday}T12:00:00-0300`, executionUnitId: unitId }, acts: [], reason: 'Pedido sem decisão.', createdAt: '2026-04-08T12:00:00.000Z' });
+  await assert.rejects(actOnOvertimeDecision(admin, request(), deps), { code: 'PTRP_OVERTIME_DAY_BLOCKED' });
+  await pendingRef.delete();
+
+  // Dia com batida de ensaio: a prévia a somaria e o fechamento não, então não há escolha.
+  const { REP_P_PILOT_RECEIPT_TITLE } = await import('../../src/features/dp/rep-p/pilot-receipt.ts');
+  const pilotId = `pilot_${createHash('sha256').update(prefix).digest('hex')}`;
+  const pilotHash = createHash('sha256').update(pilotId).digest('hex');
+  const pilotRef = hrDbAdmin.collection('repP_pilotMarkings').doc(pilotId);
+  await pilotRef.set({ schemaVersion: 1, mode: 'pilot', workspaceId, employeeId: uid, receiptId: pilotId, markingId: pilotId, sequence: 1, nsr: 1,
+    workDate: tuesday, recordedDate: tuesday, markedAt: `${tuesday}T13:10:00-0300`, executionUnitId: unitId, collectorId: '01', hash: pilotHash, status: 'issued',
+    snapshot: { schemaVersion: 1, title: REP_P_PILOT_RECEIPT_TITLE, sequence: 1, markedAt: `${tuesday}T13:10:00-0300`, hash: pilotHash,
+      employeeName: 'Maria', unitName: 'Unidade', workLocation: 'Unidade', collectorId: '01' } });
+  assert.match((await readOvertimeMonth(admin, query, deps)).days.find((item) => item.date === tuesday).blockedReason, /batida de ensaio/);
+  await assert.rejects(actOnOvertimeDecision(admin, request(), deps), { code: 'PTRP_OVERTIME_DAY_BLOCKED' });
+  await pilotRef.delete();
+
+  // Quem só reabre e não acessa a unidade do dia não vê a hora extra dele.
+  const otherUnit = { ...guest, userDoc: { id: guest.userDoc.id, unitIds: [`${prefix}-other-unit`] },
+    permissions: (() => { const value = structuredClone(defaultGuestPermissions); value.dp.timeClosure = { close: false, reopen: true }; return value; })() };
+  await assert.rejects(readOvertimeMonth(otherUnit, query, deps), { code: 'PTRP_OVERTIME_SUBJECT_FORBIDDEN' });
+
+  const first = request();
+  assert.equal((await actOnOvertimeDecision(admin, first, deps)).revision, 1);
+  assert.equal((await actOnOvertimeDecision(admin, first, deps)).revision, 1, 'o mesmo envio não grava duas vezes');
+  await assert.rejects(actOnOvertimeDecision(admin, { ...first, reason: 'Fechamento do caixa' }, deps), { code: 'PTRP_OVERTIME_OPERATION_CONFLICT' });
+  await assert.rejects(actOnOvertimeDecision(admin, request(), deps), { code: 'PTRP_OVERTIME_REVISION_CONFLICT' });
+  const stored = (await hrDbAdmin.collection('dp_timeOvertimeDecisions').where('employeeUid', '==', uid).get()).docs;
+  assert.equal(stored.length, 1);
+  assert.deepEqual([stored[0].get('actorUids'), stored[0].get('unitIds'), stored[0].get(`days.${tuesday}.decidedBy`)], [[admin.decoded.uid], [unitId], admin.decoded.uid]);
+  assert.equal((await hrDbAdmin.collection('dp_timeOvertimeDecisions').where('actorUids', 'array-contains', admin.decoded.uid).where('workspaceId', '==', workspaceId).get()).size, 1);
+
+  const summary = (record) => record.days.filter((item) => item.lines.length).map((item) => [item.date, item.lines.map((line) => `${line.nature}:${line.minutes}:${line.reason}`)]);
+  const decided = [[tuesday, ['payroll_overtime:40:worked_more', 'bank_credit:20:worked_more']], [sunday, ['payroll_overtime:60:worked_more']]];
+  const preview = () => computeBankMonth(deps, workspaceId, competence, null, uid);
+  assert.deepEqual(summary(await preview()), decided);
+  process.env.DP_TIME_OVERTIME_DECISION_ENABLED = 'false';
+  assert.deepEqual(summary(await preview())[0], [tuesday, ['review:60:pending_approval']], 'desligada, a prévia ignora a escolha');
+  await assert.rejects(actOnOvertimeDecision(admin, request({ expectedRevision: 1 }), deps), { code: 'PTRP_OVERTIME_DECISION_PENDING' });
+  assert.deepEqual((await readOvertimeMonth(admin, query, deps)).days, []);
+  process.env.DP_TIME_OVERTIME_DECISION_ENABLED = 'true';
+
+  await closeCompetence(admin, { competence, expectedVersion: 0 }, deps);
+  const versionRef = hrDbAdmin.collection(CLOSURES).doc(`${workspaceId}_${competence}`).collection('versions').doc('1');
+  assert.equal((await versionRef.collection('people').doc(uid).get()).get(`overtimeDecisions.${tuesday}.sourceMinutes`), 60);
+  assert.equal((await readCompetenceClosure(admin, competence, deps)).people[0].overtimeDecisions, undefined, 'a tela do mês fechado não recebe motivo nem autor');
+  assert.equal((await actOnOvertimeDecision(admin, first, deps)).revision, 1, 'a repetição continua respondendo depois do fechamento');
+  await assert.rejects(actOnOvertimeDecision(admin, request({ expectedRevision: 1 }), deps), { code: 'PTRP_OVERTIME_CLOSED' });
+  assert.equal((await readOvertimeMonth(admin, query, deps)).closed, true);
+  // A apuração oficial usa a versão congelada, mesmo com a chave desligada depois ou o documento vivo alterado.
+  await stored[0].ref.update({ days: {} });
+  process.env.DP_TIME_OVERTIME_DECISION_ENABLED = 'false';
+  assert.deepEqual(summary(await generateBankMonth(admin, { action: 'generate', competence, expectedVersion: 1, employeeUid: uid }, deps)), decided);
+  process.env.DP_TIME_OVERTIME_DECISION_ENABLED = 'true';
+  await stored[0].ref.update({ days: stored[0].get('days') });
+
+  await reopenCompetence(admin, competence, { action: 'reopen', expectedVersion: 1, reason: 'Saída corrigida depois do fechamento.' }, deps);
+  await punch('b', tuesday, '13:30', 2);
+  assert.deepEqual(summary(await preview())[0], [tuesday, ['review:90:decision_outdated']]);
+  assert.equal((await readOvertimeMonth(admin, query, deps)).days[0].outdated, 'O tempo extra do dia mudou.');
+  assert.equal((await actOnOvertimeDecision(admin, { action: 'revokeOvertime', employeeUid: uid, date: tuesday, operationId: randomUUID(), expectedRevision: 1 }, deps)).revision, 2);
+  assert.deepEqual(summary(await preview())[0], [tuesday, ['review:90:pending_approval']]);
+  assert.deepEqual((await stored[0].ref.get()).get('history').map((act) => act.action), ['decided', 'revoked']);
+});

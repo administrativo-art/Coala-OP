@@ -42,6 +42,7 @@ export const REASON_LABELS: Record<BankLineReason, string> = {
   payroll_settlement: "Saldo lançado na folha",
   credit_expired: "Crédito vencido",
   break_suppressed: "Intervalo intrajornada suprimido (indenizatório)",
+  decision_outdated: "Escolha da hora extra desatualizada: confira o dia de novo",
 };
 const hm = (minutes: number, signed = false) => {
   const sign = minutes < 0 ? "−" : signed && minutes > 0 ? "+" : "";
