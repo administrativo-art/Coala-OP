@@ -26,6 +26,7 @@ import {
   type ClosureDayKind, type ClosureDayRow, type ClosureDayTone, type PersonServerAlerts,
 } from "./closure-person-record-model";
 import { DayCorrectionBatch } from "./day-corrections-panel";
+import { OvertimeDaysList, useOvertimeMonth } from "./overtime-decision-card";
 import type { AdjustmentView, TreatmentView } from "./types";
 
 type EmployeeMonth = {
@@ -128,6 +129,10 @@ export function ClosurePersonRecord({ firebaseUser, competence, person, alerts, 
       .catch(() => { if (!cancelled) { setBank(null); setBankUnavailable(true); } });
     return () => { cancelled = true; };
   }, [firebaseUser, person.uid, competence, reloadKey]);
+
+  const overtime = useOvertimeMonth(firebaseUser, competence, person.uid, reloadKey);
+  // A hora extra não muda alerta nem pendência: só o registro, o banco e a própria escolha são relidos.
+  const overtimeSaved = useCallback(() => setReloadKey((value) => value + 1), []);
 
   // Os alertas do servidor releem a equipe toda: são atualizados uma vez, ao sair do modal, e não a cada decisão.
   const decided = useRef(false);
@@ -330,6 +335,8 @@ export function ClosurePersonRecord({ firebaseUser, competence, person, alerts, 
         </div>
       </section>
 
+      <OvertimeDaysList overtime={overtime} onOpen={open} />
+
       <section className="space-y-2 rounded-ds-card border border-ds-border bg-ds-surface px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -354,6 +361,7 @@ export function ClosurePersonRecord({ firebaseUser, competence, person, alerts, 
         }}
         days={days} today={today} adjustments={adjustments} unitNames={unitNames} employeeName={name} employeeUid={person.uid} firebaseUser={firebaseUser}
         bank={bank ? { policyName: bank.policy?.name ?? null, lines: bank.statement?.lines ?? [] } : null}
+        overtime={overtime} onOvertimeSaved={overtimeSaved}
         onChanged={changedInDay} />
     </div>
   );

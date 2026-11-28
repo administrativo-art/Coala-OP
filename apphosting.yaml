@@ -27,6 +27,10 @@ env:
     value: "true"
     availability:
       - RUNTIME
+  - variable: DP_TIME_OVERTIME_DECISION_ENABLED
+    value: "true"
+    availability:
+      - RUNTIME
   - variable: NODE_OPTIONS
     value: "--max-old-space-size=4096"
     availability:

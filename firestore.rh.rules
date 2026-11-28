@@ -224,6 +224,7 @@ service cloud.firestore {
     match /providerClosureAccess/{id} { allow read, write: if false; }
     match /ptrp_dayCorrections/{id} { allow read, write: if false; }
     match /dp_timeClosureAlertReviews/{id} { allow read, write: if false; }
+    match /dp_timeOvertimeDecisions/{id} { allow read, write: if false; }
     match /ptrp_competenceClosures/{id} {
       allow read, write: if false;
       match /{nested=**} { allow read, write: if false; }

@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { assertClosureAccess, closeCompetence, justifyClosureAlert, previewClosureAlerts, readCompetenceClosure } from '@/features/dp/time-adjustments/closure.server';
-import { closureSubmitSchema, closureQuerySchema, type ClosureAlertReviewInput, type ClosureCloseInput } from '@/features/dp/time-adjustments/schemas';
+import { closureSubmitSchema, closureQuerySchema, type ClosureAlertReviewInput, type ClosureCloseInput, type OvertimeDecisionInput, type OvertimeRevokeInput } from '@/features/dp/time-adjustments/schemas';
+import { actOnOvertimeDecision, readOvertimeMonth } from '@/features/dp/time-bank/overtime-decision.server';
 import { generateBankClosedCompetence, readPayrollReadiness } from '@/features/dp/time-bank/service.server';
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
 import { AppError } from '@/lib/observability/app-error';
@@ -23,7 +24,7 @@ const getContract = defineSecurityContract({
   input: { kind: 'schema', schema: 'dp.time-closure.query', unknownFields: 'reject' },
   effects: { mode: 'read', audit: 'none' }, errorExposure: 'sanitized',
 });
-const getEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, { competence: string; alerts?: '1'; payroll?: '1' }, Resource>({
+const getEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, { competence: string; alerts?: '1'; payroll?: '1'; overtimeOf?: string }, Resource>({
   id: 'dp-time-closure-read-v1',
   guarantees: ['authenticated-user', 'active-user', 'permission-checked', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
   async enforce({ request }) {
@@ -42,7 +43,7 @@ const postContract = defineSecurityContract({
   input: { kind: 'schema', schema: 'dp.time-closure.close', unknownFields: 'reject' },
   effects: { mode: 'write', audit: 'server-authoritative' }, errorExposure: 'sanitized',
 });
-const postEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, ClosureCloseInput | ClosureAlertReviewInput, Resource>({
+const postEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, ServerUserContext, ClosureCloseInput | ClosureAlertReviewInput | OvertimeDecisionInput | OvertimeRevokeInput, Resource>({
   id: 'dp-time-closure-close-v1',
   guarantees: ['authenticated-user', 'active-user', 'permission-checked', 'workspace-scoped', 'input-validated', 'fields-allowlisted'],
   async enforce({ request }) {
@@ -56,9 +57,12 @@ const postEnforcer = defineSecurityEnforcer<NextRequest, unknown, unknown, Serve
 });
 
 export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer }, async ({ security }) =>
-  NextResponse.json(security.input.payroll ? await readPayrollReadiness(security.actor, security.input.competence) : security.input.alerts ? await previewClosureAlerts(security.actor, security.input.competence) : await readCompetenceClosure(security.actor, security.input.competence), { headers: { 'Cache-Control': 'private, no-store' } }));
+  NextResponse.json(security.input.overtimeOf ? await readOvertimeMonth(security.actor, { competence: security.input.competence, employeeUid: security.input.overtimeOf })
+    : security.input.payroll ? await readPayrollReadiness(security.actor, security.input.competence) : security.input.alerts ? await previewClosureAlerts(security.actor, security.input.competence) : await readCompetenceClosure(security.actor, security.input.competence), { headers: { 'Cache-Control': 'private, no-store' } }));
 export const POST = secureRoute({ contract: postContract, enforcer: postEnforcer }, async ({ security }) => {
-  if ('action' in security.input) return NextResponse.json(await justifyClosureAlert(security.actor, security.input), { headers: { 'Cache-Control': 'private, no-store' } });
+  if ('action' in security.input) return NextResponse.json(security.input.action === 'justifyAlert'
+    ? await justifyClosureAlert(security.actor, security.input) : await actOnOvertimeDecision(security.actor, security.input),
+  { headers: { 'Cache-Control': 'private, no-store' } });
   const closure = await closeCompetence(security.actor, security.input);
   const timeBank = await generateBankClosedCompetence(security.actor, closure.competence, closure.version);
   return NextResponse.json({ closure, timeBank }, { status: 201, headers: { 'Cache-Control': 'private, no-store' } });

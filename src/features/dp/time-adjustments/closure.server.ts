@@ -25,6 +25,8 @@ import { AUTOMATIC_ABSENCES, type AutomaticAbsenceRecord } from './automatic-abs
 import { adjustmentRestoresAutomaticAbsence, automaticAbsenceSuperseded } from './automatic-absence-core';
 import { belongsToTimeClosureRoster } from '@/lib/hr/employment-relationship';
 
+import { overtimeDecisionRef, type OvertimeDecisionDocument } from '../time-bank/overtime-decision-store.server';
+import { overtimeDecisionEnabled } from '../time-config/rollout.server';
 import { checkPersonAlerts, readPersonAlertSources, type AlertSources } from './closure-alert-check.server';
 import type { ClosureAlertDecision, ReviewableAlert } from './closure-alerts';
 import { canAccessUnit } from '@/lib/unit-access';
@@ -411,11 +413,18 @@ export async function closeCompetence(context: ServerUserContext, input: Closure
     const reviewed = await reviewDays(deps, context, input.competence, input.expectedVersion, people, tx, sources);
     const blocked = reviewed.filter((item) => !item.decision);
     if (blocked.length) throw fail('PTRP_CLOSURE_CRITICAL_ALERT', `Há ${blocked.length} dia(s) com alerta grave sem justificativa. Confira os alertas antes de fechar.`, 'CONFLICT');
+    // Escolhas da hora extra entram na versão e no carimbo; a apuração oficial usa só o que foi congelado aqui.
+    const decisionDocs = overtimeDecisionEnabled() && people.length
+      ? await tx.getAll(...people.map((person) => overtimeDecisionRef(deps.hrDb, context.workspace_id, input.competence, person.uid))) : [];
+    const frozen: ClosurePerson[] = people.map((person, index) => {
+      const days = (decisionDocs[index]?.data() as OvertimeDecisionDocument | undefined)?.days;
+      return days && Object.keys(days).length ? { ...person, overtimeDecisions: days } : person;
+    });
     const version = (current?.version ?? 0) + 1;
     const digests = itemDigests(people);
     const previous = current?.version ? (await tx.get(ref.collection('versions').doc(String(current.version)))).get('itemDigests') as Record<string, string> | undefined : undefined;
     const changes = diffDigests(previous ?? null, digests);
-    const manifestHash = sha256({ competence: input.competence, workspaceId: context.workspace_id, version, people, ...(reviewed.length ? { releases: reviewed.map((item) => item.decision) } : {}) });
+    const manifestHash = sha256({ competence: input.competence, workspaceId: context.workspace_id, version, people: frozen, ...(reviewed.length ? { releases: reviewed.map((item) => item.decision) } : {}) });
     const record: ClosureRecord = {
       workspaceId: context.workspace_id, competence: input.competence, status: 'closed', version, closedAt: at, closedBy: context.decoded.uid, clockSource,
       manifestHash, peopleCount: people.length, counts: counts(people), changes, reopenings: current?.reopenings ?? [], updatedAt: at,
@@ -423,7 +432,7 @@ export async function closeCompetence(context: ServerUserContext, input: Closure
     const versionRef = ref.collection('versions').doc(String(version));
     tx.set(ref, record);
     tx.create(versionRef, { ...record, itemDigests: digests });
-    for (const person of people) {
+    for (const person of frozen) {
       const applied = reviewed.filter((item) => item.employeeUid === person.uid);
       const breakReviewDates = applied.filter((item) => item.incidents.includes('short_break') || item.incidents.includes('missing_break')).map((item) => item.date);
       tx.create(versionRef.collection('people').doc(person.uid), applied.length ? {

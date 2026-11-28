@@ -22,6 +22,11 @@ export function nightToleranceEnabled() {
   return process.env.DP_TIME_NIGHT_TOLERANCE_ENABLED?.trim() === 'true';
 }
 
+/** Escolha da hora extra de cada dia: muda o que vai para a folha e para o banco. Desligada, não grava nem aplica na prévia. */
+export function overtimeDecisionEnabled() {
+  return process.env.DP_TIME_OVERTIME_DECISION_ENABLED?.trim() === 'true';
+}
+
 export function activeOvertimePolicy(policy: DPOvertimePolicy): DPOvertimePolicy {
   if (policyRulesEnabled()) return policy;
   const legacy = { ...policy };
