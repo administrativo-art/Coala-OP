@@ -74,11 +74,23 @@ export type AdjustmentDecisionInput = z.infer<typeof adjustmentDecisionSchema>;
 export type AdjustmentMonthInput = z.infer<typeof adjustmentMonthSchema>;
 
 const competence = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Competência inválida.');
-export const closureQuerySchema = z.object({ competence, alerts: z.literal('1').optional(), payroll: z.literal('1').optional() }).strict();
+export const closureQuerySchema = z.object({ competence, alerts: z.literal('1').optional(), payroll: z.literal('1').optional(),
+  overtimeOf: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional() }).strict()
+  .refine((query) => [query.alerts, query.payroll, query.overtimeOf].filter(Boolean).length <= 1, 'Peça uma consulta por vez.');
 export const closureCloseSchema = z.object({ competence, expectedVersion: z.number().int().min(0) }).strict();
 export const closureAlertReviewSchema = z.object({ action: z.literal('justifyAlert'), competence, expectedVersion: z.number().int().min(0),
   employeeUid: id, fingerprint: z.string().regex(/^[a-f0-9]{64}$/), reason }).strict();
-export const closureSubmitSchema = z.union([closureCloseSchema, closureAlertReviewSchema]);
+const workDay = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/, 'Data inválida.');
+const overtimeTarget = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
+const overtimeAct = { employeeUid: overtimeTarget, date: workDay, operationId: z.string().uuid(), expectedRevision: z.number().int().min(0) };
+export const overtimeDecisionSchema = z.object({ action: z.literal('decideOvertime'), ...overtimeAct,
+  sourceMinutes: z.number().int().positive().max(1440),
+  parts: z.array(z.object({ destination: z.enum(['payroll', 'time_bank']), categoryId: z.string().trim().min(1).max(180), minutes: z.number().int().positive().max(1440) }).strict()).min(1).max(8),
+  reason: z.string().trim().min(10, 'O motivo precisa ter ao menos 10 caracteres.').max(1000) }).strict();
+export const overtimeRevokeSchema = z.object({ action: z.literal('revokeOvertime'), ...overtimeAct }).strict();
+export type OvertimeDecisionInput = z.infer<typeof overtimeDecisionSchema>;
+export type OvertimeRevokeInput = z.infer<typeof overtimeRevokeSchema>;
+export const closureSubmitSchema = z.union([closureCloseSchema, closureAlertReviewSchema, overtimeDecisionSchema, overtimeRevokeSchema]);
 export type ClosureAlertReviewInput = z.infer<typeof closureAlertReviewSchema>;
 export const closureRouteSchema = z.object({ competence }).strict();
 export const closureActionSchema = z.object({ action: z.literal('reopen'), expectedVersion: z.number().int().positive(),

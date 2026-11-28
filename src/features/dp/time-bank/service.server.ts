@@ -5,10 +5,10 @@ import { FieldPath, type Firestore, type Transaction } from 'firebase-admin/fire
 
 import { readRepPMonthOfPerson } from '@/features/dp/rep-p/own-month.server';
 import { policyTargetOf } from '@/features/dp/time-config/policy-tolerance.server';
-import { activeOvertimePolicy, nightShiftEnabled } from '@/features/dp/time-config/rollout.server';
+import { activeOvertimePolicy, nightShiftEnabled, overtimeDecisionEnabled } from '@/features/dp/time-config/rollout.server';
 import { readRepPMarkingsForMirror, readRepPPilotMarkingsForBank } from '@/features/dp/rep-p/service.server';
 import type { AbsenceRequestRecord } from '@/features/dp/absences/requests/workflow-types';
-import { competenceRange, sha256, type ClosureAdjustment, type ClosurePerson } from '@/features/dp/time-adjustments/closure-core';
+import { competenceRange, OPEN_ABSENCE_STATUSES, sha256, type ClosureAdjustment, type ClosurePerson } from '@/features/dp/time-adjustments/closure-core';
 import { canReadEmployeeTimeRecording } from '@/features/dp/rep-p/employee-time-access.server';
 import { assertClosureAccess, readCompetenceClosure, type ClosureRecord } from '@/features/dp/time-adjustments/closure.server';
 import { ADJUSTMENTS, CLOSURES, closureKey, adjustmentOperations, type AdjustmentRecord } from '@/features/dp/time-adjustments/service.server';
@@ -27,6 +27,8 @@ import {
   applyWeeklyOvertimeLimits, buildStatement, competencesBetween, computeBankDay, monthTotals, overnightWorkDate, TIME_BANK_ALGORITHM_VERSION, isReadableTimeBankAlgorithmVersion,
   type BankAbsence, type BankDay, type BankManualMovement, type BankMonthRecord, type BankPolicy, type BankSettlement, type BankShift,
 } from './core';
+import { applyOvertimeDecision, type OvertimeDecisions } from './overtime-decision';
+import { readOvertimeDecisionDays } from './overtime-decision-store.server';
 import { payrollReviewReason, type PayrollPersonStatus, type PayrollReadiness } from './payroll-readiness';
 import { cycleOf } from './cycle';
 import type { TimeBankActionInput } from './schemas';
@@ -63,8 +65,9 @@ async function subject(deps: Dependencies, context: ServerUserContext, employeeU
 const text = (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null;
 const toMinutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 const fiscalMs = (markedAt: string) => Date.parse(markedAt.replace(/([+-]\d{2})(\d{2})$/, '$1:$2'));
-const competenceRef = (deps: Dependencies, workspaceId: string, competence: string) =>
-  deps.hrDb.collection(CLOSURES).doc(closureKey(workspaceId, competence));
+export const competenceClosureRef = (hrDb: Firestore, workspaceId: string, competence: string) =>
+  hrDb.collection(CLOSURES).doc(closureKey(workspaceId, competence));
+const competenceRef = (deps: Dependencies, workspaceId: string, competence: string) => competenceClosureRef(deps.hrDb, workspaceId, competence);
 const frozenPeople = (version: FirebaseFirestore.DocumentReference) => version.collection('people');
 const bankMonths = (version: FirebaseFirestore.DocumentReference) => version.collection('timeBank');
 const bankRef = (deps: Dependencies, workspaceId: string, competence: string, version: number, uid: string) =>
@@ -104,14 +107,33 @@ async function policiesAndTarget(deps: Dependencies, uid: string, published?: DP
   } };
 }
 
+/** Pedidos da pessoa que tocam o mês, para a apuração e para a hora extra por dia. */
+function monthRequests(hrDb: Firestore, workspaceId: string, uid: string, start: string, end: string) {
+  return [
+    hrDb.collection(ADJUSTMENTS).where('workspaceId', '==', workspaceId).where('employeeUid', '==', uid)
+      .where('workDate', '>=', start).where('workDate', '<=', end).limit(201).get(),
+    hrDb.collection(ABSENCES).where('workspaceId', '==', workspaceId).where('beneficiaryUid', '==', uid)
+      .where('startDate', '<=', end).limit(201).get(),
+  ] as const;
+}
+
+/** Dias com pedido de ajuste ou ausência sem decisão: a hora extra deles ainda pode mudar. */
+export async function pendingRequestDates(hrDb: Firestore, workspaceId: string, competence: string, uid: string) {
+  const { start, end } = competenceRange(competence);
+  const [adjustments, absences] = await Promise.all(monthRequests(hrDb, workspaceId, uid, start, end));
+  if (adjustments.size > 200 || absences.size > 200) throw fail('PTRP_OVERTIME_INPUT_LIMIT', 'O mês tem pedidos demais para conferir a hora extra com segurança.', 'CONFLICT');
+  const adjustmentDates = new Set(adjustments.docs.filter((doc) => doc.get('status') === 'in_review').map((doc) => String(doc.get('workDate'))));
+  const openAbsences = absences.docs.filter((doc) => (OPEN_ABSENCE_STATUSES as readonly string[]).includes(String(doc.get('status'))));
+  return (date: string) => adjustmentDates.has(date) ? 'Decida o pedido de ajuste deste dia antes de definir a hora extra.'
+    : openAbsences.some((doc) => String(doc.get('startDate')) <= date && String(doc.get('endDate')) >= date)
+      ? 'Decida o pedido de ausência deste dia antes de definir a hora extra.' : null;
+}
+
 /** Apuração da pessoa no mês fechado, a partir da escala, da versão da jornada, das batidas tratadas e da declaração congelada. */
 async function liveDeclaration(deps: Dependencies, workspaceId: string, competence: string, uid: string): Promise<ClosurePerson> {
   const { start, end } = competenceRange(competence);
   const [adjustments, absences, automaticAbsences] = await Promise.all([
-    deps.hrDb.collection(ADJUSTMENTS).where('workspaceId', '==', workspaceId).where('employeeUid', '==', uid)
-      .where('workDate', '>=', start).where('workDate', '<=', end).limit(201).get(),
-    deps.hrDb.collection(ABSENCES).where('workspaceId', '==', workspaceId).where('beneficiaryUid', '==', uid)
-      .where('startDate', '<=', end).limit(201).get(),
+    ...monthRequests(deps.hrDb, workspaceId, uid, start, end),
     deps.hrDb.collection(AUTOMATIC_ABSENCES).where('workspaceId', '==', workspaceId).where('employeeUid', '==', uid)
       .where('workDate', '>=', start).where('workDate', '<=', end).limit(201).get(),
   ]);
@@ -148,7 +170,8 @@ async function liveDeclaration(deps: Dependencies, workspaceId: string, competen
   };
 }
 
-async function computeBankMonth(deps: Dependencies, workspaceId: string, competence: string, closure: ClosureRecord | null, uid: string) {
+export async function computeBankMonth(deps: Dependencies, workspaceId: string, competence: string, closure: ClosureRecord | null, uid: string,
+  options: { officialOnly?: boolean; onRawDay?: (day: BankDay, policy: BankPolicy | null, unitIds: string[]) => void } = {}) {
   const { start, end } = competenceRange(competence);
   const closureRef = closure ? competenceRef(deps, workspaceId, competence).collection('versions').doc(String(closure.version)) : null;
   const [{ user, policyOn }, declaration] = await Promise.all([
@@ -158,7 +181,7 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
   ]);
   const [arp, pilot, month] = await Promise.all([
     readRepPMarkingsForMirror(workspaceId, uid, start, end, { repDb: deps.repDb, mainDb: deps.mainDb, hrDb: deps.hrDb }),
-    closure ? Promise.resolve({ markings: [], truncated: false })
+    closure || options.officialOnly ? Promise.resolve({ markings: [], truncated: false })
       : readRepPPilotMarkingsForBank(workspaceId, uid, start, end, { repDb: deps.repDb }),
     readRepPMonthOfPerson([uid, text(user.get('hrEmployeeId'))], competence, { db: deps.mainDb }, { holidays: true }),
   ]);
@@ -177,6 +200,9 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
     minutes: item.unit === 'hour' ? (item.startTime && item.endTime ? Math.max(0, toMinutes(item.endTime) - toMinutes(item.startTime)) : Math.round(item.quantity * 60)) : null,
   }));
   const holidays = new Set(month.holidays);
+  // Mês fechado usa só o que a versão congelou, mesmo com a chave desligada depois; a prévia lê a escolha atual.
+  const decisions: OvertimeDecisions = closure ? declaration?.overtimeDecisions ?? {}
+    : overtimeDecisionEnabled() ? await readOvertimeDecisionDays(deps.hrDb, workspaceId, competence, uid) : {};
   const sourceMarkings = [...arp.markings, ...pilot.markings];
   // Com o turno noturno ligado, a leitura oficial já vem no dia do turno; reaplicar a regra antiga a deslocaria de novo.
   const legacyDate = (item: { workDate: string; markedAt: string }) => overnightWorkDate(item.workDate, item.markedAt, month.shifts);
@@ -219,19 +245,24 @@ async function computeBankMonth(deps: Dependencies, workspaceId: string, compete
     ].sort((left, right) => fiscalMs(left) - fiscalMs(right));
     const policy = policyOn(date);
     if (policy) usedPolicies.set(`${policy.id}:${policy.version}`, { id: policy.id, version: policy.version });
-    const day = computeBankDay({
+    const bankPolicy = policy ? { id: policy.id, version: policy.version, categories: policy.categories, timeBank: policy.timeBank,
+      dailyOvertimeLimitMinutes: policy.dailyOvertimeLimitMinutes, weeklyOvertimeLimitMinutes: policy.weeklyOvertimeLimitMinutes,
+      ...(policy.tolerances ? { tolerances: policy.tolerances } : {}), ...(policy.intrajornada ? { intrajornada: policy.intrajornada } : {}) } satisfies BankPolicy : null;
+    const rawDay = computeBankDay({
       date, shift, markings, holiday: holidays.has(date),
       absences: absences.filter((item) => item.startDate <= date && item.endDate >= date),
-      policy: policy ? { id: policy.id, version: policy.version, categories: policy.categories, timeBank: policy.timeBank,
-        dailyOvertimeLimitMinutes: policy.dailyOvertimeLimitMinutes, weeklyOvertimeLimitMinutes: policy.weeklyOvertimeLimitMinutes,
-        ...(policy.tolerances ? { tolerances: policy.tolerances } : {}), ...(policy.intrajornada ? { intrajornada: policy.intrajornada } : {}) } satisfies BankPolicy : null,
+      policy: bankPolicy,
     });
+    options.onRawDay?.(rawDay, bankPolicy, [...new Set([...shifts.map((item) => item.unitId),
+      ...arp.markings.filter((item) => item.workDate === date).map((item) => item.executionUnitId)].filter((unit): unit is string => Boolean(unit)))]);
+    const day = applyOvertimeDecision(rawDay, bankPolicy, decisions[date]);
     if (day.kind !== 'no_schedule' || day.workedMinutes || day.lines.length || day.issues.length) days.push(day);
   }
   const limitedDays = applyWeeklyOvertimeLimits(days);
   return { days: limitedDays, totals: monthTotals(limitedDays), policies: [...usedPolicies.values()],
     pilotPreview: pilot.markings.length > 0,
-    inputHash: sha256({ markings: sourceMarkings, shifts: month.shifts, holidays: month.holidays, declaration, absences }) };
+    inputHash: sha256({ markings: sourceMarkings, shifts: month.shifts, holidays: month.holidays, declaration, absences,
+      ...(!closure && Object.keys(decisions).length ? { decisions } : {}) }) };
 }
 
 /** Lê a apuração gravada para a versão vigente do fechamento ou, no mês fechado, apura uma vez e grava. */
